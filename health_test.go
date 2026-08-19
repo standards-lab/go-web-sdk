@@ -9,6 +9,7 @@ import (
 
 	"github.com/standards-lab/go-core/lifecycle"
 	"github.com/standards-lab/go-web-sdk"
+	"github.com/standards-lab/go-web-sdk/internal/webtest"
 )
 
 // staticChecker reports a fixed readiness, standing in for a subsystem that
@@ -17,15 +18,8 @@ type staticChecker bool
 
 func (c staticChecker) Ready() bool { return bool(c) }
 
-// probe serves one GET through h and returns the recorder.
-func probe(h http.Handler, path string) *httptest.ResponseRecorder {
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-	return rec
-}
-
 func TestLiveness_ReportsOK(t *testing.T) {
-	rec := probe(web.Liveness(), web.HealthPath)
+	rec := webtest.Probe(web.Liveness(), web.HealthPath)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rec.Code)
@@ -39,7 +33,7 @@ func TestLiveness_ReportsOK(t *testing.T) {
 }
 
 func TestReadiness_NoChecksIsReady(t *testing.T) {
-	rec := probe(web.Readiness(), web.ReadyPath)
+	rec := webtest.Probe(web.Readiness(), web.ReadyPath)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200 with no checks registered", rec.Code)
@@ -55,7 +49,7 @@ func TestReadiness_AllReady(t *testing.T) {
 		web.Check{Name: "database", Checker: staticChecker(true)},
 	)
 
-	rec := probe(handler, web.ReadyPath)
+	rec := webtest.Probe(handler, web.ReadyPath)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -78,7 +72,7 @@ func TestReadiness_NotReadyEmitsProblem(t *testing.T) {
 		web.Check{Name: "database", Checker: staticChecker(false)},
 	)
 
-	rec := probe(handler, web.ReadyPath)
+	rec := webtest.Probe(handler, web.ReadyPath)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rec.Code)
 	}
@@ -113,7 +107,7 @@ func TestReadiness_NotReadyEmitsProblem(t *testing.T) {
 }
 
 func TestReadiness_NilCheckerIsNotReady(t *testing.T) {
-	rec := probe(web.Readiness(web.Check{Name: "database"}), web.ReadyPath)
+	rec := webtest.Probe(web.Readiness(web.Check{Name: "database"}), web.ReadyPath)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503 for a nil checker", rec.Code)
 	}
@@ -144,18 +138,18 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 	go func() { done <- lc.Run(ctx, 2*time.Second) }()
 
 	recvOrFail(t, started, "startup hook to start")
-	if got := probe(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
+	if got := webtest.Probe(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
 		t.Errorf("status = %d during startup, want 503", got)
 	}
 	// Liveness is independent of readiness: the process is serving either way.
-	if got := probe(mux, web.HealthPath).Code; got != http.StatusOK {
+	if got := webtest.Probe(mux, web.HealthPath).Code; got != http.StatusOK {
 		t.Errorf("healthz = %d during startup, want 200", got)
 	}
 
 	close(release)
 	recvOrFail(t, ready, "coordinator to become ready")
 
-	if got := probe(mux, web.ReadyPath).Code; got != http.StatusOK {
+	if got := webtest.Probe(mux, web.ReadyPath).Code; got != http.StatusOK {
 		t.Errorf("status = %d after startup, want 200", got)
 	}
 
@@ -164,7 +158,7 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	if got := probe(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
+	if got := webtest.Probe(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
 		t.Errorf("status = %d after Run returned, want 503", got)
 	}
 }
@@ -174,7 +168,7 @@ func TestRegisterHealth_MountsBothPaths(t *testing.T) {
 	web.RegisterHealth(mux, web.Check{Name: "lifecycle", Checker: staticChecker(true)})
 
 	for _, path := range []string{web.HealthPath, web.ReadyPath} {
-		if got := probe(mux, path).Code; got != http.StatusOK {
+		if got := webtest.Probe(mux, path).Code; got != http.StatusOK {
 			t.Errorf("GET %s = %d, want 200", path, got)
 		}
 	}

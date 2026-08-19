@@ -92,21 +92,9 @@
 // request first. A nil entry is skipped, so a caller can build a chain with
 // conditional entries without filtering it first.
 //
-// [RequestLogger] emits one record per request through a *slog.Logger the
-// caller supplies — method, path, status, duration, and remote address — at
-// info level, or at error level with the panic value attached when the handler
-// panics (the panic then continues to net/http's recovery). A successful
-// request to [HealthPath] or [ReadyPath] logs at debug — orchestrator
-// heartbeat, visible in development and quiet in production — while a failing
-// probe stays at info. Beyond that the middleware does not judge status codes:
-// whether a 5xx was the application's own failure belongs to the error
-// mapping, not here.
-//
-// The middleware wraps the ResponseWriter to capture the status. The wrapper
-// records the first status written, implements Unwrap so flushing and hijacking
-// work through http.ResponseController, and delegates io.ReaderFrom so a
-// handler serving files keeps the zero-copy path. http.Pusher is not available
-// through the wrapper.
+// The type and the composer live here because the routing layer consumes
+// them; the middleware implementations — the request logger today — live in
+// the middleware package.
 //
 // # Problem responses
 //
