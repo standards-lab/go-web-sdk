@@ -1,4 +1,4 @@
-package web_test
+package middleware_test
 
 import (
 	"bytes"
@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
+	"github.com/standards-lab/go-web-sdk/internal/webtest"
+	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
 // record serves one GET through the request logger and returns the single log
@@ -21,7 +23,7 @@ func record(t *testing.T, handler http.Handler) map[string]any {
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	probe(web.Chain(handler, web.RequestLogger(logger)), "/orders/7")
+	webtest.Probe(web.Chain(handler, middleware.RequestLogger(logger)), "/orders/7")
 
 	var out map[string]any
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &out); err != nil {
@@ -100,7 +102,7 @@ func TestRequestLogger_ResponseControllerReachesTheWriter(t *testing.T) {
 		flushErr = http.NewResponseController(w).Flush()
 	})
 
-	rec := probe(web.Chain(handler, web.RequestLogger(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)))), "/")
+	rec := webtest.Probe(web.Chain(handler, middleware.RequestLogger(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)))), "/")
 
 	if flushErr != nil {
 		t.Errorf("Flush through the wrapper: %v", flushErr)
@@ -119,7 +121,7 @@ func TestRequestLogger_WriterSupportsReadFrom(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	rec := probe(web.Chain(handler, web.RequestLogger(logger)), "/")
+	rec := webtest.Probe(web.Chain(handler, middleware.RequestLogger(logger)), "/")
 
 	if !isReaderFrom {
 		t.Error("the wrapped writer does not implement io.ReaderFrom")
@@ -142,7 +144,7 @@ func TestRequestLogger_WriterSupportsReadFrom(t *testing.T) {
 func TestRequestLogger_ProbeSuccessLogsAtDebug(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	probe(web.Chain(web.Liveness(), web.RequestLogger(logger)), web.HealthPath)
+	webtest.Probe(web.Chain(web.Liveness(), middleware.RequestLogger(logger)), web.HealthPath)
 
 	var out map[string]any
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &out); err != nil {
@@ -159,7 +161,7 @@ func TestRequestLogger_ProbeSuccessLogsAtDebug(t *testing.T) {
 func TestRequestLogger_ProbeSuccessSilentAtInfoLevel(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	probe(web.Chain(web.Liveness(), web.RequestLogger(logger)), web.HealthPath)
+	webtest.Probe(web.Chain(web.Liveness(), middleware.RequestLogger(logger)), web.HealthPath)
 
 	if buf.Len() != 0 {
 		t.Errorf("a successful probe logged through an info-level handler: %s", buf.String())
@@ -172,9 +174,9 @@ func TestRequestLogger_ProbeFailureLogsAtInfo(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	handler := web.Chain(
 		web.Readiness(web.Check{Name: "lifecycle"}),
-		web.RequestLogger(logger),
+		middleware.RequestLogger(logger),
 	)
-	probe(handler, web.ReadyPath)
+	webtest.Probe(handler, web.ReadyPath)
 
 	var out map[string]any
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &out); err != nil {
@@ -193,12 +195,12 @@ func TestRequestLogger_PanicLogsAtErrorAndRepanics(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	handler := web.Chain(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
-	}), web.RequestLogger(logger))
+	}), middleware.RequestLogger(logger))
 
 	var recovered any
 	func() {
 		defer func() { recovered = recover() }()
-		probe(handler, "/orders/7")
+		webtest.Probe(handler, "/orders/7")
 	}()
 
 	if recovered != "boom" {
@@ -238,7 +240,7 @@ func TestRequestLogger_HijackThroughWrapper(t *testing.T) {
 	})
 
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	ts := httptest.NewServer(web.Chain(handler, web.RequestLogger(logger)))
+	ts := httptest.NewServer(web.Chain(handler, middleware.RequestLogger(logger)))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL)

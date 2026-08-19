@@ -24,9 +24,9 @@
 // # Lifecycle wiring
 //
 // The package registers no lifecycle hooks of its own and holds no shutdown
-// timeout. [Server.Start] and [Server.Shutdown] carry the lifecycle package's
-// hook signature, and [Server.Err] is a monitorable source, so a composition
-// root wires the server as bare method values:
+// timeout. [Server.Start] and [Server.Shutdown] match the hook signature of
+// go-core's lifecycle coordinator, and [Server.Err] is a monitorable source,
+// so a composition root wires the server as bare method values:
 //
 //	lc.OnStartup(srv.Start)
 //	lc.OnShutdown(srv.Shutdown)
@@ -63,8 +63,8 @@
 // # Configuration
 //
 // [Config] holds the host, the port, and the server's four timeouts, and
-// implements the config package's Merge and Finalize contract, so it loads as
-// part of an application's configuration rather than on its own. The port and
+// implements the Merge and Finalize contract of go-core's config package, so
+// it loads as part of an application's configuration rather than on its own. The port and
 // timeouts are pointers: nil is unset and takes the default, while an explicit
 // zero survives the load and means what it says — a disabled timeout, or an
 // ephemeral port. A file and the environment express both states identically.
@@ -92,21 +92,9 @@
 // request first. A nil entry is skipped, so a caller can build a chain with
 // conditional entries without filtering it first.
 //
-// [RequestLogger] emits one record per request through a *slog.Logger the
-// caller supplies — method, path, status, duration, and remote address — at
-// info level, or at error level with the panic value attached when the handler
-// panics (the panic then continues to net/http's recovery). A successful
-// request to [HealthPath] or [ReadyPath] logs at debug — orchestrator
-// heartbeat, visible in development and quiet in production — while a failing
-// probe stays at info. Beyond that the middleware does not judge status codes:
-// whether a 5xx was the application's own failure belongs to the error
-// mapping, not here.
-//
-// The middleware wraps the ResponseWriter to capture the status. The wrapper
-// records the first status written, implements Unwrap so flushing and hijacking
-// work through http.ResponseController, and delegates io.ReaderFrom so a
-// handler serving files keeps the zero-copy path. http.Pusher is not available
-// through the wrapper.
+// The type and the composer live here because the routing layer consumes
+// them; the middleware implementations — the request logger today — live in
+// the middleware package.
 //
 // # Problem responses
 //
