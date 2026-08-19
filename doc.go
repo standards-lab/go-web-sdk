@@ -24,9 +24,9 @@
 // # Lifecycle wiring
 //
 // The package registers no lifecycle hooks of its own and holds no shutdown
-// timeout. [Server.Start] and [Server.Shutdown] carry the lifecycle package's
-// hook signature, and [Server.Err] is a monitorable source, so a composition
-// root wires the server as bare method values:
+// timeout. [Server.Start] and [Server.Shutdown] match the hook signature of
+// go-core's lifecycle coordinator, and [Server.Err] is a monitorable source,
+// so a composition root wires the server as bare method values:
 //
 //	lc.OnStartup(srv.Start)
 //	lc.OnShutdown(srv.Shutdown)
@@ -63,8 +63,8 @@
 // # Configuration
 //
 // [Config] holds the host, the port, and the server's four timeouts, and
-// implements the config package's Merge and Finalize contract, so it loads as
-// part of an application's configuration rather than on its own. The port and
+// implements the Merge and Finalize contract of go-core's config package, so
+// it loads as part of an application's configuration rather than on its own. The port and
 // timeouts are pointers: nil is unset and takes the default, while an explicit
 // zero survives the load and means what it says — a disabled timeout, or an
 // ephemeral port. A file and the environment express both states identically.
