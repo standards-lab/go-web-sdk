@@ -1,0 +1,17 @@
+# Marathon session plan files.
+.claude/plans/
+
+# Per-machine mise overrides.
+mise.local.toml
+
+# Build output.
+bin/
+
+# Editor and OS.
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
