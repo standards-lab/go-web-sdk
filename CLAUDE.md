@@ -1,19 +1,22 @@
 # go-web-sdk
 
-The application SDK for web services of `go-minimal`, the Standards Lab organization's
-minimal-dependency Go standard: the HTTP server and its configuration, routing, RFC 9457 problem
-responses, the liveness and readiness probes, and middleware. Managed with the marathon workflow;
-start from `context/README.md`.
+The Application SDK for web services of Go Minimal, the Standards Lab organization's
+minimal-dependency Go standard: the HTTP server and its configuration, routing, RFC 9457
+problem responses, the liveness and readiness probes, and middleware. Managed with the marathon
+workflow; start from `context/README.md`.
 
-## Conventions are settled in the repository
+## Design is documented in the landing zone
 
-The design and conventions for this SDK are recorded in `context/design/` — that is the authority.
-Keep them there; do not restate them here.
+The design and conventions of this repository are documented in the organization's
+[documentation landing zone](https://github.com/standards-lab/docs) — that is the authority.
+`context/` records only working knowledge the landing zone and the code do not express; do not
+restate documented design here. A change that alters documented behavior updates the landing
+zone page in the same effort.
 
 ## Role boundary
 
-go-web-sdk is a marathon **code** project (`.claude/marathon.toml` declares `kind = "code"`). The
-developer owns the production Go source — they apply it and answer for it. The agent writes
+go-web-sdk is a marathon **code** project (`.claude/marathon.toml` declares `kind = "code"`).
+The developer owns the production Go source — they apply it and answer for it. The agent writes
 everything else: tests, godoc and `doc.go`, prose documentation, the files in `context/`, the
 implementation guide, and the reset file.
 
@@ -21,14 +24,9 @@ implementation guide, and the reset file.
 
 - **Module layout** — one Go module rooted at `github.com/standards-lab/go-web-sdk`; the `web`
   package occupies the module root, and `middleware` is its one sub-package. No sub-modules.
-- **Dependencies** — the standard library and `go-core`; at most, packages as idiomatic and stable
-  as the standard library. Vendor SDKs never enter this module.
-- **Releases** — the module is tagged `v<semver>` at the root from `CHANGELOG.md`, cut by
-  `.github/workflows/release.yml`.
-- **Tests** are co-located `{file}_test.go` files in an external black-box package
-  (`package <pkg>_test`) that exercise the public API. They are hermetic: `httptest` recorders and
-  ephemeral ports, never a fixed port. Helpers more than one test package needs live in
-  `internal/webtest`.
-- **Tasks** run through `mise` (`build`, `test`, `vet`, `fmt`, `tidy`, `lint`).
+- **Dependencies** — the standard library and go-core, per the Go Minimal dependency line.
+- **Releases, CI, tests, tasks** — per the Go Minimal standard principles in the landing zone
+  (root `v<semver>` tags from `CHANGELOG.md`, hermetic `httptest`/port-0 tests with shared
+  helpers in `internal/webtest`, mise tasks).
 - **Public repo.** The module resolves through the public Go proxy; CI carries no private-module
   config.

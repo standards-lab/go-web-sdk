@@ -1,15 +1,19 @@
 # go-web-sdk
 
-Go web SDK for Standards Lab: the HTTP server and its configuration, routing, RFC 9457 problem
-responses, the liveness and readiness probes, and middleware.
+Application SDK for web services of Standards Lab's Go Minimal standard: the HTTP server and its
+configuration, routing, RFC 9457 problem responses, the liveness and readiness probes, and
+middleware.
 
 `github.com/standards-lab/go-web-sdk` is a single Go module; the `web` package occupies the module
 root, and `middleware` is its one sub-package.
 
-## Target standard
+## Standard
 
-`go-web-sdk` is the application SDK for web services of `go-minimal`, the minimal-dependency Go
-standard. Its repository-level principles:
+`go-web-sdk` is the Application SDK for web services of
+[Go Minimal](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/index.md), the
+minimal-dependency Go standard, and its design is documented on the standard's
+[go-web-sdk page](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/go-web-sdk/index.md).
+Its repository-level principles:
 
 - The module depends on the standard library and `go-core`, and takes at most packages as idiomatic
   and stable as the standard library. Vendor SDKs never enter it.
