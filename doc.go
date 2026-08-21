@@ -83,14 +83,19 @@
 //
 // [Liveness] reports that the process is up and serving HTTP and checks nothing
 // else; an unanswered probe is the liveness signal. [Readiness] aggregates the
-// [lifecycle.Check] values the caller supplies — typically the coordinator
-// under a name of the application's choosing, followed by the coordinator's
-// Checks — and answers 503 unless every one of them is ready. A Check with a
-// nil Checker reports not ready, so a subsystem that failed to construct
-// fails the probe. [RegisterHealth] mounts
-// both endpoints on a [Mounter]. The patterns use net/http.ServeMux's
-// method-scoped syntax ("GET /healthz"), which http.ServeMux handles directly;
-// any other Mounter translates them.
+// [lifecycle.Check] values the caller supplies, and answers 503 unless every
+// one of them is ready. A Check with a nil Checker reports not ready, so a
+// subsystem that failed to construct fails the probe. [RegisterHealth] mounts
+// both endpoints on a [Mounter]: liveness plain, and readiness over a
+// [lifecycle.Coordinator], queried fresh on every request rather than once at
+// registration, so a service the coordinator gains after RegisterHealth is
+// called still appears on the next probe. The coordinator itself is the first
+// participant, under the fixed name "lifecycle", followed by its own Checks,
+// in start order. Exposing an in-progress service's check this way is safe
+// only because the transport registers at [lifecycle.StageRoot]; nothing else
+// guarantees every check exists before a request reaches the probe. The
+// patterns use net/http.ServeMux's method-scoped syntax ("GET /healthz"),
+// which http.ServeMux handles directly; any other Mounter translates them.
 //
 // # Middleware
 //

@@ -4,6 +4,19 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the module adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.0] - 2026-08-21
+
+`RegisterHealth` takes the coordinator directly and queries it live on every request, instead of a
+fixed slice of checks captured once at registration: a service the coordinator gains afterward now
+appears on the next probe instead of vanishing from it.
+
+### Changed
+
+- `web`: `RegisterHealth(m Mounter, lc *lifecycle.Coordinator)` replaces `RegisterHealth(m Mounter,
+  checks ...lifecycle.Check)`. It prepends the coordinator itself, under the fixed name
+  `"lifecycle"`, to `lc.Checks()`, evaluated fresh on every request. `Readiness` is unchanged, and
+  still takes a caller-supplied check list directly.
+
 ## [v0.2.0] - 2026-08-21
 
 The named readiness check moves to its process-level home: `Readiness` and `RegisterHealth` now

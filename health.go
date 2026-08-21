@@ -72,9 +72,18 @@ func Readiness(checks ...lifecycle.Check) http.Handler {
 	})
 }
 
-// RegisterHealth mounts [Liveness] at GET /healthz and [Readiness] over
-// checks at GET /readyz.
-func RegisterHealth(m Mounter, checks ...lifecycle.Check) {
+// RegisterHealth mounts [Liveness] at GET /healthz and a readiness probe at
+// GET /readyz over lc, queried fresh on every request rather than once at
+// registration: a service lc.Add adds after this call still appears on the
+// next probe. Exposing an in-progress service's check is safe only because
+// the caller registers its own HTTP server at [lifecycle.StageRoot], so the
+// coordinator never serves a request before every numbered stage exists.
+func RegisterHealth(m Mounter, lc *lifecycle.Coordinator) {
+	readiness := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		checks := append([]lifecycle.Check{{Name: "lifecycle", Checker: lc}}, lc.Checks()...)
+		Readiness(checks...).ServeHTTP(w, r)
+	})
+
 	m.Handle("GET "+HealthPath, Liveness())
-	m.Handle("GET "+ReadyPath, Readiness(checks...))
+	m.Handle("GET "+ReadyPath, readiness)
 }

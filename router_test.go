@@ -60,13 +60,16 @@ func TestRouter_ProbesMountOutsideModuleMiddleware(t *testing.T) {
 
 	r := web.NewRouter()
 	r.Mount(web.NewModule(g))
-	web.RegisterHealth(r, lifecycle.Check{Name: "lifecycle", Checker: staticChecker(true)})
+	web.RegisterHealth(r, lifecycle.New())
 
 	if got := webtest.Probe(r, web.HealthPath).Code; got != http.StatusOK {
 		t.Fatalf("GET %s = %d, want 200", web.HealthPath, got)
 	}
-	if got := webtest.Probe(r, web.ReadyPath).Code; got != http.StatusOK {
-		t.Fatalf("GET %s = %d, want 200", web.ReadyPath, got)
+	// The coordinator never ran, so 503 rather than 200; what this test
+	// checks is that the path is mounted and reaches the probe, not the
+	// coordinator's readiness state.
+	if got := webtest.Probe(r, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
+		t.Fatalf("GET %s = %d, want 503 before the coordinator runs", web.ReadyPath, got)
 	}
 	if len(order) != 0 {
 		t.Errorf("module middleware saw a probe request: %v", order)
