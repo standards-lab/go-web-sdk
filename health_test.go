@@ -45,8 +45,8 @@ func TestReadiness_NoChecksIsReady(t *testing.T) {
 
 func TestReadiness_AllReady(t *testing.T) {
 	handler := web.Readiness(
-		web.Check{Name: "lifecycle", Checker: staticChecker(true)},
-		web.Check{Name: "database", Checker: staticChecker(true)},
+		lifecycle.Check{Name: "lifecycle", Checker: staticChecker(true)},
+		lifecycle.Check{Name: "database", Checker: staticChecker(true)},
 	)
 
 	rec := webtest.Probe(handler, web.ReadyPath)
@@ -68,8 +68,8 @@ func TestReadiness_AllReady(t *testing.T) {
 
 func TestReadiness_NotReadyEmitsProblem(t *testing.T) {
 	handler := web.Readiness(
-		web.Check{Name: "lifecycle", Checker: staticChecker(true)},
-		web.Check{Name: "database", Checker: staticChecker(false)},
+		lifecycle.Check{Name: "lifecycle", Checker: staticChecker(true)},
+		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
 	)
 
 	rec := webtest.Probe(handler, web.ReadyPath)
@@ -107,7 +107,7 @@ func TestReadiness_NotReadyEmitsProblem(t *testing.T) {
 }
 
 func TestReadiness_NilCheckerIsNotReady(t *testing.T) {
-	rec := webtest.Probe(web.Readiness(web.Check{Name: "database"}), web.ReadyPath)
+	rec := webtest.Probe(web.Readiness(lifecycle.Check{Name: "database"}), web.ReadyPath)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503 for a nil checker", rec.Code)
 	}
@@ -120,7 +120,7 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 	lc := lifecycle.New()
 
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux, web.Check{Name: "lifecycle", Checker: lc})
+	web.RegisterHealth(mux, lifecycle.Check{Name: "lifecycle", Checker: lc})
 
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -165,7 +165,7 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 
 func TestRegisterHealth_MountsBothPaths(t *testing.T) {
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux, web.Check{Name: "lifecycle", Checker: staticChecker(true)})
+	web.RegisterHealth(mux, lifecycle.Check{Name: "lifecycle", Checker: staticChecker(true)})
 
 	for _, path := range []string{web.HealthPath, web.ReadyPath} {
 		if got := webtest.Probe(mux, path).Code; got != http.StatusOK {

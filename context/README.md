@@ -18,9 +18,9 @@ The code and each package's `doc.go` are authoritative for what is built; the la
 documents the design. An unbuilt capability gains written detail when a session is about to
 build it.
 
-- **web** — the HTTP layer: the bind-then-serve server wired for go-core's lifecycle, route
-  groups, modules, and the router, the probes, the problem writers, and the `Middleware` type
-  with `Chain`. Built.
+- **web** — the HTTP layer: the bind-then-serve server declared as go-core's root-stage
+  lifecycle service, route groups, modules, and the router, the probes aggregating
+  `lifecycle.Check` values, the problem writers, and the `Middleware` type with `Chain`. Built.
 - **middleware** — the middleware implementations: the request logger. Built.
 - **Candidate direction** — the rest of the middleware set, error mapping, the success envelope
   and the page response, and a readiness type hook (`concepts/direction.md`); each waits on a
