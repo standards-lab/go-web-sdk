@@ -4,6 +4,24 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the module adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.0] - 2026-08-21
+
+The named readiness check moves to its process-level home: `Readiness` and `RegisterHealth` now
+consume go-core's `lifecycle.Check`, and `web.Check` is removed.
+
+### Changed
+
+- `web`: `Readiness` and `RegisterHealth` consume `lifecycle.Check` values. The aggregation, the
+  nil-checker rule, and the 503 problem document are unchanged. The lifecycle-wiring example in
+  the package documentation declares the server as a `lifecycle.Service` in `StageRoot` —
+  started after every numbered stage, drained first — replacing the hook wiring.
+- The module requires `github.com/standards-lab/go-core v0.2.0` and Go 1.27.
+
+### Removed
+
+- `web.Check`, replaced by `lifecycle.Check`, moved verbatim. The field names are unchanged, so
+  a call site updates by qualifying the type.
+
 ## [v0.1.0] - 2026-08-19
 
 The first release of the web SDK: the `web` and `middleware` packages. The module depends on the

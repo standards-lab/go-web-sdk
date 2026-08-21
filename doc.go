@@ -23,17 +23,23 @@
 //
 // # Lifecycle wiring
 //
-// The package registers no lifecycle hooks of its own and holds no shutdown
-// timeout. [Server.Start] and [Server.Shutdown] match the hook signature of
-// go-core's lifecycle coordinator, and [Server.Err] is a monitorable source,
-// so a composition root wires the server as bare method values:
+// The package registers no lifecycle service of its own and holds no shutdown
+// timeout. [Server.Start] and [Server.Shutdown] match the member signatures of
+// go-core's [lifecycle.Service], and [Server.Err] is a monitorable source, so
+// a composition root declares the server as bare method values — in the root
+// stage, so every numbered stage starts beneath it and the drain empties it
+// first:
 //
-//	lc.OnStartup(srv.Start)
-//	lc.OnShutdown(srv.Shutdown)
+//	lc.Add(lifecycle.Service{
+//		Name:     "server",
+//		Stage:    lifecycle.StageRoot,
+//		Start:    srv.Start,
+//		Shutdown: srv.Shutdown,
+//	})
 //	lc.Monitor(srv.Err())
 //
 // A bind failure fails the coordinator's startup, a serve failure ends its
-// run, and the shutdown hook receives the timeout-bounded drain context
+// run, and Shutdown receives the timeout-bounded drain context
 // [Server.Shutdown] consumes directly.
 //
 // # Routing
@@ -77,10 +83,11 @@
 //
 // [Liveness] reports that the process is up and serving HTTP and checks nothing
 // else; an unanswered probe is the liveness signal. [Readiness] aggregates the
-// [Check] values the caller supplies — typically the lifecycle coordinator
-// alongside each subsystem that reports readiness — and answers 503 unless
-// every one of them is ready. A Check with a nil Checker reports not ready, so
-// a subsystem that failed to construct fails the probe. [RegisterHealth] mounts
+// [lifecycle.Check] values the caller supplies — typically the coordinator
+// under a name of the application's choosing, followed by the coordinator's
+// Checks — and answers 503 unless every one of them is ready. A Check with a
+// nil Checker reports not ready, so a subsystem that failed to construct
+// fails the probe. [RegisterHealth] mounts
 // both endpoints on a [Mounter]. The patterns use net/http.ServeMux's
 // method-scoped syntax ("GET /healthz"), which http.ServeMux handles directly;
 // any other Mounter translates them.

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/standards-lab/go-core/lifecycle"
 	"github.com/standards-lab/go-web-sdk"
 	"github.com/standards-lab/go-web-sdk/internal/webtest"
 	"github.com/standards-lab/go-web-sdk/middleware"
@@ -173,7 +174,7 @@ func TestRequestLogger_ProbeFailureLogsAtInfo(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	handler := web.Chain(
-		web.Readiness(web.Check{Name: "lifecycle"}),
+		web.Readiness(lifecycle.Check{Name: "lifecycle"}),
 		middleware.RequestLogger(logger),
 	)
 	webtest.Probe(handler, web.ReadyPath)

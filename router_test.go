@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/standards-lab/go-core/lifecycle"
 	"github.com/standards-lab/go-web-sdk"
 	"github.com/standards-lab/go-web-sdk/internal/webtest"
 )
@@ -59,7 +60,7 @@ func TestRouter_ProbesMountOutsideModuleMiddleware(t *testing.T) {
 
 	r := web.NewRouter()
 	r.Mount(web.NewModule(g))
-	web.RegisterHealth(r, web.Check{Name: "lifecycle", Checker: staticChecker(true)})
+	web.RegisterHealth(r, lifecycle.Check{Name: "lifecycle", Checker: staticChecker(true)})
 
 	if got := webtest.Probe(r, web.HealthPath).Code; got != http.StatusOK {
 		t.Fatalf("GET %s = %d, want 200", web.HealthPath, got)
