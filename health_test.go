@@ -120,7 +120,7 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 	lc := lifecycle.New()
 
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux, lifecycle.Check{Name: "lifecycle", Checker: lc})
+	web.RegisterHealth(mux, lc)
 
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -165,23 +165,56 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 
 func TestRegisterHealth_MountsBothPaths(t *testing.T) {
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux, lifecycle.Check{Name: "lifecycle", Checker: staticChecker(true)})
+	web.RegisterHealth(mux, lifecycle.New())
 
-	for _, path := range []string{web.HealthPath, web.ReadyPath} {
-		if got := webtest.Probe(mux, path).Code; got != http.StatusOK {
-			t.Errorf("GET %s = %d, want 200", path, got)
-		}
+	if got := webtest.Probe(mux, web.HealthPath).Code; got != http.StatusOK {
+		t.Errorf("GET %s = %d, want 200", web.HealthPath, got)
+	}
+	// The coordinator never ran, so it reports not ready; readyz still has to
+	// be mounted and answer, just not with 200.
+	if got := webtest.Probe(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
+		t.Errorf("GET %s = %d, want 503 before the coordinator runs", web.ReadyPath, got)
 	}
 }
 
 func TestRegisterHealth_RejectsOtherMethods(t *testing.T) {
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux)
+	web.RegisterHealth(mux, lifecycle.New())
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, web.HealthPath, nil))
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("POST %s = %d, want 405 from the method-prefixed pattern", web.HealthPath, rec.Code)
+	}
+}
+
+// TestRegisterHealth_QueriesCoordinatorLive is the regression test for the
+// fix: RegisterHealth used to close over a snapshot of the coordinator's
+// checks, so a service added afterward never appeared on the probe.
+func TestRegisterHealth_QueriesCoordinatorLive(t *testing.T) {
+	lc := lifecycle.New()
+	mux := http.NewServeMux()
+	web.RegisterHealth(mux, lc)
+
+	lc.Add(lifecycle.Service{
+		Name:  "database",
+		Stage: 0,
+		Check: staticChecker(false),
+	})
+
+	rec := webtest.Probe(mux, web.ReadyPath)
+	body := decodeBody(t, rec)
+	checks, ok := body["checks"].([]any)
+	if !ok || len(checks) != 2 {
+		t.Fatalf("checks = %v, want the lifecycle check plus database, registered after RegisterHealth", body["checks"])
+	}
+
+	database, ok := checks[1].(map[string]any)
+	if !ok || database["name"] != "database" {
+		t.Fatalf("checks[1] = %v, want the late-registered database check", checks[1])
+	}
+	if database["ready"] != false {
+		t.Errorf("database ready = %v, want false", database["ready"])
 	}
 }
