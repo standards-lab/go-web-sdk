@@ -4,6 +4,14 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the module adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.1] - 2026-08-24
+
+### Changed
+
+- The go-core pin moves to v0.3.0, which adds the `process` package and builds on Go 1.27.
+  Nothing in the SDK uses the new package; the pin is the committed steady state for consumers
+  building on this release.
+
 ## [v0.3.0] - 2026-08-21
 
 `RegisterHealth` takes the coordinator directly and queries it live on every request, instead of a
