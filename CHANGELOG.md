@@ -4,6 +4,22 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the module adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.4.0] - 2026-08-26
+
+The HTTP side of paginated reads: the request directives parsed from the query string, and the
+success envelope. The contract carries no storage detail — directive field names are lexical
+here, and whether one names a readable field is the data layer's check.
+
+### Added
+
+- `web`: `ParseDirectives` reads `page`, `size`, and `sort` (`sort=name,-code`, honored across
+  repeated parameters) into the new `Directives` and `Sort` types, under a caller-supplied
+  `Limits` — the SDK holds no policy numbers of its own, and invalid limits panic as a wiring
+  mistake. A malformed or out-of-bounds parameter returns a `*DirectiveError` for the handler
+  to map to its own 400 problem, consistent with the SDK minting no problem types. `Page[T]` is
+  the `items`/`page`/`size`/`total` success envelope, assembled by `NewPage` — nil items
+  marshal as `[]`, never `null` — and written with `WriteJSON`.
+
 ## [v0.3.1] - 2026-08-24
 
 ### Changed

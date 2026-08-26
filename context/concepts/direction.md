@@ -17,13 +17,6 @@ ID wait for a service to need them.
 The domain-error-to-status matchers that turn a returned error into a problem response. Additive
 to the problem writers; needs a domain handler to exercise it.
 
-## The success envelope and the page response
-
-The JSON structure a handler returns on success, and the HTTP-side pagination contract: `page`,
-`size`, and `sort` parsed into the package's own directive types, and an `items`/`page`/`size`/
-`total` envelope written back. The contract carries no storage detail — how a data layer renders
-paging is its own concern — so nothing an engine does reaches the HTTP side.
-
 ## A readiness type hook
 
 `/readyz` attaches its `checks` extension member to an `about:blank` problem (the landing zone's

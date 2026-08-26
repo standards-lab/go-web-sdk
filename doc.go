@@ -108,6 +108,21 @@
 // them; the middleware implementations — the request logger today — live in
 // the middleware package.
 //
+// # Paginated reads
+//
+// [ParseDirectives] reads a request's page, size, and sort query parameters
+// into [Directives] — the package's own types, carrying no storage detail.
+// Sort is comma-separated field names, "-" prefixing a descending key
+// ("sort=name,-code"), honored across every occurrence of the parameter; the
+// names are lexical here, and whether one names a readable field is the data
+// layer's check. Policy belongs to the caller: a [Limits] value supplies the
+// default and maximum size (invalid limits panic as a wiring mistake), and a
+// malformed or out-of-bounds parameter returns a *[DirectiveError] for the
+// handler to map to its own 400 problem — this package mints no problem
+// types. On success, [NewPage] assembles the [Page] envelope — items, page,
+// size, total, with nil items marshaling as [] — and [WriteJSON] sends it as
+// the response body.
+//
 // # Problem responses
 //
 // Error responses are RFC 9457 problem documents. The type member identifies
