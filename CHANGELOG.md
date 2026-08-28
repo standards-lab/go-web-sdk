@@ -4,6 +4,34 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the module adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.0] - 2026-08-28
+
+The read parse consolidated and the error-to-problem mapping, promoted from the reference
+service's sdk package with both slices of evidence in hand. The SDK maps its own vocabulary
+and nothing else's: HTTP status policy for infrastructure errors is declared by the consumer
+through matchers, keeping the application SDK and the infrastructure libraries peers on
+go-core.
+
+### Added
+
+- `web`: `ParseQuery` parses a read request's query string in full into the new `Query` —
+  page, size, and sort under the caller's `Limits`, and every remaining parameter as the
+  filter set — so a handler cannot parse the paging parameters and forget to strip them from
+  the filters. A rejected parameter is a `*QueryError`.
+- `web`: `ErrorWriter` turns a handler's returned error into an RFC 9457 problem response
+  through a composed `StatusMatcher` list: `*QueryError` → 400 built in, the consumer's
+  matchers decide the rest in order, first match wins, 500 the fallback. The detail member
+  carries the error text only on a 400; no internal error's text reaches the wire.
+
+### Changed
+
+- `web`: `NewPage` takes the read's `Query` in place of the removed `Directives`.
+
+### Removed
+
+- `web`: `ParseDirectives`, `Directives`, and `DirectiveError`, absorbed by `ParseQuery`,
+  `Query`, and `QueryError` — one way to parse a read, one flat result.
+
 ## [v0.4.0] - 2026-08-26
 
 The HTTP side of paginated reads: the request directives parsed from the query string, and the

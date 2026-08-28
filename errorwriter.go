@@ -1,0 +1,56 @@
+package web
+
+import (
+	"errors"
+	"net/http"
+)
+
+// StatusMatcher maps an error to an HTTP status. It reports false for an
+// error it does not recognize, passing the decision to the next matcher.
+type StatusMatcher func(error) (int, bool)
+
+// ErrorWriter turns a handler's returned error into an RFC 9457 problem
+// response. The one mapping it owns is this package's own vocabulary — a
+// *[QueryError] is a 400; every other status is decided by the consumer's
+// matchers, so HTTP status policy stays with the application and the SDK
+// depends on no infrastructure library's error types.
+type ErrorWriter struct {
+	matchers []StatusMatcher
+}
+
+// NewErrorWriter composes the matchers into a writer, wired once at route
+// setup. They are consulted in argument order after the built-in
+// *[QueryError] match, first match wins; an error no matcher claims is a
+// 500.
+func NewErrorWriter(matchers ...StatusMatcher) *ErrorWriter {
+	return &ErrorWriter{matchers: matchers}
+}
+
+// Status maps err to its HTTP status without writing a response, for a
+// caller that needs the code alone.
+func (ew *ErrorWriter) Status(err error) int {
+	var qe *QueryError
+	if errors.As(err, &qe) {
+		return http.StatusBadRequest
+	}
+	for _, match := range ew.matchers {
+		if status, ok := match(err); ok {
+			return status
+		}
+	}
+	return http.StatusInternalServerError
+}
+
+// Write sends err as a problem at [ErrorWriter.Status]'s mapping. The detail
+// carries the error text only on a 400, where it is request-shaped and
+// client-actionable; every other status sends the bare title — an internal
+// error's text never reaches the wire. The returned error is the encoder's,
+// as from [WriteProblem].
+func (ew *ErrorWriter) Write(w http.ResponseWriter, r *http.Request, err error) error {
+	status := ew.Status(err)
+	detail := ""
+	if status == http.StatusBadRequest {
+		detail = err.Error()
+	}
+	return WriteProblem(w, r, status, "", detail)
+}
