@@ -8,8 +8,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-func TestNewPage_CarriesTheDirectives(t *testing.T) {
-	d := web.Directives{Page: 2, Size: 25}
+func TestNewPage_CarriesTheQuery(t *testing.T) {
+	d := web.Query{Page: 2, Size: 25}
 
 	p := web.NewPage([]string{"a", "b"}, d, 51)
 
@@ -20,7 +20,7 @@ func TestNewPage_CarriesTheDirectives(t *testing.T) {
 }
 
 func TestNewPage_NilItemsMarshalAsEmptyArray(t *testing.T) {
-	p := web.NewPage[string](nil, web.Directives{Page: 1, Size: 25}, 0)
+	p := web.NewPage[string](nil, web.Query{Page: 1, Size: 25}, 0)
 
 	body, err := json.Marshal(p)
 	if err != nil {
@@ -38,7 +38,7 @@ func TestPage_WireShape(t *testing.T) {
 		Name string `json:"name"`
 	}
 
-	body, err := json.Marshal(web.NewPage([]row{{Name: "ops"}}, web.Directives{Page: 3, Size: 10}, 21))
+	body, err := json.Marshal(web.NewPage([]row{{Name: "ops"}}, web.Query{Page: 3, Size: 10}, 21))
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}

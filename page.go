@@ -11,16 +11,16 @@ type Page[T any] struct {
 }
 
 // NewPage assembles the envelope from a fulfilled read: the page's items, the
-// directives the read honored, and the total row count. Nil items become an
+// query the read honored, and the total row count. Nil items become an
 // empty slice, so an empty page marshals its items as [] rather than null.
-func NewPage[T any](items []T, d Directives, total int) Page[T] {
+func NewPage[T any](items []T, q Query, total int) Page[T] {
 	if items == nil {
 		items = []T{}
 	}
 	return Page[T]{
 		Items: items,
-		Page:  d.Page,
-		Size:  d.Size,
+		Page:  q.Page,
+		Size:  q.Size,
 		Total: total,
 	}
 }

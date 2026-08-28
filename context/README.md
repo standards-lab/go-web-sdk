@@ -20,11 +20,12 @@ build it.
 
 - **web** — the HTTP layer: the bind-then-serve server declared as go-core's root-stage
   lifecycle service, route groups, modules, and the router, the probes aggregating
-  `lifecycle.Check` values, the problem writers, the `Middleware` type with `Chain`, and the
-  paginated-read contract (`ParseDirectives` under caller-supplied `Limits`, the `Page[T]`
-  envelope). Built.
+  `lifecycle.Check` values, the problem writers, the `Middleware` type with `Chain`, the read
+  contract (`ParseQuery` splitting a request's query string into paging and filters as one
+  `Query` under caller-supplied `Limits`, the `Page[T]` envelope), and the `ErrorWriter`
+  mapping returned errors to problem responses through consumer-supplied matchers. Built.
 - **middleware** — the middleware implementations: the request logger. Built.
-- **Candidate direction** — the rest of the middleware set, error mapping, and a readiness
-  type hook (`concepts/direction.md`); each waits on a consumer, and the roadmap re-plan
+- **Candidate direction** — the rest of the middleware set and a readiness type hook
+  (`concepts/direction.md`); each waits on a consumer, and the roadmap re-plan
   decides what is next. Where service-collaborating middleware lives is open in
   `concepts/service-middleware.md`.

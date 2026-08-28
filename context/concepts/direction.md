@@ -12,11 +12,6 @@ enforcement wait on an auth infrastructure library (`concepts/service-middleware
 open placement question), CORS waits on a browser client, and a recovery handler and a request
 ID wait for a service to need them.
 
-## Error mapping
-
-The domain-error-to-status matchers that turn a returned error into a problem response. Additive
-to the problem writers; needs a domain handler to exercise it.
-
 ## A readiness type hook
 
 `/readyz` attaches its `checks` extension member to an `about:blank` problem (the landing zone's
