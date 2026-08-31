@@ -4,6 +4,8 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the module adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
 ## [v0.5.0] - 2026-08-28
 
 The read parse consolidated and the error-to-problem mapping, promoted from the reference
@@ -112,3 +114,11 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   through a caller-supplied `*slog.Logger`, demotes a successful probe to debug, logs a panicking
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
+
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.5.0...HEAD
+[v0.5.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.4.0...v0.5.0
+[v0.4.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.3.1...v0.4.0
+[v0.3.1]: https://github.com/standards-lab/go-web-sdk/compare/v0.3.0...v0.3.1
+[v0.3.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.2.0...v0.3.0
+[v0.2.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.1.0...v0.2.0
+[v0.1.0]: https://github.com/standards-lab/go-web-sdk/releases/tag/v0.1.0
