@@ -1,6 +1,6 @@
 [tools]
-go = "latest"
-golangci-lint = "latest"
+go = "1.27"
+golangci-lint = "2.13.2"
 
 [tasks.build]
 description = "Build the module"
