@@ -13,13 +13,6 @@ The design and conventions of this repository are documented in the organization
 restate documented design here. A change that alters documented behavior updates the landing
 zone page in the same effort.
 
-## Role boundary
-
-go-web-sdk is a marathon **code** project (`.claude/marathon.toml` declares `kind = "code"`).
-The developer owns the production Go source — they apply it and answer for it. The agent writes
-everything else: tests, godoc and `doc.go`, prose documentation, the files in `context/`, the
-implementation guide, and the reset file.
-
 ## Repository specifics
 
 - **Module layout** — one Go module rooted at `github.com/standards-lab/go-web-sdk`; the `web`
