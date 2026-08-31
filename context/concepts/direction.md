@@ -7,10 +7,14 @@ decides what is next. None of it revises the current API; all of it adds to it.
 
 ## The rest of the middleware set
 
-New implementations land in the `middleware` package: authentication and authorization
-enforcement wait on an auth infrastructure library (`concepts/service-middleware.md` records the
-open placement question), CORS waits on a browser client, and a recovery handler and a request
-ID wait for a service to need them.
+Superseded (2026-08-31) by the retrospective's settled direction: `v1.web.adapter` brings the
+error-handler adapter and the shared wrapped writer, and `v1.web.middleware` builds the
+hand-rolled set (request ID, recoverer, timeout, content-type gate, body limit, fixed headers)
+and sources the spec-surface set per the org's dependency-sourcing rule (`standards-lab
+context/design/dependency-sourcing.md`) — the reference service now needs them.
+Authentication and authorization enforcement land in the auth infrastructure library over
+stdlib types (`concepts/service-middleware.md`, settled); transport-generic implementations
+land in the `middleware` package.
 
 ## A readiness type hook
 
