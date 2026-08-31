@@ -19,6 +19,6 @@ land in the `middleware` package.
 ## A readiness type hook
 
 `/readyz` attaches its `checks` extension member to an `about:blank` problem (the landing zone's
-[problem responses page](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/go-web-sdk/problems.md)).
+[problem responses page](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/go-web-sdk/problems.md)).
 A consumer that needs readiness failures under its own problem vocabulary gets a type hook on
 `Readiness`, not an SDK-owned URI.

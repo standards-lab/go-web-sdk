@@ -1,6 +1,6 @@
 # go-web-sdk
 
-Application SDK for web services of Standards Lab's Go Minimal standard: the HTTP server and its
+Application SDK for web services of Standards Lab's Go Elemental standard: the HTTP server and its
 configuration, routing, RFC 9457 problem responses, the liveness and readiness probes, and
 middleware.
 
@@ -10,9 +10,9 @@ root, and `middleware` is its one sub-package.
 ## Standard
 
 `go-web-sdk` is the Application SDK for web services of
-[Go Minimal](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/index.md), the
+[Go Elemental](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/index.md), the
 minimal-dependency Go standard, and its design is documented on the standard's
-[go-web-sdk page](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/go-web-sdk/index.md).
+[go-web-sdk page](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/go-web-sdk/index.md).
 Its repository-level principles:
 
 - The module depends on the standard library and `go-core`, and takes at most packages as idiomatic
