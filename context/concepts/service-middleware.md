@@ -8,7 +8,13 @@ implements only transport-generic middleware, because an application SDK and an 
 library never import each other, and this SDK has no sub-modules — a middleware that imports an
 infrastructure library cannot land here without breaking the module's dependency line.
 
-Open is which outside home such a middleware is defined in:
+Settled at the 2026-08-31 retrospective, in favor of the first home below: the infrastructure
+library's repository, over stdlib types. The transport-vocabulary cost is accepted because the
+alternative — every service hand-writing the same adapter — is the defect the SDK exists to
+remove; the org's dependency-sourcing rule (`standards-lab
+context/design/dependency-sourcing.md`, "Placement") records the same conclusion. The
+`v1.web.middleware` and `goals.v1.auth` sessions express it. The original options, kept for
+the reasoning:
 
 - **The infrastructure library's repository, over `net/http` alone.** A
   `func(http.Handler) http.Handler` built from stdlib types is structurally a `web.Middleware`
