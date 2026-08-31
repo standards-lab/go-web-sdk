@@ -1,14 +1,14 @@
 # go-web-sdk
 
-The Application SDK for web services of Go Minimal, the Standards Lab organization's
-minimal-dependency Go standard: the HTTP server and its configuration, routing, RFC 9457
+The Application SDK for web services of Go Elemental, the Standards Lab organization's Go
+implementation of the Elemental Architecture: the HTTP server and its configuration, routing, RFC 9457
 problem responses, the liveness and readiness probes, and middleware.
 
 The design and conventions of this repository are documented in the organization's
 [documentation landing zone](https://github.com/standards-lab/docs); this context records only
 working knowledge the landing zone and the code do not express. The repository page is
-[go-web-sdk](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/go-web-sdk/index.md),
-under the [Go Minimal](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/index.md)
+[go-web-sdk](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/go-web-sdk/index.md),
+under the [Go Elemental](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/index.md)
 standard, with the design detailed in its server, routing, problem responses, health, and
 middleware pages.
 

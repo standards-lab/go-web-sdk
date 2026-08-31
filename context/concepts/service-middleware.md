@@ -21,7 +21,7 @@ the reasoning:
   without importing this SDK, so an infrastructure library can offer its enforcement point in
   its own module and a composition root can hang it on a router unchanged. The cost: the library
   compiles `net/http` and owns HTTP vocabulary, which the transport rule in the landing zone's
-  [middleware page](https://github.com/standards-lab/docs/blob/main/standards/go-minimal/go-web-sdk/middleware.md)
+  [middleware page](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/go-web-sdk/middleware.md)
   exists to avoid.
 - **The consuming service.** The infrastructure library offers its collaborator (a verifier, a
   tracer); the application wraps it as middleware at its composition root. The cost: every

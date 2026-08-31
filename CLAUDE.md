@@ -1,7 +1,7 @@
 # go-web-sdk
 
-The Application SDK for web services of Go Minimal, the Standards Lab organization's
-minimal-dependency Go standard: the HTTP server and its configuration, routing, RFC 9457
+The Application SDK for web services of Go Elemental, the Standards Lab organization's Go
+implementation of the Elemental Architecture: the HTTP server and its configuration, routing, RFC 9457
 problem responses, the liveness and readiness probes, and middleware. Managed with the marathon
 workflow; start from `context/README.md`.
 
@@ -17,8 +17,8 @@ zone page in the same effort.
 
 - **Module layout** — one Go module rooted at `github.com/standards-lab/go-web-sdk`; the `web`
   package occupies the module root, and `middleware` is its one sub-package. No sub-modules.
-- **Dependencies** — the standard library and go-core, per the Go Minimal dependency line.
-- **Releases, CI, tests, tasks** — per the Go Minimal standard principles in the landing zone
+- **Dependencies** — the standard library and go-core, per the Go Elemental dependency line.
+- **Releases, CI, tests, tasks** — per the Go Elemental standard principles in the landing zone
   (root `v<semver>` tags from `CHANGELOG.md`, hermetic `httptest`/port-0 tests with shared
   helpers in `internal/webtest`, mise tasks).
 - **Public repo.** The module resolves through the public Go proxy; CI carries no private-module
