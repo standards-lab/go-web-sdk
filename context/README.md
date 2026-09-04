@@ -25,7 +25,7 @@ build it.
   `Query` under caller-supplied `Limits`, the `Page[T]` envelope), and the `ErrorWriter`
   mapping returned errors to problem responses through consumer-supplied matchers. Built.
 - **middleware** — the middleware implementations: the request logger. Built.
-- **Candidate direction** — the rest of the middleware set and a readiness type hook
-  (`concepts/direction.md`); each waits on a consumer, and the roadmap re-plan
-  decides what is next. Where service-collaborating middleware lives is open in
-  `concepts/service-middleware.md`.
+- **Candidate direction** — the error-handler adapter (`concepts/error-handling.md`), the
+  middleware set (`concepts/middleware-sourcing.md`), and a readiness type hook
+  (`concepts/direction.md`); the roadmap's `v1.web` goal sequences them. Where
+  service-collaborating middleware lives is settled in `concepts/service-middleware.md`.
