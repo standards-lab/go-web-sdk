@@ -135,6 +135,6 @@ rot).
    they land with the adapter.
 6. **The config env segment becomes per-block.** `env.go` hardcodes the `"server"` segment in
    every composed name (`APP_SERVER_PORT` unconditionally), so a second `web.Config` block —
-   the management listener `v1.data.sql.startup` needs — cannot exist under one prefix. Give
-   the env composition a block-name parameter. Scheduled with the startup task but owned by
-   this SDK; land it wherever the earlier session touches config.
+   the management listener `v1.data.sql.integration.listener` needs — cannot exist under one
+   prefix. Give the env composition a block-name parameter. Scheduled with the listener task
+   but owned by this SDK; land it wherever the earlier session touches config.
