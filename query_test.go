@@ -18,7 +18,7 @@ func TestParseQuery_Defaults(t *testing.T) {
 		t.Fatalf("ParseQuery: %v", err)
 	}
 
-	want := web.Query{Page: 1, Size: 25, Filters: url.Values{}}
+	want := web.Query{Page: 1, Size: 25, Filters: []web.Filter{}}
 	if !reflect.DeepEqual(q, want) {
 		t.Errorf("query = %+v, want %+v", q, want)
 	}
@@ -30,7 +30,7 @@ func TestParseQuery_EmptyValuesReadAsOmitted(t *testing.T) {
 		t.Fatalf("ParseQuery: %v", err)
 	}
 
-	want := web.Query{Page: 1, Size: 25, Filters: url.Values{}}
+	want := web.Query{Page: 1, Size: 25, Filters: []web.Filter{}}
 	if !reflect.DeepEqual(q, want) {
 		t.Errorf("query = %+v, want %+v", q, want)
 	}
@@ -91,7 +91,10 @@ func TestParseQuery_SplitsFiltersFromDirectiveParameters(t *testing.T) {
 		t.Fatalf("ParseQuery: %v", err)
 	}
 
-	want := url.Values{"status": {"active"}, "unit": {"ops", "lab"}}
+	want := []web.Filter{
+		{Field: "status", Values: []string{"active"}},
+		{Field: "unit", Values: []string{"ops", "lab"}},
+	}
 	if !reflect.DeepEqual(q.Filters, want) {
 		t.Errorf("filters = %+v, want %+v", q.Filters, want)
 	}
@@ -104,7 +107,99 @@ func TestParseQuery_FiltersAreNeverNil(t *testing.T) {
 	}
 
 	if q.Filters == nil {
-		t.Error("filters = nil, want empty url.Values")
+		t.Error("filters = nil, want an empty slice")
+	}
+}
+
+func TestParseQuery_FilterOperators(t *testing.T) {
+	q, err := web.ParseQuery(url.Values{
+		"created[gte]": {"2026-01-01T10:00:00Z"},
+		"created[lt]":  {"2026-02-01T00:00:00Z"},
+		"name[like]":   {"acme%"},
+		"status[in]":   {"active", "pending"},
+		"unit":         {"ops"},
+	}, limits)
+	if err != nil {
+		t.Fatalf("ParseQuery: %v", err)
+	}
+
+	want := []web.Filter{
+		{Field: "created", Op: "gte", Values: []string{"2026-01-01T10:00:00Z"}},
+		{Field: "created", Op: "lt", Values: []string{"2026-02-01T00:00:00Z"}},
+		{Field: "name", Op: "like", Values: []string{"acme%"}},
+		{Field: "status", Op: "in", Values: []string{"active", "pending"}},
+		{Field: "unit", Values: []string{"ops"}},
+	}
+	if !reflect.DeepEqual(q.Filters, want) {
+		t.Errorf("filters = %+v, want %+v", q.Filters, want)
+	}
+}
+
+func TestParseQuery_OperatorsPassThroughAsText(t *testing.T) {
+	q, err := web.ParseQuery(url.Values{"name[frobnicate]": {"x"}}, limits)
+	if err != nil {
+		t.Fatalf("ParseQuery: %v", err)
+	}
+	if len(q.Filters) != 1 || q.Filters[0].Op != "frobnicate" {
+		t.Errorf("filters = %+v, want the operator carried verbatim", q.Filters)
+	}
+}
+
+func TestParseQuery_FiltersAreOrdered(t *testing.T) {
+	values := url.Values{
+		"zeta":      {"1"},
+		"alpha[lt]": {"2"},
+		"alpha[gt]": {"3"},
+		"mid":       {"4"},
+	}
+	want := []string{"alpha gt", "alpha lt", "mid ", "zeta "}
+	for range 20 {
+		q, err := web.ParseQuery(values, limits)
+		if err != nil {
+			t.Fatalf("ParseQuery: %v", err)
+		}
+		var got []string
+		for _, f := range q.Filters {
+			got = append(got, f.Field+" "+f.Op)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("filter order = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestParseQuery_RejectsMalformedFilterKeys(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		param string
+	}{
+		{"unclosed", "name[gt", "name[gt"},
+		{"unopened", "name]", "name]"},
+		{"stray close", "name]gt[", "name]gt["},
+		{"no field", "[gt]", "[gt]"},
+		{"empty operator", "name[]", "name[]"},
+		{"two operators", "name[gt][lt]", "name[gt][lt]"},
+		{"text after the bracket", "name[gt]x", "name[gt]x"},
+		{"reserved page", "page[gt]", "page"},
+		{"reserved size", "size[lt]", "size"},
+		{"reserved sort", "sort[eq]", "sort"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := web.ParseQuery(url.Values{tt.key: {"5"}}, limits)
+
+			qerr, ok := errors.AsType[*web.QueryError](err)
+			if !ok {
+				t.Fatalf("error = %v, want *QueryError", err)
+			}
+			if qerr.Param != tt.param {
+				t.Errorf("param = %q, want %q", qerr.Param, tt.param)
+			}
+			if qerr.Value != "5" || qerr.Reason == "" {
+				t.Errorf("error carries value %q, reason %q; want the first value and a reason", qerr.Value, qerr.Reason)
+			}
+		})
 	}
 }
 
@@ -127,8 +222,8 @@ func TestParseQuery_Rejections(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := web.ParseQuery(tt.query, limits)
 
-			var qerr *web.QueryError
-			if !errors.As(err, &qerr) {
+			qerr, ok := errors.AsType[*web.QueryError](err)
+			if !ok {
 				t.Fatalf("error = %v, want *QueryError", err)
 			}
 			if qerr.Param != tt.param {

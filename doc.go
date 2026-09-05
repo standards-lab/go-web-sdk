@@ -115,9 +115,14 @@
 // filter set — one call yields both halves, so a handler cannot parse the
 // paging parameters and forget to strip them from the filters. Sort is
 // comma-separated field names, "-" prefixing a descending key
-// ("sort=name,-code"), honored across every occurrence of the parameter;
-// sort and filter names are lexical here, and whether one names a readable
-// field is the data layer's check. Policy belongs to the caller: a [Limits]
+// ("sort=name,-code"), honored across every occurrence of the parameter. A
+// filter is a field name with an optional operator in brackets
+// ("status=active", "created[gte]=2026-01-01"), a repeated parameter
+// carrying several values under one [Filter]; the filters come back ordered
+// by field and operator, so a consumer composes a deterministic predicate.
+// Sort and filter names and the operators are lexical here: whether a field
+// is readable or an operator supported is the data layer's check, and the
+// SDK enumerates no operators of its own. Policy belongs to the caller: a [Limits]
 // value supplies the default and maximum size (invalid limits panic as a
 // wiring mistake), and a malformed or out-of-bounds parameter returns a
 // *[QueryError]. On success, [NewPage] assembles the [Page] envelope —

@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -23,17 +24,32 @@ type Sort struct {
 	Descending bool
 }
 
+// Filter is one filter parsed from a request: a field name, the operator
+// the request named in brackets after it ("created[gte]=2026-01-01"), and
+// every value the parameter carried. Op is empty when the request named
+// none ("status=active"), the plain form a consumer reads as equality. Both
+// the name and the operator are lexical — whether the field is readable and
+// the operator is one the read model supports is the data layer's check —
+// and what several values mean under one operator is the consumer's
+// translation; the SDK enumerates no operators of its own.
+type Filter struct {
+	Field  string
+	Op     string
+	Values []string
+}
+
 // Query is one read request's parsed query string: the page, size, and sort
 // parameters, and every remaining parameter as the filter set. Page is
 // 1-based and defaults to 1; Size is defaulted and capped by the [Limits]
 // given to [ParseQuery]; Sort preserves request order and is nil when the
-// request carries no sort; Filters is never nil. Filter names are lexical
-// here — validating them against the read model is the data layer's job.
+// request carries no sort. Filters is never nil and is ordered by field
+// name, then operator — url.Values carries no request order, and a fixed
+// order lets a consumer compose a deterministic predicate from it.
 type Query struct {
 	Page    int
 	Size    int
 	Sort    []Sort
-	Filters url.Values
+	Filters []Filter
 }
 
 // Limits bounds query parsing: the page size when a request omits one, and
@@ -53,7 +69,15 @@ type Limits struct {
 // page is 1 and an absent size is the default; sort is comma-separated field
 // names, each optionally prefixed with "-" for descending, honored across
 // every occurrence of the parameter in order; an empty parameter value reads
-// as omitted. A malformed or out-of-bounds parameter is a *[QueryError].
+// as omitted.
+//
+// A filter parameter is a field name, optionally followed by an operator in
+// brackets: "status=active" is the field alone, "created[gte]=2026-01-01"
+// names an operator, and a repeated parameter carries several values under
+// one [Filter]. The operator passes through as text. A key with unbalanced,
+// misplaced, or repeated brackets, an empty name, or an empty operator is
+// rejected, as is an operator on page, size, or sort. A malformed or
+// out-of-bounds parameter is a *[QueryError].
 func ParseQuery(q url.Values, l Limits) (Query, error) {
 	if l.DefaultSize < 1 || l.MaxSize < l.DefaultSize {
 		panic(fmt.Sprintf(
@@ -111,13 +135,60 @@ func ParseQuery(q url.Values, l Limits) (Query, error) {
 		}
 	}
 
-	out.Filters = url.Values{}
+	out.Filters = []Filter{}
 	for key, values := range q {
 		if _, ok := reserved[key]; ok {
 			continue
 		}
-		out.Filters[key] = values
+		field, op, err := parseFilterKey(key, values)
+		if err != nil {
+			return Query{}, err
+		}
+		out.Filters = append(out.Filters, Filter{Field: field, Op: op, Values: values})
 	}
+	slices.SortFunc(out.Filters, func(a, b Filter) int {
+		if c := strings.Compare(a.Field, b.Field); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Op, b.Op)
+	})
 
 	return out, nil
+}
+
+// parseFilterKey splits a filter parameter's key into its field name and
+// operator: "name" yields ("name", ""), "name[op]" yields ("name", "op").
+// Anything else is a *QueryError on the key, with the parameter's first
+// value as the offending input; a reserved name with an operator is
+// rejected on the reserved parameter.
+func parseFilterKey(key string, values []string) (field, op string, err error) {
+	value := ""
+	if len(values) > 0 {
+		value = values[0]
+	}
+	reject := func(param, reason string) (string, string, error) {
+		return "", "", &QueryError{Param: param, Value: value, Reason: reason}
+	}
+
+	open := strings.IndexByte(key, '[')
+	if open < 0 {
+		if strings.IndexByte(key, ']') >= 0 {
+			return reject(key, "unbalanced bracket in the parameter name")
+		}
+		return key, "", nil
+	}
+	if open == 0 {
+		return reject(key, "the operator must follow a field name")
+	}
+	if !strings.HasSuffix(key, "]") || strings.Count(key, "[") != 1 || strings.Count(key, "]") != 1 {
+		return reject(key, "the operator must be one bracketed suffix, like name[op]")
+	}
+	field, op = key[:open], key[open+1:len(key)-1]
+	if op == "" {
+		return reject(key, "empty operator")
+	}
+	if _, ok := reserved[field]; ok {
+		return reject(field, "takes no operator")
+	}
+	return field, op, nil
 }
