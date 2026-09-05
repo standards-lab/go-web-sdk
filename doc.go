@@ -132,8 +132,10 @@
 // in order, first match wins, and an unclaimed error is a 500 — so HTTP
 // status policy stays with the application, and the SDK depends on no
 // infrastructure library's error types. The detail member carries the error
-// text only on a 400, where it is request-shaped and client-actionable; no
-// internal error's text reaches the wire.
+// text only on a status in the writer's detail set — 400, 413, and 428 built
+// in, the statuses that are request-shaped by construction — so no internal
+// error's text reaches the wire; [ErrorWriter.Detail] adds statuses for a
+// surface whose clients need the reason, such as an operator API's 409.
 //
 // # Problem responses
 //

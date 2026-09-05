@@ -6,6 +6,17 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+### Added
+
+- `web`: `ErrorWriter.Detail` adds statuses whose problems carry the error text as their
+  detail member, for a surface whose clients need the reason. The built-in set is 400, 413,
+  and 428.
+
+### Changed
+
+- `web`: `ErrorWriter.Write` decides the detail member from the writer's detail set rather
+  than from the single status 400.
+
 ## [v0.5.0] - 2026-08-28
 
 The read parse consolidated and the error-to-problem mapping, promoted from the reference

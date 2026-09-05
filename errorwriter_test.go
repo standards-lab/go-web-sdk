@@ -93,6 +93,53 @@ func TestErrorWriter_Write400CarriesTheErrorText(t *testing.T) {
 	}
 }
 
+func TestErrorWriter_DetailAddsStatusesThatCarryTheErrorText(t *testing.T) {
+	conflict := errors.New("schema is dirty at version 7")
+	forbidden := errors.New("seeding is disabled in this environment")
+	internal := errors.New("driver: connection reset")
+	ew := web.NewErrorWriter(
+		matcherFor(conflict, http.StatusConflict),
+		matcherFor(forbidden, http.StatusForbidden),
+	)
+	ew.Detail(http.StatusConflict, http.StatusInternalServerError)
+
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		detail bool
+	}{
+		{"added conflict carries text", conflict, http.StatusConflict, true},
+		{"unadded forbidden stays bare", forbidden, http.StatusForbidden, false},
+		{"consumer's choice is honored even on 500", internal, http.StatusInternalServerError, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/admin/schema/up", nil)
+
+			if err := ew.Write(rec, req, tt.err); err != nil {
+				t.Fatalf("Write: %v", err)
+			}
+			if rec.Code != tt.status {
+				t.Errorf("status = %d, want %d", rec.Code, tt.status)
+			}
+
+			var body map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+			detail, present := body["detail"]
+			if present != tt.detail {
+				t.Errorf("detail present = %v, want %v", present, tt.detail)
+			}
+			if tt.detail && detail != tt.err.Error() {
+				t.Errorf("detail = %q, want %q", detail, tt.err.Error())
+			}
+		})
+	}
+}
+
 func TestErrorWriter_WriteAboveA400SendsNoErrorText(t *testing.T) {
 	sentinel := errors.New("unique constraint violation")
 	ew := web.NewErrorWriter(matcherFor(sentinel, http.StatusConflict))
