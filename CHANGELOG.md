@@ -6,6 +6,15 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.6.0] - 2026-09-05
+
+The request side of a handler, promoted from the reference service and the SQL DSL
+experiment: the If-Match precondition parse, the strict body decode, and the error-returning
+handler adapter that removes the rejection plumbing every handler repeated. The query parser
+takes the operator grammar the experiment left open. The SDK still maps only its own
+vocabulary: each of its error types carries its status, sealed from extension, and the
+consumer's matchers decide everything else.
+
 ### Added
 
 - `web`: `IfMatch` reads a request's version precondition from the If-Match header, exactly one
@@ -147,7 +156,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.6.0...HEAD
+[v0.6.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.4.0...v0.5.0
 [v0.4.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.3.1...v0.4.0
 [v0.3.1]: https://github.com/standards-lab/go-web-sdk/compare/v0.3.0...v0.3.1

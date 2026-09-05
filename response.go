@@ -1,5 +1,24 @@
 package web
 
+import (
+	"encoding/json"
+	"net/http"
+)
+
+// JSONMediaType is the media type [WriteJSON] sets.
+const JSONMediaType = "application/json"
+
+// WriteJSON sends data as JSON with the given status.
+func WriteJSON(
+	w http.ResponseWriter,
+	status int,
+	data any,
+) error {
+	w.Header().Set("Content-Type", JSONMediaType)
+	w.WriteHeader(status)
+	return json.NewEncoder(w).Encode(data)
+}
+
 // Page is the success envelope of a paginated read: one page of items, the
 // paging that produced it, and the total row count across all pages. It is
 // the whole response body, written with [WriteJSON].
