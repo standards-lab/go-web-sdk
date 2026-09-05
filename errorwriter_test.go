@@ -33,13 +33,58 @@ func TestErrorWriter_QueryErrorIsBuiltIn(t *testing.T) {
 	}
 }
 
+func TestErrorWriter_PreconditionErrorIsBuiltIn(t *testing.T) {
+	ew := web.NewErrorWriter()
+
+	missing := fmt.Errorf("edit: %w", &web.PreconditionError{Missing: true})
+	if got := ew.Status(missing); got != http.StatusPreconditionRequired {
+		t.Errorf("Status(missing) = %d, want %d", got, http.StatusPreconditionRequired)
+	}
+	malformed := fmt.Errorf("edit: %w", &web.PreconditionError{Value: `W/"3"`})
+	if got := ew.Status(malformed); got != http.StatusBadRequest {
+		t.Errorf("Status(malformed) = %d, want %d", got, http.StatusBadRequest)
+	}
+}
+
 func TestErrorWriter_BuiltInWinsOverMatchers(t *testing.T) {
 	claimAll := func(error) (int, bool) { return http.StatusTeapot, true }
 	ew := web.NewErrorWriter(claimAll)
 
-	err := &web.QueryError{Param: "size", Value: "many", Reason: "must be an integer of at least 1"}
-	if got := ew.Status(err); got != http.StatusBadRequest {
-		t.Errorf("Status = %d, want %d", got, http.StatusBadRequest)
+	builtIn := map[string]struct {
+		err  error
+		want int
+	}{
+		"query":                {&web.QueryError{Param: "size", Value: "many", Reason: "must be an integer of at least 1"}, http.StatusBadRequest},
+		"precondition missing": {&web.PreconditionError{Missing: true}, http.StatusPreconditionRequired},
+		"precondition value":   {&web.PreconditionError{Value: "3"}, http.StatusBadRequest},
+		"body too large":       {&web.BodyError{TooLarge: true, Reason: "exceeds the 16-byte limit"}, http.StatusRequestEntityTooLarge},
+		"body rejected":        {&web.BodyError{Reason: "unknown field"}, http.StatusBadRequest},
+	}
+	for name, tt := range builtIn {
+		if got := ew.Status(tt.err); got != tt.want {
+			t.Errorf("Status(%s) = %d, want %d", name, got, tt.want)
+		}
+	}
+}
+
+func TestErrorWriter_Write428CarriesTheErrorText(t *testing.T) {
+	ew := web.NewErrorWriter()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/things/1", nil)
+
+	perr := &web.PreconditionError{Missing: true}
+	if err := ew.Write(rec, req, perr); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if rec.Code != http.StatusPreconditionRequired {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusPreconditionRequired)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if body["detail"] != perr.Error() {
+		t.Errorf("detail = %q, want %q", body["detail"], perr.Error())
 	}
 }
 
@@ -90,6 +135,53 @@ func TestErrorWriter_Write400CarriesTheErrorText(t *testing.T) {
 	}
 	if body["instance"] != "/things" {
 		t.Errorf("instance = %q, want %q", body["instance"], "/things")
+	}
+}
+
+func TestErrorWriter_DetailAddsStatusesThatCarryTheErrorText(t *testing.T) {
+	conflict := errors.New("schema is dirty at version 7")
+	forbidden := errors.New("seeding is disabled in this environment")
+	internal := errors.New("driver: connection reset")
+	ew := web.NewErrorWriter(
+		matcherFor(conflict, http.StatusConflict),
+		matcherFor(forbidden, http.StatusForbidden),
+	)
+	ew.Detail(http.StatusConflict, http.StatusInternalServerError)
+
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		detail bool
+	}{
+		{"added conflict carries text", conflict, http.StatusConflict, true},
+		{"unadded forbidden stays bare", forbidden, http.StatusForbidden, false},
+		{"consumer's choice is honored even on 500", internal, http.StatusInternalServerError, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/admin/schema/up", nil)
+
+			if err := ew.Write(rec, req, tt.err); err != nil {
+				t.Fatalf("Write: %v", err)
+			}
+			if rec.Code != tt.status {
+				t.Errorf("status = %d, want %d", rec.Code, tt.status)
+			}
+
+			var body map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+			detail, present := body["detail"]
+			if present != tt.detail {
+				t.Errorf("detail present = %v, want %v", present, tt.detail)
+			}
+			if tt.detail && detail != tt.err.Error() {
+				t.Errorf("detail = %q, want %q", detail, tt.err.Error())
+			}
+		})
 	}
 }
 

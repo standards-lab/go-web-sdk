@@ -21,11 +21,17 @@ build it.
 - **web** — the HTTP layer: the bind-then-serve server declared as go-core's root-stage
   lifecycle service, route groups, modules, and the router, the probes aggregating
   `lifecycle.Check` values, the problem writers, the `Middleware` type with `Chain`, the read
-  contract (`ParseQuery` splitting a request's query string into paging and filters as one
-  `Query` under caller-supplied `Limits`, the `Page[T]` envelope), and the `ErrorWriter`
-  mapping returned errors to problem responses through consumer-supplied matchers. Built.
+  contract (`ParseQuery` splitting a request's query string into paging and an ordered filter
+  list with the bracket operator grammar, as one `Query` under caller-supplied `Limits`; the
+  `Page[T]` envelope), the request helpers (`IfMatch`, `DecodeJSON`), the `ErrorWriter` mapping
+  returned errors to problem responses — its own error types map themselves, sealed, and
+  consumer-supplied matchers decide the rest, with `Detail` and `Log` set at wiring — and the
+  error-returning handler adapter (`HandlerFunc`, `Handle`, `Group.HandleErr` under
+  `Group.SetErrorWriter`) that never writes a second response. Built, v0.6.0.
 - **middleware** — the middleware implementations: the request logger. Built.
-- **Candidate direction** — the error-handler adapter (`concepts/error-handling.md`), the
-  middleware set (`concepts/middleware-sourcing.md`), and a readiness type hook
-  (`concepts/direction.md`); the roadmap's `v1.web` goal sequences them. Where
-  service-collaborating middleware lives is settled in `concepts/service-middleware.md`.
+- **Candidate direction** — what remains of the adapter story after v0.6.0: the recorder
+  exported and the logger rewritten onto it, the problem vocabulary, router 404/405 hooks, the
+  `ErrorLog` bridge (`concepts/error-handling.md`); the middleware set
+  (`concepts/middleware-sourcing.md`); a readiness type hook (`concepts/direction.md`). The
+  roadmap's `v1.web` goal sequences them. Where service-collaborating middleware lives is
+  settled in `concepts/service-middleware.md`.

@@ -21,6 +21,7 @@ type Group struct {
 	middleware []Middleware
 	routes     []route
 	groups     []*Group
+	errors     *ErrorWriter
 	sealed     bool
 }
 
@@ -67,6 +68,33 @@ func (g *Group) HandleFunc(
 	mw ...Middleware,
 ) {
 	g.Handle(method, pattern, handler, mw...)
+}
+
+// SetErrorWriter sets the writer the group's [Group.HandleErr] routes are
+// adapted with. The writer is group-scoped, not per route: a layer builds
+// one writer carrying its error vocabulary and every handler in the group
+// returns errors through it. A child group does not inherit its parent's
+// writer; each group that registers error-returning handlers sets its own.
+// SetErrorWriter after NewModule panics.
+func (g *Group) SetErrorWriter(ew *ErrorWriter) {
+	g.checkSeal()
+	g.errors = ew
+}
+
+// HandleErr registers an error-returning handler for method and pattern,
+// adapted through the group's error writer by [Handle]; the pattern, method,
+// and middleware rules are [Group.Handle]'s. A group with no writer panics
+// with the fix named — a registration-time failure, like every other wiring
+// mistake here. HandleErr after NewModule panics.
+func (g *Group) HandleErr(
+	method, pattern string,
+	fn HandlerFunc,
+	mw ...Middleware,
+) {
+	if g.errors == nil {
+		panic("web: HandleErr on a group with no error writer; call SetErrorWriter first: " + g.prefix + pattern)
+	}
+	g.Handle(method, pattern, Handle(fn, g.errors), mw...)
 }
 
 // Mount nests child under the group: the child's prefix appends to the

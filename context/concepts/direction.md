@@ -7,8 +7,9 @@ decides what is next. None of it revises the current API; all of it adds to it.
 
 ## The rest of the middleware set
 
-Superseded (2026-08-31) by the retrospective's settled direction: `v1.web.adapter` brings the
-error-handler adapter and the shared wrapped writer, and `v1.web.middleware` builds the
+Superseded (2026-08-31) by the retrospective's settled direction. The error-handler adapter's
+core landed in v0.6.0 (`v1.data.sql.integration.websdk`); `v1.web.adapter` exports its
+recorder as the shared wrapped writer and finishes the problem story, and `v1.web.middleware` builds the
 hand-rolled set (request ID, recoverer, timeout, content-type gate, body limit, fixed headers)
 and sources the spec-surface set per the org's dependency-sourcing rule (`standards-lab
 context/design/dependency-sourcing.md`) — the reference service now needs them.

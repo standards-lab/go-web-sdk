@@ -115,25 +115,65 @@
 // filter set — one call yields both halves, so a handler cannot parse the
 // paging parameters and forget to strip them from the filters. Sort is
 // comma-separated field names, "-" prefixing a descending key
-// ("sort=name,-code"), honored across every occurrence of the parameter;
-// sort and filter names are lexical here, and whether one names a readable
-// field is the data layer's check. Policy belongs to the caller: a [Limits]
+// ("sort=name,-code"), honored across every occurrence of the parameter. A
+// filter is a field name with an optional operator in brackets
+// ("status=active", "created[gte]=2026-01-01"), a repeated parameter
+// carrying several values under one [Filter]; the filters come back ordered
+// by field and operator, so a consumer composes a deterministic predicate.
+// Sort and filter names and the operators are lexical here: whether a field
+// is readable or an operator supported is the data layer's check, and the
+// SDK enumerates no operators of its own. Policy belongs to the caller: a [Limits]
 // value supplies the default and maximum size (invalid limits panic as a
 // wiring mistake), and a malformed or out-of-bounds parameter returns a
 // *[QueryError]. On success, [NewPage] assembles the [Page] envelope —
 // items, page, size, total, with nil items marshaling as [] — and
 // [WriteJSON] sends it as the response body.
 //
+// # Request helpers
+//
+// [IfMatch] reads a request's version precondition from the If-Match header
+// (RFC 9110 §13.1.1): exactly one strong entity-tag whose opaque value is an
+// integer version, If-Match: "3". A missing header, a weak tag, the * form, a
+// list, or a non-integer tag is a *[PreconditionError], which the error
+// mapping below answers with a 428 when the header is missing and a 400
+// otherwise. The parse is syntax only; whether the version matches the row
+// is the data layer's check, and a mismatch is the consumer's 412.
+//
+// [DecodeJSON] reads a request body strictly as one JSON value: bounded at
+// the caller's limit, unknown fields rejected so a misspelled field cannot
+// silently change a command's meaning, and nothing after the first value.
+// A body that fails any of these, or is empty, is a *[BodyError], answered
+// with a 413 when the body is over its limit and a 400 otherwise. The decode
+// is syntax and shape only; the values' validity is the command's own check.
+//
 // # Error mapping
 //
 // An [ErrorWriter] turns a handler's returned error into a problem response
 // through a composed [StatusMatcher] list: the package's own vocabulary is
-// built in (*[QueryError] is a 400), the consumer's matchers decide the rest
+// built in (*[QueryError] is a 400; *[PreconditionError] a 428 or a 400;
+// *[BodyError] a 413 or a 400), the consumer's matchers decide the rest
 // in order, first match wins, and an unclaimed error is a 500 — so HTTP
 // status policy stays with the application, and the SDK depends on no
 // infrastructure library's error types. The detail member carries the error
-// text only on a 400, where it is request-shaped and client-actionable; no
-// internal error's text reaches the wire.
+// text only on a status in the writer's detail set — 400, 413, and 428 built
+// in, the statuses that are request-shaped by construction — so no internal
+// error's text reaches the wire; [ErrorWriter.Detail] adds statuses for a
+// surface whose clients need the reason, such as an operator API's 409.
+//
+// # Error-returning handlers
+//
+// [HandlerFunc] is the handler shape that reports failure by returning an
+// error, and [Handle] adapts one into an http.Handler under an [ErrorWriter]:
+// a returned error is written as a problem, so a handler's body reads as its
+// success path and every rejection is one return statement. The stdlib
+// signature stays the primary contract — [Group.Handle] and [Router.Handle]
+// take http.Handler, and nothing requires the adapter — and
+// [Group.HandleErr] registers an error-returning handler under the writer
+// set by [Group.SetErrorWriter], one per group, not per route. The adapter
+// never writes a second response: a handler that committed a response and
+// then returned an error is reported through the writer's logger
+// ([ErrorWriter.Log], slog's default when unset) and nothing more is
+// written.
 //
 // # Problem responses
 //

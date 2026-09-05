@@ -6,6 +6,47 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.6.0] - 2026-09-05
+
+The request side of a handler, promoted from the reference service and the SQL DSL
+experiment: the If-Match precondition parse, the strict body decode, and the error-returning
+handler adapter that removes the rejection plumbing every handler repeated. The query parser
+takes the operator grammar the experiment left open. The SDK still maps only its own
+vocabulary: each of its error types carries its status, sealed from extension, and the
+consumer's matchers decide everything else.
+
+### Added
+
+- `web`: `IfMatch` reads a request's version precondition from the If-Match header, exactly one
+  strong entity-tag holding an integer version; a missing or malformed header is a
+  `*PreconditionError`, which `ErrorWriter` maps to a 428 or a 400 built in. Promoted from the
+  reference service's sdk package.
+- `web`: `DecodeJSON` reads a request body strictly as one JSON value of the given type: bounded
+  at the caller's limit, unknown fields rejected, nothing after the first value. A rejected body
+  is a `*BodyError`, which `ErrorWriter` maps to a 413 when the body is over its limit and a
+  400 otherwise. Promoted from the reference service's per-domain `decode`, which answered 400
+  for an oversized body.
+- `web`: the query parser's filter grammar gains operators: `field[op]=value` names one, the
+  bare `field=value` names none, and a repeated parameter carries several values under one
+  filter. The operator passes through as text for the data layer to validate; an operator on
+  `page`, `size`, or `sort`, or a malformed key, is a `*QueryError`.
+- `web`: `HandlerFunc`, `Handle`, `Group.SetErrorWriter`, and `Group.HandleErr` — the
+  error-returning handler adapted through an `ErrorWriter`, so a handler's body reads as its
+  success path and every rejection is one return statement. The stdlib handler signature stays
+  the primary contract. The adapter never writes a second response: an error returned after a
+  response was committed is logged, through `ErrorWriter.Log`'s logger or slog's default, and
+  nothing more is written.
+- `web`: `ErrorWriter.Detail` adds statuses whose problems carry the error text as their
+  detail member, for a surface whose clients need the reason. The built-in set is 400, 413,
+  and 428.
+
+### Changed
+
+- `web`: `Query.Filters` is an ordered `[]Filter` — field, operator, values — in place of
+  `url.Values`, sorted by field then operator so a composed predicate is deterministic.
+- `web`: `ErrorWriter.Write` decides the detail member from the writer's detail set rather
+  than from the single status 400.
+
 ## [v0.5.0] - 2026-08-28
 
 The read parse consolidated and the error-to-problem mapping, promoted from the reference
@@ -115,7 +156,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.6.0...HEAD
+[v0.6.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.4.0...v0.5.0
 [v0.4.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.3.1...v0.4.0
 [v0.3.1]: https://github.com/standards-lab/go-web-sdk/compare/v0.3.0...v0.3.1
