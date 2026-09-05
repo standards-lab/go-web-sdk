@@ -124,11 +124,22 @@
 // items, page, size, total, with nil items marshaling as [] — and
 // [WriteJSON] sends it as the response body.
 //
+// # Request helpers
+//
+// [IfMatch] reads a request's version precondition from the If-Match header
+// (RFC 9110 §13.1.1): exactly one strong entity-tag whose opaque value is an
+// integer version, If-Match: "3". A missing header, a weak tag, the * form, a
+// list, or a non-integer tag is a *[PreconditionError], which the error
+// mapping below answers with a 428 when the header is missing and a 400
+// otherwise. The parse is syntax only; whether the version matches the row
+// is the data layer's check, and a mismatch is the consumer's 412.
+//
 // # Error mapping
 //
 // An [ErrorWriter] turns a handler's returned error into a problem response
 // through a composed [StatusMatcher] list: the package's own vocabulary is
-// built in (*[QueryError] is a 400), the consumer's matchers decide the rest
+// built in (*[QueryError] is a 400; *[PreconditionError] a 428 or a 400), the
+// consumer's matchers decide the rest
 // in order, first match wins, and an unclaimed error is a 500 — so HTTP
 // status policy stays with the application, and the SDK depends on no
 // infrastructure library's error types. The detail member carries the error

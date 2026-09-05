@@ -8,6 +8,10 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ### Added
 
+- `web`: `IfMatch` reads a request's version precondition from the If-Match header, exactly one
+  strong entity-tag holding an integer version; a missing or malformed header is a
+  `*PreconditionError`, which `ErrorWriter` maps to a 428 or a 400 built in. Promoted from the
+  reference service's sdk package.
 - `web`: `ErrorWriter.Detail` adds statuses whose problems carry the error text as their
   detail member, for a surface whose clients need the reason. The built-in set is 400, 413,
   and 428.

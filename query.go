@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -58,6 +59,8 @@ type QueryError struct {
 func (e *QueryError) Error() string {
 	return fmt.Sprintf("query %s=%q: %s", e.Param, e.Value, e.Reason)
 }
+
+func (e *QueryError) status() int { return http.StatusBadRequest }
 
 // ParseQuery parses one read request's query string in full: the page, size,
 // and sort parameters under the given limits, and every remaining parameter

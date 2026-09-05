@@ -33,13 +33,56 @@ func TestErrorWriter_QueryErrorIsBuiltIn(t *testing.T) {
 	}
 }
 
+func TestErrorWriter_PreconditionErrorIsBuiltIn(t *testing.T) {
+	ew := web.NewErrorWriter()
+
+	missing := fmt.Errorf("edit: %w", &web.PreconditionError{Missing: true})
+	if got := ew.Status(missing); got != http.StatusPreconditionRequired {
+		t.Errorf("Status(missing) = %d, want %d", got, http.StatusPreconditionRequired)
+	}
+	malformed := fmt.Errorf("edit: %w", &web.PreconditionError{Value: `W/"3"`})
+	if got := ew.Status(malformed); got != http.StatusBadRequest {
+		t.Errorf("Status(malformed) = %d, want %d", got, http.StatusBadRequest)
+	}
+}
+
 func TestErrorWriter_BuiltInWinsOverMatchers(t *testing.T) {
 	claimAll := func(error) (int, bool) { return http.StatusTeapot, true }
 	ew := web.NewErrorWriter(claimAll)
 
-	err := &web.QueryError{Param: "size", Value: "many", Reason: "must be an integer of at least 1"}
-	if got := ew.Status(err); got != http.StatusBadRequest {
-		t.Errorf("Status = %d, want %d", got, http.StatusBadRequest)
+	builtIn := map[string]struct {
+		err  error
+		want int
+	}{
+		"query":                {&web.QueryError{Param: "size", Value: "many", Reason: "must be an integer of at least 1"}, http.StatusBadRequest},
+		"precondition missing": {&web.PreconditionError{Missing: true}, http.StatusPreconditionRequired},
+		"precondition value":   {&web.PreconditionError{Value: "3"}, http.StatusBadRequest},
+	}
+	for name, tt := range builtIn {
+		if got := ew.Status(tt.err); got != tt.want {
+			t.Errorf("Status(%s) = %d, want %d", name, got, tt.want)
+		}
+	}
+}
+
+func TestErrorWriter_Write428CarriesTheErrorText(t *testing.T) {
+	ew := web.NewErrorWriter()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/things/1", nil)
+
+	perr := &web.PreconditionError{Missing: true}
+	if err := ew.Write(rec, req, perr); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if rec.Code != http.StatusPreconditionRequired {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusPreconditionRequired)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if body["detail"] != perr.Error() {
+		t.Errorf("detail = %q, want %q", body["detail"], perr.Error())
 	}
 }
 
