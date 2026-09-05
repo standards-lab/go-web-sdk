@@ -134,12 +134,19 @@
 // otherwise. The parse is syntax only; whether the version matches the row
 // is the data layer's check, and a mismatch is the consumer's 412.
 //
+// [DecodeJSON] reads a request body strictly as one JSON value: bounded at
+// the caller's limit, unknown fields rejected so a misspelled field cannot
+// silently change a command's meaning, and nothing after the first value.
+// A body that fails any of these, or is empty, is a *[BodyError], answered
+// with a 413 when the body is over its limit and a 400 otherwise. The decode
+// is syntax and shape only; the values' validity is the command's own check.
+//
 // # Error mapping
 //
 // An [ErrorWriter] turns a handler's returned error into a problem response
 // through a composed [StatusMatcher] list: the package's own vocabulary is
-// built in (*[QueryError] is a 400; *[PreconditionError] a 428 or a 400), the
-// consumer's matchers decide the rest
+// built in (*[QueryError] is a 400; *[PreconditionError] a 428 or a 400;
+// *[BodyError] a 413 or a 400), the consumer's matchers decide the rest
 // in order, first match wins, and an unclaimed error is a 500 — so HTTP
 // status policy stays with the application, and the SDK depends on no
 // infrastructure library's error types. The detail member carries the error

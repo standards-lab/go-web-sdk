@@ -9,21 +9,11 @@ import (
 // error it does not recognize, passing the decision to the next matcher.
 type StatusMatcher func(error) (int, bool)
 
-// statusError is the status mapping of this package's own error types: each
-// carries its HTTP status beside its definition, and [ErrorWriter.Status]
-// asks the error rather than enumerating the types. The method is
-// unexported on purpose. A consumer's status policy is declared through
-// matchers at the composition root, never by teaching an error its status,
-// so the set of errors the SDK maps itself stays exactly the set it defines.
-type statusError interface {
-	error
-	status() int
-}
-
 // ErrorWriter turns a handler's returned error into an RFC 9457 problem
 // response. The mappings it owns are this package's own vocabulary — a
 // *[QueryError] is a 400, a *[PreconditionError] a 428 when the header is
-// missing and a 400 otherwise; every other status is decided by the
+// missing and a 400 otherwise, a *[BodyError] a 413 when the body is over
+// its limit and a 400 otherwise; every other status is decided by the
 // consumer's matchers, so HTTP status policy stays with the application and
 // the SDK depends on no infrastructure library's error types.
 type ErrorWriter struct {

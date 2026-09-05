@@ -12,6 +12,11 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
   strong entity-tag holding an integer version; a missing or malformed header is a
   `*PreconditionError`, which `ErrorWriter` maps to a 428 or a 400 built in. Promoted from the
   reference service's sdk package.
+- `web`: `DecodeJSON` reads a request body strictly as one JSON value of the given type: bounded
+  at the caller's limit, unknown fields rejected, nothing after the first value. A rejected body
+  is a `*BodyError`, which `ErrorWriter` maps to a 413 when the body is over its limit and a
+  400 otherwise. Promoted from the reference service's per-domain `decode`, which answered 400
+  for an oversized body.
 - `web`: `ErrorWriter.Detail` adds statuses whose problems carry the error text as their
   detail member, for a surface whose clients need the reason. The built-in set is 400, 413,
   and 428.

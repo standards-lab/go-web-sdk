@@ -57,6 +57,8 @@ func TestErrorWriter_BuiltInWinsOverMatchers(t *testing.T) {
 		"query":                {&web.QueryError{Param: "size", Value: "many", Reason: "must be an integer of at least 1"}, http.StatusBadRequest},
 		"precondition missing": {&web.PreconditionError{Missing: true}, http.StatusPreconditionRequired},
 		"precondition value":   {&web.PreconditionError{Value: "3"}, http.StatusBadRequest},
+		"body too large":       {&web.BodyError{TooLarge: true, Reason: "exceeds the 16-byte limit"}, http.StatusRequestEntityTooLarge},
+		"body rejected":        {&web.BodyError{Reason: "unknown field"}, http.StatusBadRequest},
 	}
 	for name, tt := range builtIn {
 		if got := ew.Status(tt.err); got != tt.want {

@@ -2,7 +2,6 @@ package web
 
 import (
 	"fmt"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -46,21 +45,6 @@ type Limits struct {
 	DefaultSize int
 	MaxSize     int
 }
-
-// QueryError reports one rejected query parameter: which parameter
-// ("page", "size", or "sort"), the offending input, and why. [ErrorWriter]
-// maps it to a 400; this package mints no problem types.
-type QueryError struct {
-	Param  string
-	Value  string
-	Reason string
-}
-
-func (e *QueryError) Error() string {
-	return fmt.Sprintf("query %s=%q: %s", e.Param, e.Value, e.Reason)
-}
-
-func (e *QueryError) status() int { return http.StatusBadRequest }
 
 // ParseQuery parses one read request's query string in full: the page, size,
 // and sort parameters under the given limits, and every remaining parameter
