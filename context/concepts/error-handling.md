@@ -1,140 +1,70 @@
-# The error-handler adapter and the whole-response problem story
+# The adapter's remaining work and the whole-response problem story
 
 Settled at the 2026-08-31 workspace retrospective; `v1.web.adapter` in the coordinator's
-roadmap cites this note. §1 is the settled adapter decision from the retrospective's design
-discussion; §2 is the retrospective's evaluation findings folded into the same session because
-the adapter multiplies traffic through the surfaces they fix. This note decays into the
-landing-zone pages and the code when the session lands.
+roadmap cites this note. The adapter core landed in go-web-sdk v0.6.0 under
+`v1.data.sql.integration.websdk` (2026-09-05): `HandlerFunc`, `Handle`, `Group.SetErrorWriter`,
+`Group.HandleErr`, the committed-tracking `recorder` in `handler.go`, and the request helpers
+`IfMatch` and `DecodeJSON`. The code and `doc.go` express those, and this note keeps only what
+remains. It decays into the landing-zone pages and the code when the adapter task lands.
 
-## 1. The adapter
+## Idiom
 
-### Decision
+Wiring-time methods are the SDK's form for optional behavior: `Group.Use`,
+`Group.SetErrorWriter`, `ErrorWriter.Detail`, `ErrorWriter.Log`. Struct options are for
+construction-time configuration accumulated from sources, go-core's `config.Options` being the
+case. The go-patterns constructors reference draws the same line: struct configs for production
+constructors, variadic or method-style variation where the parameters are genuinely optional. An
+earlier version of this note stated the rule as "never functional options", which overstated it.
 
-Add an opt-in adapter that lets a handler return an error, routed through an `ErrorWriter`.
-The stdlib `http.Handler` signature stays the primary contract: `Group.Handle` and
-`Router.Handle` continue to accept `http.Handler`, and nothing in the SDK requires the
-adapter.
+## What remains for `v1.web.adapter`
 
-### Why the original choice was a mistake
+Verified against v0.5.0 at the retrospective (96.5% / 89.7% coverage, all hermetic); re-read
+against v0.6.0 at this rewrite.
 
-The SDK kept the stdlib handler signature to avoid a framework-style handler type. That goal
-is still right, but it was applied one layer too deep. The cost shows in the reference
-service: `domain/organization/handler.go` repeats
-
-```go
-if err != nil {
-    _ = h.errors.Write(w, r, err)
-    return
-}
-```
-
-fourteen times across seven handlers, and two helpers (`pathID`, `decode`) take `w` only so
-they can write their own rejection. Every one of those sites is a chance to forget the
-`return`, write twice, or map a status inconsistently. The error-returning handler is the one
-framework idea that removes real defects rather than adding abstraction, and it composes with
-`net/http` rather than replacing it.
-
-### API
-
-```go
-// HandlerFunc is an http.HandlerFunc that reports failure by returning an
-// error instead of writing it. A nil return means the handler wrote the
-// response itself.
-type HandlerFunc func(w http.ResponseWriter, r *http.Request) error
-
-// Handle adapts fn into an http.Handler: a returned error is written as a
-// problem response through ew. A handler that has already written to w and
-// then returns an error produces a logged, not written, failure — the
-// adapter never writes a second response.
-func Handle(fn HandlerFunc, ew *ErrorWriter) http.Handler
-```
-
-Convenience on `Group`, so the adapter reads naturally at the registration site:
-
-```go
-// HandleErr registers an error-returning handler under the group's error
-// writer. Use after NewModule panics.
-func (g *Group) HandleErr(method, pattern string, fn HandlerFunc, mw ...Middleware)
-```
-
-`Group` gains one field, the `*ErrorWriter` its `HandleErr` routes use; a group with no writer
-and a `HandleErr` call panics at wiring time, consistent with the SDK's registration-time
-failure rule. The writer is group-scoped, not per-route: the reference service builds one
-writer per layer today and would otherwise re-thread it through seven call sites. How the
-writer is set follows the workspace's options idiom — a struct-shaped options value in
-go-core's style (`config.Options` with zero-value defaults), never functional options, which
-nothing in the workspace uses; the setter must respect `checkSeal()`.
-
-### Effect on the reference service
-
-```go
-func (h *handler) find(w http.ResponseWriter, r *http.Request) error {
-    id, err := pathID(r)
-    if err != nil {
-        return err
-    }
-    o, err := h.service.Find(r.Context(), id)
-    if err != nil {
-        return err
-    }
-    return web.WriteJSON(w, http.StatusOK, o)
-}
-```
-
-`pathID` becomes `func(*http.Request) (string, error)`; `decode` becomes
-`func[T any](*http.Request) (T, error)` with `MaxBytesReader` moved to a per-route middleware
-or kept by passing `w` for the reader only. `Routes` registers through `g.HandleErr` and drops
-the `errors` field from `handler`, since the group owns the writer.
-
-### Double-write rule
-
-The adapter must not write a second response. The chosen mechanism: wrap `w` in a shared
-status-recording writer, and if a status was already written when the error returns, log at
-error level and write nothing. (The documented alternative — rely on `net/http`'s
-superfluous-`WriteHeader` log line — was rejected as weaker; it also emits to stderr, not
-slog, see §2.4.) The shared writer is the same type `RequestLogger`, the adapter, and the
-future recoverer use.
-
-## 2. Folded retrospective findings
-
-Verified against v0.5.0 (96.5% / 89.7% coverage, all hermetic; the findings are headroom, not
-rot).
-
-1. **The shared wrapped writer must be built, not reused, and it lives in `web`.**
-   `middleware/logger.go`'s `statusRecorder` overrides `WriteHeader` and `ReadFrom` but not
-   `Write`, so a handler that writes a body then calls `WriteHeader(500)` records 500 while
-   the client got 200 — and the landing-zone middleware page's claim that seeding 200 "removes
-   any need to intercept the body write" is wrong and must be corrected in the same effort.
-   The adapter needs a *committed* flag more than a status. Because `middleware` imports `web`
-   and never the reverse, the shared type moves into `web` and the logger is rewritten onto
-   it.
+1. **The recorder is exported and the logger rewritten onto it.** `handler.go`'s `recorder`
+   tracks the commit through `WriteHeader`, `Write`, and `ReadFrom` — the case
+   `middleware/logger.go`'s `statusRecorder` misses: it overrides `WriteHeader` and `ReadFrom`
+   but not `Write`, so a handler that writes a body then calls `WriteHeader(500)` records 500
+   while the client got 200. Export the recorder, rewrite the logger onto it, and correct the
+   landing-zone middleware page's claim that seeding 200 "removes any need to intercept the
+   body write" in the same effort. `middleware` imports `web` and never the reverse, so the
+   type stays in `web`.
 2. **`ErrorWriter` gains a problem vocabulary.** `StatusMatcher` is `func(error) (int, bool)`
-   and `Write` hardcodes empty type and title, so every problem the service emits is
+   and `Write` sends an empty type and title, so every problem the service emits is
    `about:blank`, distinguishable only by status — while the landing zone's problems page
    promises consumers their own URIs through extension points that do not exist on this path.
    Widen the matcher (or add a problem-returning matcher alongside) so a matcher can carry a
-   type URI, title, and extension members. Do this in the adapter session, before `HandleErr`
-   multiplies the call sites. Related: `WriteProblemWith` rebuilds the document as a
-   `map[string]any` while `Problem.Write` marshals the struct — two serializers for one
-   document; unify.
+   type URI, title, and extension members. The SDK's own errors map themselves through the
+   unexported `statusError` interface in `errors.go`, sealed on purpose because consumer policy
+   is the matcher list; whether that seam is exported so an error can carry its problem is this
+   item's decision. Related: `WriteProblemWith` rebuilds the document as a `map[string]any`
+   while `Problem.Write` marshals the struct — two serializers for one document; unify.
 3. **Router-level misses join the RFC 9457 contract.** Unmatched paths and method mismatches
    fall through to `http.ServeMux` as `text/plain` 404/405 — bare text on an API whose whole
    error story is problem+json, with the 405's `Allow` header outside the SDK's control. Add
    NotFound/MethodNotAllowed hooks on the router (and module) so misses write problems.
-4. **`http.Server` escape hatches.** `NewServer` sets `Addr`, `Handler`, and four timeouts and
-   nothing else. `ErrorLog` is nil, so TLS handshake failures, parse errors, and the
-   superfluous-WriteHeader warning (the adapter's own diagnostic, per §1) go to global `log`
-   on stderr, invisible to the slog pipeline — bridge it. `MaxHeaderBytes` is unset (the
-   body-limit middleware bounds bodies, not headers) — a `web.Config` field.
-5. **The request-side helpers promote here.** The service's `sdk/web.go` stages `IfMatch` +
-   `PreconditionError` for this SDK (their `doc.go` says so); `decode[T]`
-   (MaxBytesReader + DisallowUnknownFields) is its unstaged twin, and it currently collapses a
-   body-overflow into the validation error so an oversized body answers 400 where 413 is
-   correct — fix on promotion. The SDK today has no request-side body or conditional-header
-   API at all; these are its first, and they are the natural first error-returning helpers, so
-   they land with the adapter.
-6. **The config env segment becomes per-block.** `env.go` hardcodes the `"server"` segment in
-   every composed name (`APP_SERVER_PORT` unconditionally), so a second `web.Config` block —
+4. **`http.Server` escape hatches, and the swallowed encoder error.** `NewServer` sets `Addr`,
+   `Handler`, and four timeouts and nothing else. `ErrorLog` is nil, so TLS handshake failures,
+   parse errors, and the superfluous-WriteHeader warning go to global `log` on stderr,
+   invisible to the slog pipeline — bridge it. `MaxHeaderBytes` is unset (the body-limit
+   middleware bounds bodies, not headers) — a `web.Config` field. `Handle` discards the
+   encoder's error from `ErrorWriter.Write` with a blank assignment, as every handler does with
+   `WriteJSON`; whether an encoder failure deserves a log line through `ErrorWriter.Log` is
+   decided here.
+5. **Writer inheritance.** `HandleErr` requires the writer on its own group; a child mounted
+   under a parent that has one still panics. If a layer wants one writer at `/api` for every
+   domain group, resolution moves to `NewModule`, which walks the tree — the registration-time
+   panic becomes a compile-time one, still at wiring. Wait for a consumer to ask.
+6. **The config env segment becomes per-block.** `config.go` hardcodes the `"server"` segment
+   in every composed name (`APP_SERVER_PORT` unconditionally), so a second `web.Config` block —
    the management listener `v1.data.sql.integration.listener` needs — cannot exist under one
    prefix. Give the env composition a block-name parameter. Scheduled with the listener task
    but owned by this SDK; land it wherever the earlier session touches config.
+
+## Effect on the reference service
+
+The reference service converts at `v1.data.sql.integration.service`, its rewrite onto sqlate:
+`pathID` becomes `func(*http.Request) (string, error)`, `decode` and the If-Match parse become
+`web.DecodeJSON` and `web.IfMatch`, `Routes` registers through `g.HandleErr` and drops the
+`errors` field from `handler`, since the group owns the writer, and the library vocabulary the
+domains share composes as one common matcher (the service's `retrospective-findings.md`).
