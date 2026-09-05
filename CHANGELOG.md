@@ -21,6 +21,12 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
   bare `field=value` names none, and a repeated parameter carries several values under one
   filter. The operator passes through as text for the data layer to validate; an operator on
   `page`, `size`, or `sort`, or a malformed key, is a `*QueryError`.
+- `web`: `HandlerFunc`, `Handle`, `Group.SetErrorWriter`, and `Group.HandleErr` — the
+  error-returning handler adapted through an `ErrorWriter`, so a handler's body reads as its
+  success path and every rejection is one return statement. The stdlib handler signature stays
+  the primary contract. The adapter never writes a second response: an error returned after a
+  response was committed is logged, through `ErrorWriter.Log`'s logger or slog's default, and
+  nothing more is written.
 - `web`: `ErrorWriter.Detail` adds statuses whose problems carry the error text as their
   detail member, for a surface whose clients need the reason. The built-in set is 400, 413,
   and 428.

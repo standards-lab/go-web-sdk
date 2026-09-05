@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 )
 
@@ -19,6 +20,7 @@ type StatusMatcher func(error) (int, bool)
 type ErrorWriter struct {
 	matchers []StatusMatcher
 	detail   map[int]struct{}
+	logger   *slog.Logger
 }
 
 // NewErrorWriter composes the matchers into a writer, wired once at route
@@ -46,6 +48,21 @@ func (ew *ErrorWriter) Detail(statuses ...int) {
 	for _, s := range statuses {
 		ew.detail[s] = struct{}{}
 	}
+}
+
+// Log sets the logger the writer reports to when an error cannot be written
+// — a handler adapted by [Handle] that returned an error after committing
+// its response. Unset, the writer reports through slog's default logger.
+// Called at wiring time, like [ErrorWriter.Detail].
+func (ew *ErrorWriter) Log(logger *slog.Logger) {
+	ew.logger = logger
+}
+
+func (ew *ErrorWriter) log() *slog.Logger {
+	if ew.logger == nil {
+		return slog.Default()
+	}
+	return ew.logger
 }
 
 // Status maps err to its HTTP status without writing a response, for a

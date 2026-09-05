@@ -160,6 +160,21 @@
 // error's text reaches the wire; [ErrorWriter.Detail] adds statuses for a
 // surface whose clients need the reason, such as an operator API's 409.
 //
+// # Error-returning handlers
+//
+// [HandlerFunc] is the handler shape that reports failure by returning an
+// error, and [Handle] adapts one into an http.Handler under an [ErrorWriter]:
+// a returned error is written as a problem, so a handler's body reads as its
+// success path and every rejection is one return statement. The stdlib
+// signature stays the primary contract — [Group.Handle] and [Router.Handle]
+// take http.Handler, and nothing requires the adapter — and
+// [Group.HandleErr] registers an error-returning handler under the writer
+// set by [Group.SetErrorWriter], one per group, not per route. The adapter
+// never writes a second response: a handler that committed a response and
+// then returned an error is reported through the writer's logger
+// ([ErrorWriter.Log], slog's default when unset) and nothing more is
+// written.
+//
 // # Problem responses
 //
 // Error responses are RFC 9457 problem documents. The type member identifies

@@ -92,3 +92,33 @@ func TestGroup_SealedMutationPanics(t *testing.T) {
 		child.Handle(http.MethodGet, "/late", ok())
 	})
 }
+
+func TestGroup_HandleErrWithoutAWriterPanics(t *testing.T) {
+	g := web.NewGroup("/api")
+	mustPanic(t, "HandleErr without SetErrorWriter", func() {
+		g.HandleErr(http.MethodGet, "/things", func(http.ResponseWriter, *http.Request) error { return nil })
+	})
+}
+
+func TestGroup_ErrorWriterIsNotInherited(t *testing.T) {
+	parent := web.NewGroup("/api")
+	parent.SetErrorWriter(web.NewErrorWriter())
+	child := web.NewGroup("/things")
+	parent.Mount(child)
+
+	mustPanic(t, "HandleErr on a child without its own writer", func() {
+		child.HandleErr(http.MethodGet, "", func(http.ResponseWriter, *http.Request) error { return nil })
+	})
+}
+
+func TestGroup_SetErrorWriterAfterNewModulePanics(t *testing.T) {
+	g := web.NewGroup("/api")
+	web.NewModule(g)
+
+	mustPanic(t, "SetErrorWriter after NewModule", func() {
+		g.SetErrorWriter(web.NewErrorWriter())
+	})
+	mustPanic(t, "HandleErr after NewModule", func() {
+		g.HandleErr(http.MethodGet, "", func(http.ResponseWriter, *http.Request) error { return nil })
+	})
+}
