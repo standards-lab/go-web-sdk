@@ -63,8 +63,9 @@ against v0.6.0 at this rewrite.
 
 ## Effect on the reference service
 
-The reference service converts at `v1.data.sql.integration.service`, its rewrite onto sqlate:
-`pathID` becomes `func(*http.Request) (string, error)`, `decode` and the If-Match parse become
-`web.DecodeJSON` and `web.IfMatch`, `Routes` registers through `g.HandleErr` and drops the
-`errors` field from `handler`, since the group owns the writer, and the library vocabulary the
-domains share composes as one common matcher (the service's `retrospective-findings.md`).
+The reference service converted at `v1.data.sql.integration.service` (2026-09-06): its handlers
+register through `HandleErr`, decode with `DecodeJSON` and `IfMatch`, and compose the group's
+writer from the layer's own matcher and the shared library matcher. It stages two promotion
+candidates for this SDK in its `sdk` package: `PathID`, a typed path-value parse returning a
+`PathError`, and `Command`, the guarded-command read composing `PathID` with `IfMatch` and
+`DecodeJSON`.
