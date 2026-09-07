@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
-	"github.com/standards-lab/go-web-sdk/internal/webtest"
+	"github.com/standards-lab/go-web-sdk/webtest"
 )
 
 // Every route registers under its full pattern: the parent's prefix, the

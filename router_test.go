@@ -6,7 +6,7 @@ import (
 
 	"github.com/standards-lab/go-core/lifecycle"
 	"github.com/standards-lab/go-web-sdk"
-	"github.com/standards-lab/go-web-sdk/internal/webtest"
+	"github.com/standards-lab/go-web-sdk/webtest"
 )
 
 // module compiles a one-route group answering GET <prefix><pattern>.

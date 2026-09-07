@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
-	"github.com/standards-lab/go-web-sdk/internal/webtest"
+	"github.com/standards-lab/go-web-sdk/webtest"
 )
 
 // tag returns middleware that appends its name to order as the request passes
