@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
-	"github.com/standards-lab/go-web-sdk/internal/webtest"
+	"github.com/standards-lab/go-web-sdk/webtest"
 )
 
 // mustPanic runs fn and fails the test unless it panics.
