@@ -38,7 +38,10 @@ against v0.6.0 at this rewrite.
    unexported `statusError` interface in `errors.go`, sealed on purpose because consumer policy
    is the matcher list; whether that seam is exported so an error can carry its problem is this
    item's decision. Related: `WriteProblemWith` rebuilds the document as a `map[string]any`
-   while `Problem.Write` marshals the struct — two serializers for one document; unify.
+   while `Problem.Write` marshals the struct — two serializers for one document; unify. Also
+   related: `/readyz` attaches its `checks` extension member to an `about:blank` problem, and a
+   consumer that needs readiness failures under its own vocabulary gets a type hook on
+   `Readiness`, not an SDK-owned URI.
 3. **Router-level misses join the RFC 9457 contract.** Unmatched paths and method mismatches
    fall through to `http.ServeMux` as `text/plain` 404/405 — bare text on an API whose whole
    error story is problem+json, with the 405's `Allow` header outside the SDK's control. Add
@@ -57,15 +60,12 @@ against v0.6.0 at this rewrite.
    panic becomes a compile-time one, still at wiring. Wait for a consumer to ask.
 6. **The config env segment becomes per-block.** `config.go` hardcodes the `"server"` segment
    in every composed name (`APP_SERVER_PORT` unconditionally), so a second `web.Config` block —
-   the management listener `v1.data.sql.integration.listener` needs — cannot exist under one
-   prefix. Give the env composition a block-name parameter. Scheduled with the listener task
-   but owned by this SDK; land it wherever the earlier session touches config.
+   the management listener (`v1.admin-listener`) needs — cannot exist under one prefix. Give
+   the env composition a block-name parameter. Sequenced with the listener but owned by this
+   SDK; land it wherever an earlier session touches config.
 
-## Effect on the reference service
+## Promotion candidates staged in the reference service
 
-The reference service converted at `v1.data.sql.integration.service` (2026-09-06): its handlers
-register through `HandleErr`, decode with `DecodeJSON` and `IfMatch`, and compose the group's
-writer from the layer's own matcher and the shared library matcher. It stages two promotion
-candidates for this SDK in its `sdk` package: `PathID`, a typed path-value parse returning a
-`PathError`, and `Command`, the guarded-command read composing `PathID` with `IfMatch` and
-`DecodeJSON`.
+The reference service's `sdk` package stages two candidates for this SDK: `PathID`, a typed
+path-value parse returning a `PathError`, and `Command`, the guarded-command read composing
+`PathID` with `IfMatch` and `DecodeJSON`.
