@@ -6,6 +6,27 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.7.0] - 2026-09-07
+
+The integration toolkit beside `web`, promoted from the reference service's harness with its
+API as built: a library whose infrastructure is exercised by integration testing ships its
+toolkit beside it. The module depends on `github.com/standards-lab/go-core v0.4.0`, whose
+`process/processtest` package is the toolkit's process half.
+
+### Added
+
+- `webtest` — the HTTP half of the toolkit. `Client` issues requests against a running service
+  over one connection and returns each `Response` whole; `Response.Expect`, `Response.JSON`,
+  and `Decode` read it, and `Response.Problem` asserts an RFC 9457 document as `web` writes
+  one. `IfMatch` is the precondition header a guarded command takes, quoted as `web.IfMatch`
+  requires. `Live` reports whether a service answers its liveness probe, the condition a harness
+  passes to `processtest`'s `Await`. `Probe`, the unit-tier recorder helper, moves here from
+  the internal test package.
+
+### Changed
+
+- The module's own tests import the public `webtest`; `internal/webtest` is retired.
+
 ## [v0.6.0] - 2026-09-05
 
 The request side of a handler, promoted from the reference service and the SQL DSL
@@ -156,7 +177,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.7.0...HEAD
+[v0.7.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.4.0...v0.5.0
 [v0.4.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.3.1...v0.4.0

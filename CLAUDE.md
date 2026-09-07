@@ -16,10 +16,11 @@ zone page in the same effort.
 ## Repository specifics
 
 - **Module layout** — one Go module rooted at `github.com/standards-lab/go-web-sdk`; the `web`
-  package occupies the module root, and `middleware` is its one sub-package. No sub-modules.
+  package occupies the module root, with `middleware` and `webtest` its sub-packages. No
+  sub-modules.
 - **Dependencies** — the standard library and go-core, per the Go Elemental dependency line.
 - **Releases, CI, tests, tasks** — per the Go Elemental standard principles in the landing zone
-  (root `v<semver>` tags from `CHANGELOG.md`, hermetic `httptest`/port-0 tests with shared
-  helpers in `internal/webtest`, mise tasks).
+  (root `v<semver>` tags from `CHANGELOG.md`, hermetic `httptest`/port-0 tests with the
+  recorder helper from `webtest`, mise tasks).
 - **Public repo.** The module resolves through the public Go proxy; CI carries no private-module
   config.
