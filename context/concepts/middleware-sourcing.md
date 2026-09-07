@@ -7,17 +7,12 @@ middleware-specific catalog — what the SDK hand-rolls, what it sources, and fr
 the retrospective's build findings. It decays into the landing-zone middleware page and the
 code when the sessions land.
 
-## The rule, applied to middleware
+## The rule
 
-Implement in `go-web-sdk/middleware` any middleware that is transport-generic and has no
-specification or security surface. Source from an industry-standard library — or copy its
-implementation into the SDK with attribution — any middleware whose correctness depends on a
-specification with known corner cases, a threat model, or cryptography. Never carry a
-dependency for something the standard library already provides.
-
-The test for "trivial" is not line count. It is whether the failure mode is visible in a unit
-test you would think to write. A request-ID middleware fails loudly. A CORS middleware fails
-by letting the wrong origin through with right-looking headers.
+The rule, its test for "trivial", the "standard but not Google" markers, and the obligations
+on hand-rolled and sourced code are the coordinator's
+`standards-lab/context/design/dependency-sourcing.md`; this note applies them middleware by
+middleware.
 
 ## Hand-roll in the SDK
 
@@ -42,9 +37,9 @@ Each is 10–50 lines over stdlib types, and the tests are obvious.
 | CORS | Preflight rules, `Vary` correctness, credentialed-origin restrictions, `Access-Control-Max-Age` semantics, Private Network Access headers. Wrong answers look right. | `github.com/rs/cors` |
 | Real client IP | The parse is short; the threat model is not. `X-Forwarded-For` is attacker-controlled unless the trusted-proxy hop count is configured. | `chi/v5/middleware.RealIP` for the shape, but implement against a configured trusted-proxy list; see Adam Pritchard's "The perils of the 'real' client IP" for the model. |
 | Compression | Correct `ResponseWriter` wrapping, content negotiation, skipping already-compressed media types, writer pooling, preserving `Flusher`. | `github.com/klauspost/compress/gzhttp` (the current standard; `NYTimes/gziphandler` is its ancestor) |
-| Wrapped `ResponseWriter` | Preserving `Flusher`, `Hijacker`, `ReaderFrom`, `Pusher` through a wrap without an interface explosion. | `github.com/felixge/httpsnoop` — or the SDK's own recorder extended to cover all four; either way, one type shared by logger, adapter, recoverer. |
+| Wrapped `ResponseWriter` | Preserving `Flusher`, `Hijacker`, `ReaderFrom`, `Pusher` through a wrap without an interface explosion. | None: the SDK's own `recorder`, exported and extended to cover all four (`concepts/error-handling.md` item 1); one type shared by logger, adapter, recoverer. |
 | Rate limiting | A single-process token bucket is easy; per-key with eviction, or distributed, is not. | `golang.org/x/time/rate` for the bucket (Go-team maintained); `github.com/go-chi/httprate` for the HTTP wrapper if per-key limiting is needed. |
-| Token verification / JWKS | Cryptography. Never hand-roll. Lands in the auth infrastructure module, not the SDK, per `concepts/service-middleware.md` (settled). | `github.com/coreos/go-oidc/v3` for OIDC discovery + verification against Keycloak; `github.com/lestrrat-go/jwx/v2` if raw JWT/JWKS handling is required. |
+| Token verification / JWKS | Cryptography. Never hand-roll. Lands in the auth infrastructure module, not the SDK (Placement, below). | `github.com/coreos/go-oidc/v3` for OIDC discovery + verification against Keycloak; `github.com/lestrrat-go/jwx/v2` if raw JWT/JWKS handling is required. |
 | Tracing / metrics | Propagation formats and semantic conventions are a specification the industry converges on. | `go.opentelemetry.io/otel` and `otelhttp`. Infrastructure module, not the SDK. |
 
 Copy-with-attribution is first-class for CORS and real-IP: both `rs/cors` and chi are
@@ -53,32 +48,35 @@ only objection and the upstream change rate is low (`rs/cors` fits); prefer impo
 upstream moves with a spec (`otel`, `go-oidc`). Copied code carries the license header and
 upstream commit in the file, and a CHANGELOG line at each sync.
 
-Under the coordinator's markers, the Go ecosystem's "standard but not Google" set for web
-services is short and stable: chi (router and middleware), `rs/cors`, `httpsnoop`,
-`klauspost/compress`, `x/time/rate`, `go-oidc`, `jwx`, OpenTelemetry-Go, `pgx`.
-`golang.org/x/*` sits between: Go-team maintained but outside the compatibility promise —
-stdlib-adjacent, pinned. What fails and why it stays out: Gin, Echo, Fiber (own context
-types); Viper (transitive graph); `go-playground/validator` (a preference DSL, a second
-language to maintain); gorilla/mux (superseded by `ServeMux` 1.22).
-
 ## Placement
 
 - Transport-generic, no infrastructure import → `go-web-sdk/middleware`.
 - Collaborates with an infrastructure service (auth, tracing) → the infrastructure library's
   module, exposing a `func(http.Handler) http.Handler` over stdlib types so it is structurally
-  a `web.Middleware` without importing the SDK (`concepts/service-middleware.md`, settled at
-  the retrospective in this option's favor; the transport-vocabulary cost is accepted because
-  every service hand-writing the adapter is the defect the SDK exists to remove).
+  a `web.Middleware` without importing the SDK. Settled at the retrospective, and the
+  coordinator's placement obligation records the same conclusion.
 - Copied third-party code → `go-web-sdk/middleware` with license header and upstream commit
   recorded in the file.
 
+The reasoning behind the second placement, kept from the question it settled: an application
+SDK and an infrastructure library never import each other, and this SDK has no sub-modules,
+so a middleware that imports an infrastructure library cannot land here without breaking the
+module's dependency line. The alternative home was the consuming service, with the library
+offering only its collaborator (a verifier, a tracer) and every application wrapping it at its
+composition root; that is the defect the SDK exists to remove, so the library owns HTTP
+vocabulary instead, against the landing zone's transport rule. A middleware whose dependency
+nothing else should compile is the same test that creates provider sub-modules elsewhere in
+the organization; if one arrives, the answer may be a third module layout, and the
+authentication enforcement point is the likely forcing consumer.
+
 ## Dependency-line statement
 
-The SDK's declared line is "the standard library and go-core." Sourcing under this catalog is
-a **stated enhancement** per the coordinator's rule: the repository README and `CLAUDE.md`
-state which categories it admits (spec, threat model — cryptography stays out of this SDK
-entirely) so the org's narrowing rule holds. A silent import no stated line covers is a
-defect.
+The SDK's declared line is the README's: the standard library and go-core, with packages as
+idiomatic and stable as the standard library admitted and vendor SDKs never. Sourcing under
+this catalog is a **stated enhancement** per the coordinator's rule: the session that lands
+the first sourced or copied middleware states the admitted categories (a specification
+surface, a threat model; cryptography stays out of this SDK entirely) beside that principle.
+A silent import no stated line covers is a defect.
 
 ## Build findings folded into the session
 
@@ -101,7 +99,6 @@ defect.
 
 ## Maintenance obligation
 
-Everything hand-rolled is owned for the life of the standard. Each SDK release re-checks the
-in-house middleware against the current Go release notes for `net/http` changes
-(`http.ResponseController`, `ServeMux` pattern semantics, new `http.Server` fields) — a
-scheduled release-checklist item, not an ad hoc one.
+The coordinator's obligation on hand-rolled code applies; for this SDK the release re-check is
+against `net/http` changes (`http.ResponseController`, `ServeMux` pattern semantics, new
+`http.Server` fields).

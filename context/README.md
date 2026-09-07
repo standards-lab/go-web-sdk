@@ -27,16 +27,15 @@ build it.
   returned errors to problem responses — its own error types map themselves, sealed, and
   consumer-supplied matchers decide the rest, with `Detail` and `Log` set at wiring — and the
   error-returning handler adapter (`HandlerFunc`, `Handle`, `Group.HandleErr` under
-  `Group.SetErrorWriter`) that never writes a second response. Built, v0.6.0.
+  `Group.SetErrorWriter`) that never writes a second response. Built.
 - **middleware** — the middleware implementations: the request logger. Built.
 - **webtest** — the integration toolkit beside `web`: the client a black-box suite drives a
   running service through, reading responses and problems as `web` writes them, the liveness
   observation a harness passes to go-core's `processtest`, and the recorder helper for a
   handler test. Built at `v1.data.sql.tasks.toolkit` (2026-09-07) from the reference service's
-  harness; the landing zone page is due in the docs pass.
-- **Candidate direction** — what remains of the adapter story after v0.6.0: the recorder
-  exported and the logger rewritten onto it, the problem vocabulary, router 404/405 hooks, the
-  `ErrorLog` bridge (`concepts/error-handling.md`); the middleware set
-  (`concepts/middleware-sourcing.md`); a readiness type hook (`concepts/direction.md`). The
-  roadmap's `v1.web` goal sequences them. Where service-collaborating middleware lives is
-  settled in `concepts/service-middleware.md`.
+  harness; the landing zone page is due in `v1.alignment.docs`.
+- **Candidate direction** — what remains of the adapter story: the recorder exported and the
+  logger rewritten onto it, the problem vocabulary with the readiness type hook, router
+  404/405 hooks, the `ErrorLog` bridge (`concepts/error-handling.md`); the middleware set and
+  where service-collaborating middleware lives (`concepts/middleware-sourcing.md`). The
+  roadmap's `v1.web` goal sequences them.
