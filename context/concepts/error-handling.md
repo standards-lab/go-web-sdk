@@ -5,7 +5,7 @@ roadmap cites this note. The adapter core landed in go-web-sdk v0.6.0 under
 `v1.data.sql.integration.websdk` (2026-09-05): `HandlerFunc`, `Handle`, `Group.SetErrorWriter`,
 `Group.HandleErr`, the committed-tracking `recorder` in `handler.go`, and the request helpers
 `IfMatch` and `DecodeJSON`. The code and `doc.go` express those, and this note keeps only what
-remains. It decays into the landing-zone pages and the code when the adapter task lands.
+remains. It decays into the code and the package documentation when the adapter task lands.
 
 ## Idiom
 
@@ -25,14 +25,13 @@ against v0.6.0 at this rewrite.
    tracks the commit through `WriteHeader`, `Write`, and `ReadFrom` — the case
    `middleware/logger.go`'s `statusRecorder` misses: it overrides `WriteHeader` and `ReadFrom`
    but not `Write`, so a handler that writes a body then calls `WriteHeader(500)` records 500
-   while the client got 200. Export the recorder, rewrite the logger onto it, and correct the
-   landing-zone middleware page's claim that seeding 200 "removes any need to intercept the
-   body write" in the same effort. `middleware` imports `web` and never the reverse, so the
-   type stays in `web`.
+   while the client got 200. Export the recorder and rewrite the logger onto it, so one
+   wrapper intercepts the body write for both. `middleware` imports `web` and never the
+   reverse, so the type stays in `web`.
 2. **`ErrorWriter` gains a problem vocabulary.** `StatusMatcher` is `func(error) (int, bool)`
    and `Write` sends an empty type and title, so every problem the service emits is
-   `about:blank`, distinguishable only by status — while the landing zone's problems page
-   promises consumers their own URIs through extension points that do not exist on this path.
+   `about:blank`, distinguishable only by status — while the package documentation promises
+   consumers their own URIs through extension points that do not exist on this path.
    Widen the matcher (or add a problem-returning matcher alongside) so a matcher can carry a
    type URI, title, and extension members. The SDK's own errors map themselves through the
    unexported `statusError` interface in `errors.go`, sealed on purpose because consumer policy
