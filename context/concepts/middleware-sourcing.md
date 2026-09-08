@@ -4,8 +4,8 @@ Settled at the 2026-08-31 workspace retrospective; `v1.web.middleware` in the co
 roadmap cites this note. The org-wide rule and the "standard library" markers live at the
 coordinator (`standards-lab/context/design/dependency-sourcing.md`); this note carries the
 middleware-specific catalog — what the SDK hand-rolls, what it sources, and from where — plus
-the retrospective's build findings. It decays into the landing-zone middleware page and the
-code when the sessions land.
+the retrospective's build findings. It decays into the code and the package documentation
+when the sessions land.
 
 ## The rule
 
@@ -64,7 +64,7 @@ so a middleware that imports an infrastructure library cannot land here without 
 module's dependency line. The alternative home was the consuming service, with the library
 offering only its collaborator (a verifier, a tracer) and every application wrapping it at its
 composition root; that is the defect the SDK exists to remove, so the library owns HTTP
-vocabulary instead, against the landing zone's transport rule. A middleware whose dependency
+vocabulary instead, against the standard's rule that middleware belongs to the transport. A middleware whose dependency
 nothing else should compile is the same test that creates provider sub-modules elsewhere in
 the organization; if one arrives, the answer may be a third module layout, and the
 authentication enforcement point is the likely forcing consumer.

@@ -4,18 +4,13 @@ The Application SDK for web services of Go Elemental, the Standards Lab organiza
 implementation of the Elemental Architecture: the HTTP server and its configuration, routing, RFC 9457
 problem responses, the liveness and readiness probes, and middleware.
 
-The design and conventions of this repository are documented in the organization's
-[documentation landing zone](https://github.com/standards-lab/docs); this context records only
-working knowledge the landing zone and the code do not express. The repository page is
-[go-web-sdk](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/go-web-sdk/index.md),
-under the [Go Elemental](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/index.md)
-standard, with the design detailed in its server, routing, problem responses, health, and
-middleware pages.
+The README and each package's `doc.go` document this repository, and the
+[Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md) standard states the principles it follows; this context records only
+working knowledge the code and the README do not express.
 
 ## Capability map
 
-The code and each package's `doc.go` are authoritative for what is built; the landing zone
-documents the design. An unbuilt capability gains written detail when a session is about to
+The code and each package's `doc.go` are authoritative for what is built. An unbuilt capability gains written detail when a session is about to
 build it.
 
 - **web** — the HTTP layer: the bind-then-serve server declared as go-core's root-stage
@@ -33,7 +28,7 @@ build it.
   running service through, reading responses and problems as `web` writes them, the liveness
   observation a harness passes to go-core's `processtest`, and the recorder helper for a
   handler test. Built at `v1.data.sql.tasks.toolkit` (2026-09-07) from the reference service's
-  harness; the landing zone page is due in `v1.alignment.docs`.
+  harness.
 - **Candidate direction** — what remains of the adapter story: the recorder exported and the
   logger rewritten onto it, the problem vocabulary with the readiness type hook, router
   404/405 hooks, the `ErrorLog` bridge (`concepts/error-handling.md`); the middleware set and

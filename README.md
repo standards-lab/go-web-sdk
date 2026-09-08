@@ -10,9 +10,9 @@ root, with `middleware` and `webtest` its sub-packages.
 ## Standard
 
 `go-web-sdk` is the Application SDK for web services of
-[Go Elemental](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/index.md), the
-minimal-dependency Go standard, and its design is documented on the standard's
-[go-web-sdk page](https://github.com/standards-lab/docs/blob/main/standards/go-elemental/go-web-sdk/index.md).
+[Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md), the
+minimal-dependency Go standard. This README and each package's `doc.go` document the
+repository; the standard's principles it enhances are stated below.
 Its repository-level principles:
 
 - The module depends on the standard library and `go-core`, and takes at most packages as idiomatic
