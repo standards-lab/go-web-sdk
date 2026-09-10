@@ -12,12 +12,12 @@
 // # Request logging
 //
 // [RequestLogger] emits one record per request through a *slog.Logger the
-// caller supplies — method, path, status, duration, and remote address — at
-// info level, or at error level with the panic value attached when the
+// caller supplies: the method, path, status, duration, and remote address,
+// at info level, or at error level with the panic value attached when the
 // handler panics (the panic then continues to net/http's recovery). A
-// successful request to [web.HealthPath] or [web.ReadyPath] logs at debug —
-// orchestrator heartbeat, visible in development and quiet in production —
-// while a failing probe stays at info. Beyond that the middleware does not
+// successful request to [web.HealthPath] or [web.ReadyPath] logs at debug:
+// orchestrator heartbeat, visible in development and quiet in production.
+// A failing probe stays at info. Beyond that the middleware does not
 // judge status codes: whether a 5xx was the application's own failure belongs
 // to the error mapping, not here.
 //

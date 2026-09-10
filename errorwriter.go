@@ -38,7 +38,7 @@ func NewErrorWriter(matchers ...StatusMatcher) *ErrorWriter {
 }
 
 // Detail adds statuses whose problems carry the error text as their detail
-// member, for a surface whose clients need the reason — an operator API
+// member, for a surface whose clients need the reason: an operator API
 // reporting which schema version is dirty on a 409, or that this
 // environment does not seed on a 403. The built-in set is 400, 413, and 428,
 // the statuses that are request-shaped by construction; Detail only ever
@@ -50,9 +50,9 @@ func (ew *ErrorWriter) Detail(statuses ...int) {
 	}
 }
 
-// Log sets the logger the writer reports to when an error cannot be written
-// — a handler adapted by [Handle] that returned an error after committing
-// its response. Unset, the writer reports through slog's default logger.
+// Log sets the logger the writer reports to when an error cannot be
+// written: a handler adapted by [Handle] that returned an error after
+// committing its response. Unset, the writer reports through slog's default logger.
 // Called at wiring time, like [ErrorWriter.Detail].
 func (ew *ErrorWriter) Log(logger *slog.Logger) {
 	ew.logger = logger
@@ -80,8 +80,8 @@ func (ew *ErrorWriter) Status(err error) int {
 }
 
 // Write sends err as a problem at [ErrorWriter.Status]'s mapping. The detail
-// carries the error text only on a status in the writer's detail set — 400,
-// 413, and 428 built in, plus whatever [ErrorWriter.Detail] added — where it
+// carries the error text only on a status in the writer's detail set (400,
+// 413, and 428 built in, plus whatever [ErrorWriter.Detail] added), where it
 // is request-shaped and client-actionable; every other status sends the bare
 // title, so an internal error's text never reaches the wire. The returned
 // error is the encoder's, as from [WriteProblem].

@@ -35,8 +35,8 @@ against v0.6.0 at this rewrite.
    Widen the matcher (or add a problem-returning matcher alongside) so a matcher can carry a
    type URI, title, and extension members. The SDK's own errors map themselves through the
    unexported `statusError` interface in `errors.go`, sealed on purpose because consumer policy
-   is the matcher list; whether that seam is exported so an error can carry its problem is this
-   item's decision. Related: `WriteProblemWith` rebuilds the document as a `map[string]any`
+   is the matcher list. Whether that interface is exported so an error can carry its problem is
+   this item's decision. Related: `WriteProblemWith` rebuilds the document as a `map[string]any`
    while `Problem.Write` marshals the struct — two serializers for one document; unify. Also
    related: `/readyz` attaches its `checks` extension member to an `about:blank` problem, and a
    consumer that needs readiness failures under its own vocabulary gets a type hook on

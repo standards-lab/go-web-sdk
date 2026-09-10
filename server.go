@@ -40,9 +40,9 @@ func NewServer(cfg Config, handler http.Handler) *Server {
 	}
 }
 
-// Start binds the listener on the calling goroutine — a bind failure is the
-// returned error, and ctx bounds the bind — then serves in the background. A
-// second Start returns an error.
+// Start binds the listener on the calling goroutine: a bind failure is the
+// returned error, and ctx bounds the bind. It then serves in the
+// background. A second Start returns an error.
 func (s *Server) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -68,8 +68,8 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// Addr reports the bound address once started — a configured port 0 reads
-// back its assignment — and the configured address before.
+// Addr reports the bound address once started (a configured port 0 reads
+// back its assignment), and the configured address before that.
 func (s *Server) Addr() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

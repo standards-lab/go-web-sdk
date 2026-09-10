@@ -9,9 +9,9 @@ import (
 // Router dispatches to mounted [Module] values by longest-prefix match on
 // segment boundaries, falling back to a native http.ServeMux for every path
 // no module owns. Handlers registered through [Router.Handle] live on the
-// native mux — structurally outside every module's middleware, which is what
-// keeps probes clear of auth and the like — while middleware registered
-// through [Router.Use] wraps the whole dispatch. Wire the router before
+// native mux, structurally outside every module's middleware, which is what
+// keeps probes clear of auth and the like. Middleware registered through
+// [Router.Use] wraps the whole dispatch. Wire the router before
 // serving; registration is not synchronized with request handling.
 type Router struct {
 	mux        *http.ServeMux
@@ -33,8 +33,8 @@ func (r *Router) Handle(pattern string, handler http.Handler) {
 	r.mux.Handle(pattern, handler)
 }
 
-// Use appends middleware around the router's entire dispatch — modules and
-// native mux alike — recomposing the chain at registration, never per
+// Use appends middleware around the router's entire dispatch (modules and
+// native mux alike), recomposing the chain at registration, never per
 // request.
 func (r *Router) Use(mw ...Middleware) {
 	r.middleware = append(r.middleware, mw...)

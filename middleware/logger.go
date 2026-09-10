@@ -9,8 +9,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// RequestLogger emits one record per request — method, path, status,
-// duration, remote address — at info level. A successful request to
+// RequestLogger emits one record per request: the method, path, status,
+// duration, and remote address, at info level. A successful request to
 // [web.HealthPath] or [web.ReadyPath] logs at debug, keeping orchestrator
 // heartbeat out of production logs while a failing probe stays visible; a
 // panicking handler logs at error with the panic value attached before the

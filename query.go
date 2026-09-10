@@ -66,7 +66,7 @@ type Limits struct {
 // and sort parameters under the given limits, and every remaining parameter
 // as the filter set. One call yields both halves, so a handler cannot parse
 // the paging parameters and forget to strip them from the filters. An absent
-// page is 1 and an absent size is the default; sort is comma-separated field
+// page is 1 and an absent size is the default. Sort is comma-separated field
 // names, each optionally prefixed with "-" for descending, honored across
 // every occurrence of the parameter in order; an empty parameter value reads
 // as omitted.

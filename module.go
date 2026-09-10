@@ -10,10 +10,10 @@ type Module struct {
 }
 
 // NewModule compiles the group tree into a Module in one pass: every route
-// registers on an internal mux under its full pattern with its full chain —
-// group middleware outermost, ordered root to leaf, then per-route middleware
-// — and the tree is sealed against further mutation. Composition happens
-// once, here; nothing recomposes per request. A duplicate or malformed
+// registers on an internal mux under its full pattern with its full chain:
+// group middleware outermost, ordered root to leaf, then per-route
+// middleware. The tree is then sealed against further mutation. Composition
+// happens once, here; nothing recomposes per request. A duplicate or malformed
 // pattern panics at registration, from the mux itself.
 func NewModule(g *Group) *Module {
 	mux := http.NewServeMux()
@@ -24,8 +24,8 @@ func NewModule(g *Group) *Module {
 	}
 }
 
-// NewHandlerModule mounts a raw handler under prefix — an embedded client
-// application, a file server — with mw wrapped around it. The handler
+// NewHandlerModule mounts a raw handler under prefix (an embedded client
+// application, a file server), with mw wrapped around it. The handler
 // receives the request with the prefix stripped, via http.StripPrefix; this
 // is the one place a module rewrites a request path.
 func NewHandlerModule(
