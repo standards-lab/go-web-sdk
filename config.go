@@ -22,8 +22,8 @@ const (
 // Env names the environment variables [Config.Finalize] reads, composed from
 // the prefix it receives: SERVER_HOST, SERVER_PORT, and the four timeout
 // names under whatever prefix [config.EnvName] produces. An empty name
-// disables that one override; the zero value — an empty prefix — disables all
-// of them. Populated by Finalize and exposed for introspection.
+// disables that one override, and the zero Env (an empty prefix) disables
+// all of them. Populated by Finalize and exposed for introspection.
 type Env struct {
 	Host              string
 	Port              string
@@ -65,7 +65,7 @@ func NewEnv(prefix string) Env {
 
 // Config holds the server's address and timeouts. The port and timeouts are
 // tri-state pointers: nil is unset and takes the default, while an explicit
-// zero survives the load and means what it says — a disabled timeout, or an
+// zero survives the load and means what it says: a disabled timeout, or an
 // ephemeral port. Env records the environment-variable names Finalize
 // composed and read; it is excluded from JSON.
 type Config struct {

@@ -61,19 +61,19 @@ upstream commit in the file, and a CHANGELOG line at each sync.
 The reasoning behind the second placement, kept from the question it settled: an application
 SDK and an infrastructure library never import each other, and this SDK has no sub-modules,
 so a middleware that imports an infrastructure library cannot land here without breaking the
-module's dependency line. The alternative home was the consuming service, with the library
-offering only its collaborator (a verifier, a tracer) and every application wrapping it at its
-composition root; that is the defect the SDK exists to remove, so the library owns HTTP
-vocabulary instead, against the standard's rule that middleware belongs to the transport. A middleware whose dependency
-nothing else should compile is the same test that creates provider sub-modules elsewhere in
-the organization; if one arrives, the answer may be a third module layout, and the
-authentication enforcement point is the likely forcing consumer.
+module's dependency line. The alternative home was the consuming service: the library would
+offer only its collaborator (a verifier, a tracer), and every application would wrap it at its
+composition root. That is the defect the SDK exists to remove, so the library owns HTTP
+vocabulary instead, against the standard's rule that middleware belongs to the transport. A
+middleware whose dependency nothing else should compile is the same test that creates provider
+sub-modules elsewhere in the organization. If one arrives, the answer may be a third module
+layout, and the authentication enforcement point is the likely forcing consumer.
 
 ## Dependency-line statement
 
 The SDK's declared line is the README's: the standard library and go-core, with packages as
 idiomatic and stable as the standard library admitted and vendor SDKs never. Sourcing under
-this catalog is a **stated enhancement** per the coordinator's rule: the session that lands
+this catalog is a stated enhancement per the coordinator's rule: the session that lands
 the first sourced or copied middleware states the admitted categories (a specification
 surface, a threat model; cryptography stays out of this SDK entirely) beside that principle.
 A silent import no stated line covers is a defect.

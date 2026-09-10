@@ -6,8 +6,8 @@
 //
 // [NewServer] wraps an http.Server built from a finalized [Config] and a
 // handler the caller composes; an unfinalized Config panics with the fix
-// named. [Server.Start] binds the listener on the calling goroutine — the
-// context bounding the bind — and only then serves in the background, so a
+// named. [Server.Start] binds the listener on the calling goroutine, with the
+// context bounding the bind, and only then serves in the background, so a
 // bind failure is returned to the caller instead of being lost in a
 // goroutine. [Server.Addr] reports the bound address once started; a
 // configured port 0 binds an ephemeral port, and Addr reads back the
@@ -26,7 +26,7 @@
 // The package registers no lifecycle service of its own and holds no shutdown
 // timeout. [Server.Start] and [Server.Shutdown] match the member signatures of
 // go-core's [lifecycle.Service], and [Server.Err] is a monitorable source, so
-// a composition root declares the server as bare method values — in the root
+// a composition root declares the server as bare method values, in the root
 // stage, so every numbered stage starts beneath it and the drain empties it
 // first:
 //
@@ -47,24 +47,24 @@
 // [Group], [Module], and [Router] compose an application's route tree. A
 // Group declares routes: a path prefix (multi-segment prefixes such as
 // "/api/v1" are first-class), a middleware stack, atomic routes, and nested
-// child groups. [NewModule] compiles a group tree once into a [Module] —
-// every route under its full pattern with its middleware baked in, group
-// stacks outermost ordered root to leaf, then per-route middleware — and
-// seals the tree, so a route registered after compilation panics instead of
-// going silently dead. [NewHandlerModule] mounts a raw handler under a prefix
+// child groups. [NewModule] compiles a group tree once into a [Module]: every
+// route under its full pattern, with its middleware baked in (group stacks
+// outermost, ordered root to leaf, then per-route middleware). It then seals
+// the tree, so a route registered after compilation panics instead of going
+// silently dead. [NewHandlerModule] mounts a raw handler under a prefix
 // (an embedded client application, a file server), the one case where a
 // module strips the prefix from the request.
 //
 // A [Router] dispatches to mounted modules by longest-prefix match on segment
 // boundaries, falling back to a native http.ServeMux for every path no module
-// owns. [Router.Handle] mirrors ServeMux.Handle on the native mux — *Router
+// owns. [Router.Handle] mirrors ServeMux.Handle on the native mux. *Router
 // satisfies [Mounter], so [RegisterHealth] mounts the probes there,
-// structurally outside every module's middleware — and [Router.Use] wraps the
+// structurally outside every module's middleware, and [Router.Use] wraps the
 // whole dispatch. The effective order is router middleware, then group
 // middleware root to leaf, then route middleware, then the handler.
-// Registration mistakes — a malformed prefix, a duplicate pattern, a second
-// module at a prefix, a sealed-group mutation — panic at wiring time; nothing
-// recomposes or validates per request.
+// Registration mistakes panic at wiring time: a malformed prefix, a
+// duplicate pattern, a second module at a prefix, or a sealed-group
+// mutation. Nothing recomposes or validates per request.
 //
 // # Configuration
 //
@@ -72,7 +72,7 @@
 // implements the Merge and Finalize contract of go-core's config package, so
 // it loads as part of an application's configuration rather than on its own. The port and
 // timeouts are pointers: nil is unset and takes the default, while an explicit
-// zero survives the load and means what it says — a disabled timeout, or an
+// zero survives the load and means what it says: a disabled timeout, or an
 // ephemeral port. A file and the environment express both states identically.
 // Finalize composes its environment override names from the prefix it
 // receives (via [NewEnv], recorded on [Env] for introspection), applies
@@ -105,7 +105,7 @@
 // conditional entries without filtering it first.
 //
 // The type and the composer live here because the routing layer consumes
-// them; the middleware implementations — the request logger today — live in
+// them; the middleware implementations (the request logger today) live in
 // the middleware package.
 //
 // # Paginated reads
@@ -125,9 +125,9 @@
 // SDK enumerates no operators of its own. Policy belongs to the caller: a [Limits]
 // value supplies the default and maximum size (invalid limits panic as a
 // wiring mistake), and a malformed or out-of-bounds parameter returns a
-// *[QueryError]. On success, [NewPage] assembles the [Page] envelope —
-// items, page, size, total, with nil items marshaling as [] — and
-// [WriteJSON] sends it as the response body.
+// *[QueryError]. On success, [NewPage] assembles the [Page] envelope (items,
+// page, size, total, with nil items marshaling as []), and [WriteJSON] sends
+// it as the response body.
 //
 // # Request helpers
 //
@@ -155,8 +155,8 @@
 // in order, first match wins, and an unclaimed error is a 500 — so HTTP
 // status policy stays with the application, and the SDK depends on no
 // infrastructure library's error types. The detail member carries the error
-// text only on a status in the writer's detail set — 400, 413, and 428 built
-// in, the statuses that are request-shaped by construction — so no internal
+// text only on a status in the writer's detail set (400, 413, and 428 built
+// in, the statuses that are request-shaped by construction), so no internal
 // error's text reaches the wire; [ErrorWriter.Detail] adds statuses for a
 // surface whose clients need the reason, such as an operator API's 409.
 //
