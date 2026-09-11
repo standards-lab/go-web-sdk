@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -21,33 +20,39 @@ func RequestLogger(logger *slog.Logger) web.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			recorder := &statusRecorder{
-				ResponseWriter: w,
-				status:         http.StatusOK,
-			}
+			rec := web.WrapWriter(w)
 
 			defer func() {
+				// An uncommitted response still reaches the client as an
+				// implicit 200: net/http sends one if the handler returns
+				// (or panics past this deferred log) without writing
+				// anything itself.
+				status := rec.Status()
+				if !rec.Committed() {
+					status = http.StatusOK
+				}
+
 				attrs := []slog.Attr{
 					slog.String("method", r.Method),
 					slog.String("path", r.URL.Path),
-					slog.Int("status", recorder.status),
+					slog.Int("status", status),
 					slog.Duration("duration", time.Since(start)),
 					slog.String("remote_addr", r.RemoteAddr),
 				}
-				if rec := recover(); rec != nil {
-					attrs = append(attrs, slog.Any("panic", rec))
+				if p := recover(); p != nil {
+					attrs = append(attrs, slog.Any("panic", p))
 					logger.LogAttrs(
 						r.Context(),
 						slog.LevelError,
 						"request",
 						attrs...,
 					)
-					panic(rec)
+					panic(p)
 				}
 				level := slog.LevelInfo
 				probe := r.URL.Path == web.HealthPath ||
 					r.URL.Path == web.ReadyPath
-				if probe && recorder.status >= 200 && recorder.status < 300 {
+				if probe && status >= 200 && status < 300 {
 					level = slog.LevelDebug
 				}
 				logger.LogAttrs(
@@ -58,32 +63,7 @@ func RequestLogger(logger *slog.Logger) web.Middleware {
 				)
 			}()
 
-			next.ServeHTTP(recorder, r)
+			next.ServeHTTP(rec, r)
 		})
 	}
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-	wrote  bool
-}
-
-func (s *statusRecorder) WriteHeader(code int) {
-	if !s.wrote {
-		s.status = code
-		s.wrote = true
-	}
-	s.ResponseWriter.WriteHeader(code)
-}
-
-func (s *statusRecorder) ReadFrom(src io.Reader) (int64, error) {
-	if rf, ok := s.ResponseWriter.(io.ReaderFrom); ok {
-		return rf.ReadFrom(src)
-	}
-	return io.Copy(s.ResponseWriter, src)
-}
-
-func (s *statusRecorder) Unwrap() http.ResponseWriter {
-	return s.ResponseWriter
 }

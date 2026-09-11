@@ -71,6 +71,21 @@ func TestRequestLogger_ImplicitStatusIsOK(t *testing.T) {
 	}
 }
 
+// A handler that writes a body and only then calls WriteHeader has already
+// committed the response — net/http sent the implicit 200 on that first
+// Write — so the later WriteHeader call is superfluous and has no effect on
+// the wire. The recorded status must be the one the client actually got.
+func TestRequestLogger_WriteThenWriteHeaderRecordsTheCommittedStatus(t *testing.T) {
+	out := record(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("partial"))
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+
+	if got := out["status"]; got != float64(http.StatusOK) {
+		t.Errorf("status = %v, want the committed 200, not the superfluous 500", got)
+	}
+}
+
 func TestRequestLogger_RecordsProblemStatus(t *testing.T) {
 	out := record(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = web.WriteProblem(w, r, http.StatusTeapot, "", "no coffee")
