@@ -105,8 +105,19 @@
 // conditional entries without filtering it first.
 //
 // The type and the composer live here because the routing layer consumes
-// them; the middleware implementations (the request logger today) live in
-// the middleware package.
+// them; the middleware implementations (the request logger and the
+// recoverer today) live in the middleware package.
+//
+// # Response recording
+//
+// [Recorder] wraps a ResponseWriter to record whether a response has been
+// committed and with what status: the first WriteHeader commits, and a
+// Write with no WriteHeader before it commits an implicit 200. [WrapWriter]
+// returns its argument as a *Recorder, wrapping it only if it is not one
+// already, so [Handle] and the middleware package's RequestLogger and
+// Recoverer share one instance per request instead of nesting. It
+// implements Unwrap so http.ResponseController reaches the underlying
+// writer, and delegates io.ReaderFrom.
 //
 // # Paginated reads
 //
