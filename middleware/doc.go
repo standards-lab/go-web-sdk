@@ -31,16 +31,22 @@
 // [Recoverer] is the chain's recovery point: it recovers a handler panic,
 // logs the value and a stack trace at error level, and, if the handler had
 // not committed a response, writes a 500 problem document through
-// [web.WriteProblem]. A response already committed before the panic is
-// left alone — the client gets what was sent, and the record carries that
-// status instead. [http.ErrAbortHandler] passes through untouched,
-// preserving net/http's own silent-abort mechanism.
+// [web.WriteProblem]. A response already committed before the panic cannot
+// be answered with a problem document, so Recoverer logs the committed
+// status and re-raises the panic as [http.ErrAbortHandler] instead —
+// net/http ends the connection rather than completing a truncated body as
+// if it were a clean response. A panic that is already ErrAbortHandler is
+// re-raised untouched and not logged, preserving net/http's own
+// silent-abort mechanism.
 //
 // RequestLogger and Recoverer wrap the ResponseWriter through
 // [web.WrapWriter], sharing one [web.Recorder] per request regardless of
-// which wraps which first. The wrapper records the first status written,
-// implements Unwrap so flushing and hijacking work through
-// http.ResponseController, and delegates io.ReaderFrom so a handler
-// serving files keeps the zero-copy path. http.Pusher is not available
-// through the wrapper.
+// which wraps which first. The wrapper records the first status written
+// (a 1xx status other than 101 excepted, matching net/http's own
+// treatment of those as informational), implements Unwrap and FlushError
+// so flushing and hijacking work through http.ResponseController and a
+// Flush commits like a Write would, and delegates io.ReaderFrom so a
+// handler serving files keeps the zero-copy path. http.Pusher is not
+// available through the wrapper, and a Hijack bypasses it entirely, the
+// same as it bypasses net/http's own response bookkeeping.
 package middleware

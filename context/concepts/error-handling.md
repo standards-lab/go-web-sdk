@@ -3,9 +3,10 @@
 Settled at the 2026-08-31 workspace retrospective; `v1.web.adapter` in the coordinator's
 roadmap cites this note. The adapter core landed in go-web-sdk v0.6.0 under
 `v1.data.sql.integration.websdk` (2026-09-05): `HandlerFunc`, `Handle`, `Group.SetErrorWriter`,
-`Group.HandleErr`, the committed-tracking `Recorder` in `recorder.go`, and the request helpers
-`IfMatch` and `DecodeJSON`. The code and `doc.go` express those, and this note keeps only what
-remains. It decays into the code and the package documentation when the adapter task lands.
+`Group.HandleErr`, and the request helpers `IfMatch` and `DecodeJSON`. The committed-tracking
+`Recorder` in `recorder.go`, exported since, joined them. The code and `doc.go` express those,
+and this note keeps only what remains. It decays into the code and the package documentation
+when the adapter task lands.
 
 ## Idiom
 

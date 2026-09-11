@@ -337,6 +337,12 @@ func TestRequestLogger_WithRecovererInEitherOrder(t *testing.T) {
 	}
 }
 
+func TestRequestLogger_NilLoggerPanics(t *testing.T) {
+	mustPanic(t, "RequestLogger(nil)", func() {
+		middleware.RequestLogger(nil)
+	})
+}
+
 func TestRequestLogger_HijackThroughWrapper(t *testing.T) {
 	hijackErr := make(chan error, 1)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

@@ -95,6 +95,74 @@ func TestRecorder_UnwrapReachesTheUnderlyingWriter(t *testing.T) {
 	}
 }
 
+func TestRecorder_1xxStatusDoesNotCommit(t *testing.T) {
+	rec := web.WrapWriter(httptest.NewRecorder())
+	rec.WriteHeader(http.StatusEarlyHints)
+
+	if rec.Committed() {
+		t.Error("Committed() = true after a 1xx status")
+	}
+	if rec.Status() != 0 {
+		t.Errorf("Status() = %d, want 0", rec.Status())
+	}
+}
+
+func TestRecorder_SwitchingProtocolsCommits(t *testing.T) {
+	rec := web.WrapWriter(httptest.NewRecorder())
+	rec.WriteHeader(http.StatusSwitchingProtocols)
+
+	if !rec.Committed() {
+		t.Error("Committed() = false after 101 Switching Protocols")
+	}
+	if rec.Status() != http.StatusSwitchingProtocols {
+		t.Errorf("Status() = %d, want %d", rec.Status(), http.StatusSwitchingProtocols)
+	}
+}
+
+func TestRecorder_1xxThenTheFinalStatusCommitsTheFinal(t *testing.T) {
+	rec := web.WrapWriter(httptest.NewRecorder())
+	rec.WriteHeader(http.StatusEarlyHints)
+	rec.WriteHeader(http.StatusCreated)
+
+	if !rec.Committed() {
+		t.Error("Committed() = false after the final status")
+	}
+	if rec.Status() != http.StatusCreated {
+		t.Errorf("Status() = %d, want the final %d", rec.Status(), http.StatusCreated)
+	}
+}
+
+func TestRecorder_FlushCommitsAnImplicitOK(t *testing.T) {
+	under := httptest.NewRecorder()
+	rec := web.WrapWriter(under)
+
+	if err := http.NewResponseController(rec).Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	if !rec.Committed() {
+		t.Error("Committed() = false after a Flush with no prior WriteHeader")
+	}
+	if rec.Status() != http.StatusOK {
+		t.Errorf("Status() = %d, want %d", rec.Status(), http.StatusOK)
+	}
+	if !under.Flushed {
+		t.Error("the underlying writer was not flushed")
+	}
+}
+
+func TestRecorder_FlushAfterWriteHeaderKeepsTheExplicitStatus(t *testing.T) {
+	rec := web.WrapWriter(httptest.NewRecorder())
+	rec.WriteHeader(http.StatusAccepted)
+
+	if err := http.NewResponseController(rec).Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if rec.Status() != http.StatusAccepted {
+		t.Errorf("Status() = %d, want the explicit %d", rec.Status(), http.StatusAccepted)
+	}
+}
+
 func TestRecorder_StatusIsZeroBeforeAnyWrite(t *testing.T) {
 	rec := web.WrapWriter(httptest.NewRecorder())
 

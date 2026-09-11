@@ -20,6 +20,9 @@ build it.
   - the probes, aggregating `lifecycle.Check` values
   - the problem writers
   - the `Middleware` type, with `Chain`
+  - `Recorder`, the wrapped-writer that records whether a response has been committed and with
+    what status, and `WrapWriter`, its idempotent constructor; `Handle` and the middleware
+    package's `RequestLogger` and `Recoverer` share one per request through it
   - the read contract: `ParseQuery` splits a request's query string into paging and an ordered
     filter list with the bracket-operator grammar, as one `Query` under caller-supplied
     `Limits`; the `Page[T]` envelope carries a page of results
@@ -31,7 +34,8 @@ build it.
     `Group.SetErrorWriter`), which never writes a second response
 
   Built.
-- **middleware** holds the middleware implementations: the request logger. Built.
+- **middleware** holds the middleware implementations: the request logger and the recoverer, the
+  chain's one recovery point. Built.
 - **webtest** is the integration toolkit beside `web`. It provides:
   - the client a black-box suite drives a running service through, reading responses and
     problems as `web` writes them
@@ -40,7 +44,8 @@ build it.
 
   Built at `v1.data.sql.tasks.toolkit` (2026-09-07) from the reference service's harness.
 - **Candidate direction** names what remains of the adapter story. `concepts/error-handling.md`
-  covers the recorder exported and the logger rewritten onto it, the problem vocabulary with the
-  readiness type hook, router 404/405 hooks, and the `ErrorLog` bridge.
-  `concepts/middleware-sourcing.md` covers the middleware set and where service-collaborating
-  middleware lives. The roadmap's `v1.web` goal sequences them.
+  covers the problem vocabulary with the readiness type hook, router 404/405 hooks, and the
+  `ErrorLog` bridge. `concepts/middleware-sourcing.md` covers the rest of the hand-rolled
+  middleware set (request ID, timeout, content-type gate, body limit, fixed headers, conditional
+  wrap, path hygiene) and where service-collaborating middleware lives. The roadmap's `v1.web`
+  goal sequences them.

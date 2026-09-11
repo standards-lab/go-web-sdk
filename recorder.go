@@ -6,13 +6,17 @@ import (
 )
 
 // Recorder wraps a ResponseWriter to record whether a response has been
-// committed and with what status. The first WriteHeader commits; a Write
-// with no WriteHeader before it commits an implicit 200, which is the case
-// a status-only recorder misses. It implements Unwrap so
-// http.ResponseController reaches the underlying writer, and delegates
-// io.ReaderFrom. Handle and the middleware package's RequestLogger and
-// Recoverer all wrap through WrapWriter, so a request several of them see
-// shares one Recorder instead of nesting.
+// committed and with what status. The first WriteHeader commits, except a
+// 1xx status other than 101 Switching Protocols: net/http treats those as
+// informational and the real header is still pending, so Recorder does the
+// same. A Write with no WriteHeader before it commits an implicit 200,
+// which is the case a status-only recorder misses. It implements Unwrap so
+// http.ResponseController reaches the underlying writer, delegates
+// io.ReaderFrom, and implements FlushError so a Flush through
+// http.ResponseController commits here rather than bypassing Recorder on
+// its way to the underlying writer. Handle and the middleware package's
+// RequestLogger and Recoverer all wrap through WrapWriter, so a request
+// several of them see shares one Recorder instead of nesting.
 type Recorder struct {
 	http.ResponseWriter
 	status    int
@@ -41,7 +45,8 @@ func (rec *Recorder) Committed() bool {
 }
 
 func (rec *Recorder) WriteHeader(code int) {
-	if !rec.committed {
+	final := code < 100 || code > 199 || code == http.StatusSwitchingProtocols
+	if final && !rec.committed {
 		rec.status = code
 		rec.committed = true
 	}
@@ -69,4 +74,18 @@ func (rec *Recorder) ReadFrom(src io.Reader) (int64, error) {
 
 func (rec *Recorder) Unwrap() http.ResponseWriter {
 	return rec.ResponseWriter
+}
+
+// FlushError flushes the underlying writer through http.ResponseController
+// and, on success, commits an implicit 200 if nothing has been written yet.
+// http.ResponseController.Flush checks for this method before it unwraps,
+// so a flush through the controller commits here instead of skipping past
+// Recorder to the writer beneath it.
+func (rec *Recorder) FlushError() error {
+	err := http.NewResponseController(rec.ResponseWriter).Flush()
+	if err == nil && !rec.committed {
+		rec.status = http.StatusOK
+		rec.committed = true
+	}
+	return err
 }

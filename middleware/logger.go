@@ -25,6 +25,9 @@ import (
 // Unwrap so http.ResponseController reaches through it, and delegates
 // io.ReaderFrom.
 func RequestLogger(logger *slog.Logger) web.Middleware {
+	if logger == nil {
+		panic("middleware: RequestLogger requires a *slog.Logger")
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()

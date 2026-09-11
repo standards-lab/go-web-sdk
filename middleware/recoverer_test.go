@@ -14,6 +14,17 @@ import (
 	"github.com/standards-lab/go-web-sdk/webtest"
 )
 
+// mustPanic runs fn and fails the test unless it panics.
+func mustPanic(t *testing.T, name string, fn func()) {
+	t.Helper()
+	defer func() {
+		if recover() == nil {
+			t.Errorf("%s did not panic", name)
+		}
+	}()
+	fn()
+}
+
 // recovered serves one GET through the recoverer and returns the response
 // and whatever the recoverer logged, one map per JSON line.
 func recovered(t *testing.T, handler http.Handler) (*httptest.ResponseRecorder, []map[string]any) {
@@ -98,44 +109,6 @@ func TestRecoverer_PanicWithNothingWrittenIsAProblem(t *testing.T) {
 	}
 }
 
-// A response committed before the panic is what the client got; the
-// recoverer must not write a problem on top of it, but still logs.
-func TestRecoverer_PanicAfterCommitWritesNothingMore(t *testing.T) {
-	tests := []struct {
-		name   string
-		commit func(http.ResponseWriter)
-		status int
-	}{
-		{"after WriteHeader", func(w http.ResponseWriter) { w.WriteHeader(http.StatusAccepted) }, http.StatusAccepted},
-		{"after an implicit 200 Write", func(w http.ResponseWriter) { _, _ = w.Write([]byte("partial")) }, http.StatusOK},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec, logs := recovered(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				tt.commit(w)
-				panic("boom")
-			}))
-
-			if rec.Code != tt.status {
-				t.Errorf("status = %d, want the committed %d", rec.Code, tt.status)
-			}
-			if strings.Contains(rec.Body.String(), "problem") || rec.Header().Get("Content-Type") == web.ProblemMediaType {
-				t.Errorf("a problem was written after the commit: %q", rec.Body.String())
-			}
-
-			if len(logs) != 1 {
-				t.Fatalf("logged %d records, want 1: %v", len(logs), logs)
-			}
-			if logs[0]["panic"] != "boom" || logs[0]["level"] != "ERROR" {
-				t.Errorf("record = %v, want the panic at error level", logs[0])
-			}
-			if logs[0]["status"] != float64(tt.status) {
-				t.Errorf("status attr = %v, want the committed %d", logs[0]["status"], tt.status)
-			}
-		})
-	}
-}
-
 func TestRecoverer_LeavesANonPanickingRequestAlone(t *testing.T) {
 	rec, logs := recovered(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = web.WriteJSON(w, http.StatusCreated, map[string]string{"id": "7"})
@@ -150,6 +123,59 @@ func TestRecoverer_LeavesANonPanickingRequestAlone(t *testing.T) {
 	if len(logs) != 0 {
 		t.Errorf("logged %v for a request that did not panic", logs)
 	}
+}
+
+// A response already committed before the panic cannot be answered with a
+// problem document, so Recoverer logs the committed status and re-raises
+// the panic as http.ErrAbortHandler instead of returning normally: net/http
+// ends the connection rather than completing a truncated body as if it
+// were a clean response.
+func TestRecoverer_PanicAfterCommitReRaisesErrAbortHandler(t *testing.T) {
+	tests := []struct {
+		name   string
+		commit func(http.ResponseWriter)
+		status int
+	}{
+		{"after WriteHeader", func(w http.ResponseWriter) { w.WriteHeader(http.StatusAccepted) }, http.StatusAccepted},
+		{"after an implicit 200 Write", func(w http.ResponseWriter) { _, _ = w.Write([]byte("partial")) }, http.StatusOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&buf, nil))
+			handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				tt.commit(w)
+				panic("boom")
+			}), middleware.Recoverer(logger))
+
+			var got any
+			func() {
+				defer func() { got = recover() }()
+				webtest.Probe(handler, "/orders/7")
+			}()
+
+			if got != http.ErrAbortHandler {
+				t.Errorf("recovered %v, want http.ErrAbortHandler to propagate", got)
+			}
+
+			logs := records(t, buf.String())
+			if len(logs) != 1 {
+				t.Fatalf("logged %d records, want 1: %v", len(logs), logs)
+			}
+			if logs[0]["panic"] != "boom" || logs[0]["level"] != "ERROR" {
+				t.Errorf("record = %v, want the panic at error level", logs[0])
+			}
+			if logs[0]["status"] != float64(tt.status) {
+				t.Errorf("status attr = %v, want the committed %d", logs[0]["status"], tt.status)
+			}
+		})
+	}
+}
+
+func TestRecoverer_NilLoggerPanics(t *testing.T) {
+	mustPanic(t, "Recoverer(nil)", func() {
+		middleware.Recoverer(nil)
+	})
 }
 
 // http.ErrAbortHandler is net/http's own way to abort a response silently;
