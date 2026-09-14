@@ -17,7 +17,7 @@ import (
 var _ = config.Load[web.Config]
 
 // testPrefix is the env prefix override tests finalize with; the names below
-// are what Finalize composes from it.
+// are what Finalize composes from it under the "server" block.
 const (
 	testPrefix           = "test"
 	envHost              = "TEST_SERVER_HOST"
@@ -26,6 +26,18 @@ const (
 	envReadHeaderTimeout = "TEST_SERVER_READ_HEADER_TIMEOUT"
 	envWriteTimeout      = "TEST_SERVER_WRITE_TIMEOUT"
 	envIdleTimeout       = "TEST_SERVER_IDLE_TIMEOUT"
+)
+
+// testBlock is the non-default block FinalizeBlock tests finalize with; the
+// names below are what it composes from testPrefix and testBlock.
+const (
+	testBlock                = "management"
+	envMgmtHost              = "TEST_MANAGEMENT_HOST"
+	envMgmtPort              = "TEST_MANAGEMENT_PORT"
+	envMgmtReadTimeout       = "TEST_MANAGEMENT_READ_TIMEOUT"
+	envMgmtReadHeaderTimeout = "TEST_MANAGEMENT_READ_HEADER_TIMEOUT"
+	envMgmtWriteTimeout      = "TEST_MANAGEMENT_WRITE_TIMEOUT"
+	envMgmtIdleTimeout       = "TEST_MANAGEMENT_IDLE_TIMEOUT"
 )
 
 func dur(v time.Duration) *config.Duration {
@@ -275,28 +287,148 @@ func TestConfig_FinalizeRejectsNegativePortFromEnv(t *testing.T) {
 	}
 }
 
-func TestNewEnv_ComposesNamesFromPrefix(t *testing.T) {
-	env := web.NewEnv("herald")
-
+func TestNewEnv_ComposesNamesFromPrefixAndBlock(t *testing.T) {
 	for _, tc := range []struct {
-		got  string
-		want string
+		block string
+		want  web.Env
 	}{
-		{env.Host, "HERALD_SERVER_HOST"},
-		{env.Port, "HERALD_SERVER_PORT"},
-		{env.ReadTimeout, "HERALD_SERVER_READ_TIMEOUT"},
-		{env.ReadHeaderTimeout, "HERALD_SERVER_READ_HEADER_TIMEOUT"},
-		{env.WriteTimeout, "HERALD_SERVER_WRITE_TIMEOUT"},
-		{env.IdleTimeout, "HERALD_SERVER_IDLE_TIMEOUT"},
+		{"server", web.Env{
+			Host:              "HERALD_SERVER_HOST",
+			Port:              "HERALD_SERVER_PORT",
+			ReadTimeout:       "HERALD_SERVER_READ_TIMEOUT",
+			ReadHeaderTimeout: "HERALD_SERVER_READ_HEADER_TIMEOUT",
+			WriteTimeout:      "HERALD_SERVER_WRITE_TIMEOUT",
+			IdleTimeout:       "HERALD_SERVER_IDLE_TIMEOUT",
+		}},
+		{"management", web.Env{
+			Host:              "HERALD_MANAGEMENT_HOST",
+			Port:              "HERALD_MANAGEMENT_PORT",
+			ReadTimeout:       "HERALD_MANAGEMENT_READ_TIMEOUT",
+			ReadHeaderTimeout: "HERALD_MANAGEMENT_READ_HEADER_TIMEOUT",
+			WriteTimeout:      "HERALD_MANAGEMENT_WRITE_TIMEOUT",
+			IdleTimeout:       "HERALD_MANAGEMENT_IDLE_TIMEOUT",
+		}},
 	} {
-		if tc.got != tc.want {
-			t.Errorf("got %q, want %q", tc.got, tc.want)
-		}
+		t.Run(tc.block, func(t *testing.T) {
+			if got := web.NewEnv("herald", tc.block); got != tc.want {
+				t.Errorf("NewEnv(\"herald\", %q) = %+v, want %+v", tc.block, got, tc.want)
+			}
+		})
 	}
 }
 
 func TestNewEnv_EmptyPrefixReturnsZeroEnv(t *testing.T) {
-	if env := web.NewEnv(""); env != (web.Env{}) {
-		t.Errorf("NewEnv(\"\") = %+v, want the zero Env (overrides disabled)", env)
+	if env := web.NewEnv("", "server"); env != (web.Env{}) {
+		t.Errorf("NewEnv(\"\", \"server\") = %+v, want the zero Env (overrides disabled)", env)
+	}
+}
+
+func TestConfig_FinalizeUsesServerBlock(t *testing.T) {
+	var cfg web.Config
+	if err := cfg.Finalize(testPrefix); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if got, want := cfg.Env, web.NewEnv(testPrefix, "server"); got != want {
+		t.Errorf("Env = %+v, want the \"server\" block names %+v", got, want)
+	}
+}
+
+func TestConfig_FinalizeBlockComposesNamesFromBlock(t *testing.T) {
+	var cfg web.Config
+	if err := cfg.FinalizeBlock(testPrefix, testBlock); err != nil {
+		t.Fatalf("FinalizeBlock: %v", err)
+	}
+
+	want := web.Env{
+		Host:              envMgmtHost,
+		Port:              envMgmtPort,
+		ReadTimeout:       envMgmtReadTimeout,
+		ReadHeaderTimeout: envMgmtReadHeaderTimeout,
+		WriteTimeout:      envMgmtWriteTimeout,
+		IdleTimeout:       envMgmtIdleTimeout,
+	}
+	if cfg.Env != want {
+		t.Errorf("Env = %+v, want %+v", cfg.Env, want)
+	}
+}
+
+func TestConfig_FinalizeBlockNamesDoNotCollideAcrossBlocks(t *testing.T) {
+	var primary, mgmt web.Config
+	if err := primary.Finalize(testPrefix); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if err := mgmt.FinalizeBlock(testPrefix, testBlock); err != nil {
+		t.Fatalf("FinalizeBlock: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		primary string
+		mgmt    string
+	}{
+		{"Host", primary.Env.Host, mgmt.Env.Host},
+		{"Port", primary.Env.Port, mgmt.Env.Port},
+		{"ReadTimeout", primary.Env.ReadTimeout, mgmt.Env.ReadTimeout},
+		{"ReadHeaderTimeout", primary.Env.ReadHeaderTimeout, mgmt.Env.ReadHeaderTimeout},
+		{"WriteTimeout", primary.Env.WriteTimeout, mgmt.Env.WriteTimeout},
+		{"IdleTimeout", primary.Env.IdleTimeout, mgmt.Env.IdleTimeout},
+	} {
+		if tc.primary == tc.mgmt {
+			t.Errorf("%s: both blocks compose %q under prefix %q", tc.name, tc.primary, testPrefix)
+		}
+	}
+}
+
+func TestConfig_FinalizeBlockEnvOverridesOnlyItsOwnBlock(t *testing.T) {
+	// The primary server's variables are set alongside the management block's,
+	// so a value leaking across blocks would show up as the wrong port.
+	t.Setenv(envHost, "primary-env")
+	t.Setenv(envPort, "9443")
+	t.Setenv(envMgmtHost, "mgmt-env")
+	t.Setenv(envMgmtPort, "9444")
+	t.Setenv(envMgmtReadTimeout, "45s")
+
+	mgmt := web.Config{Host: "from-file", Port: new(8081)}
+	if err := mgmt.FinalizeBlock(testPrefix, testBlock); err != nil {
+		t.Fatalf("FinalizeBlock: %v", err)
+	}
+	if mgmt.Host != "mgmt-env" {
+		t.Errorf("Host = %q, want mgmt-env", mgmt.Host)
+	}
+	if *mgmt.Port != 9444 {
+		t.Errorf("Port = %d, want 9444", *mgmt.Port)
+	}
+	if time.Duration(*mgmt.ReadTimeout) != 45*time.Second {
+		t.Errorf("ReadTimeout = %s, want 45s", mgmt.ReadTimeout)
+	}
+	if time.Duration(*mgmt.WriteTimeout) != 15*time.Minute {
+		t.Errorf("WriteTimeout = %s, want the default (no override set)", mgmt.WriteTimeout)
+	}
+
+	var primary web.Config
+	if err := primary.Finalize(testPrefix); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if primary.Host != "primary-env" {
+		t.Errorf("primary Host = %q, want primary-env", primary.Host)
+	}
+	if *primary.Port != 9443 {
+		t.Errorf("primary Port = %d, want 9443", *primary.Port)
+	}
+	if time.Duration(*primary.ReadTimeout) != time.Minute {
+		t.Errorf("primary ReadTimeout = %s, want the default (the override is the management block's)", primary.ReadTimeout)
+	}
+}
+
+func TestConfig_FinalizeBlockMalformedPortNamesTheBlockVariable(t *testing.T) {
+	t.Setenv(envMgmtPort, "http")
+
+	var cfg web.Config
+	err := cfg.FinalizeBlock(testPrefix, testBlock)
+	if err == nil {
+		t.Fatal("FinalizeBlock returned nil for a malformed port override")
+	}
+	if !strings.Contains(err.Error(), envMgmtPort) {
+		t.Errorf("error = %v, want it to name %s", err, envMgmtPort)
 	}
 }
