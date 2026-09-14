@@ -64,6 +64,52 @@ func TestConfig_MergeSourceWinsWithoutClearing(t *testing.T) {
 	}
 }
 
+func TestConfig_MergeOverlaysMaxHeaderBytes(t *testing.T) {
+	base := web.Config{Host: "base", MaxHeaderBytes: new(4096)}
+	base.Merge(&web.Config{MaxHeaderBytes: new(1 << 20)})
+	if base.MaxHeaderBytes == nil || *base.MaxHeaderBytes != 1<<20 {
+		t.Errorf("MaxHeaderBytes = %v, want 1048576 (the source sets it)", base.MaxHeaderBytes)
+	}
+
+	base.Merge(&web.Config{Host: "other"})
+	if base.MaxHeaderBytes == nil || *base.MaxHeaderBytes != 1<<20 {
+		t.Errorf("MaxHeaderBytes = %v, want 1048576 (the source omits it and must not clear it)", base.MaxHeaderBytes)
+	}
+}
+
+func TestConfig_FinalizeLeavesMaxHeaderBytesUnset(t *testing.T) {
+	// MaxHeaderBytes has no SDK default: unset stays nil so NewServer leaves
+	// http.Server.MaxHeaderBytes to net/http's own default.
+	var cfg web.Config
+	if err := cfg.Finalize(""); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if cfg.MaxHeaderBytes != nil {
+		t.Errorf("MaxHeaderBytes = %d, want nil (no SDK default)", *cfg.MaxHeaderBytes)
+	}
+}
+
+func TestConfig_FinalizeKeepsExplicitMaxHeaderBytes(t *testing.T) {
+	cfg := web.Config{MaxHeaderBytes: new(0)}
+	if err := cfg.Finalize(""); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if cfg.MaxHeaderBytes == nil || *cfg.MaxHeaderBytes != 0 {
+		t.Errorf("MaxHeaderBytes = %v, want an explicit 0 to survive Finalize", cfg.MaxHeaderBytes)
+	}
+}
+
+func TestConfig_FinalizeRejectsNegativeMaxHeaderBytes(t *testing.T) {
+	cfg := web.Config{MaxHeaderBytes: new(-1)}
+	err := cfg.Finalize("")
+	if err == nil {
+		t.Fatal("Finalize returned nil for max_header_bytes -1")
+	}
+	if !strings.Contains(err.Error(), "max_header_bytes") {
+		t.Errorf("error = %v, want it to name max_header_bytes", err)
+	}
+}
+
 func TestConfig_FinalizeAppliesDefaults(t *testing.T) {
 	var cfg web.Config
 	if err := cfg.Finalize(""); err != nil {
@@ -194,7 +240,7 @@ func TestConfig_AddrBracketsIPv6(t *testing.T) {
 
 func TestConfig_LoadsThroughConfigLoad(t *testing.T) {
 	dir := t.TempDir()
-	body := `{"host":"127.0.0.1","port":9000,"read_timeout":"90s"}`
+	body := `{"host":"127.0.0.1","port":9000,"read_timeout":"90s","max_header_bytes":65536}`
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(body), 0o600); err != nil {
 		t.Fatalf("write config.json: %v", err)
 	}
@@ -212,6 +258,9 @@ func TestConfig_LoadsThroughConfigLoad(t *testing.T) {
 	}
 	if time.Duration(*cfg.IdleTimeout) != 2*time.Minute {
 		t.Errorf("IdleTimeout = %s, want the default", cfg.IdleTimeout)
+	}
+	if cfg.MaxHeaderBytes == nil || *cfg.MaxHeaderBytes != 65536 {
+		t.Errorf("MaxHeaderBytes = %v, want 65536 from the file", cfg.MaxHeaderBytes)
 	}
 }
 

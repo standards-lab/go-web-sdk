@@ -67,11 +67,16 @@ func NewEnv(prefix, block string) Env {
 	}
 }
 
-// Config holds the server's address and timeouts. The port and timeouts are
-// tri-state pointers: nil is unset and takes the default, while an explicit
-// zero survives the load and means what it says: a disabled timeout, or an
-// ephemeral port. Env records the environment-variable names Finalize
-// composed and read; it is excluded from JSON.
+// Config holds the server's address, timeouts, and header limit. The port and
+// timeouts are tri-state pointers: nil is unset and takes the default, while
+// an explicit zero survives the load and means what it says: a disabled
+// timeout, or an ephemeral port. MaxHeaderBytes is the same tri-state
+// pointer without an SDK default: nil stays nil through Finalize, and
+// [NewServer] then leaves http.Server.MaxHeaderBytes unset so net/http
+// applies its own [http.DefaultMaxHeaderBytes]; a set value bounds the
+// request header block, and net/http reads an explicit zero as its default
+// too. Env records the environment-variable names Finalize composed and
+// read; it is excluded from JSON.
 type Config struct {
 	Host              string           `json:"host"`
 	Port              *int             `json:"port"`
@@ -79,6 +84,7 @@ type Config struct {
 	ReadHeaderTimeout *config.Duration `json:"read_header_timeout"`
 	WriteTimeout      *config.Duration `json:"write_timeout"`
 	IdleTimeout       *config.Duration `json:"idle_timeout"`
+	MaxHeaderBytes    *int             `json:"max_header_bytes"`
 	Env               Env              `json:"-"`
 }
 
@@ -110,6 +116,9 @@ func (c *Config) Merge(src *Config) {
 	}
 	if src.IdleTimeout != nil {
 		c.IdleTimeout = src.IdleTimeout
+	}
+	if src.MaxHeaderBytes != nil {
+		c.MaxHeaderBytes = src.MaxHeaderBytes
 	}
 }
 
@@ -194,6 +203,9 @@ func (c *Config) validate() error {
 	}
 	if *c.IdleTimeout < 0 {
 		return fmt.Errorf("invalid idle_timeout: %s", c.IdleTimeout)
+	}
+	if c.MaxHeaderBytes != nil && *c.MaxHeaderBytes < 0 {
+		return fmt.Errorf("invalid max_header_bytes: %d", *c.MaxHeaderBytes)
 	}
 	return nil
 }

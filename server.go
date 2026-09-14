@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync"
@@ -27,17 +28,46 @@ func NewServer(cfg Config, handler http.Handler) *Server {
 		panic("web: Config not finalized: call Finalize before NewServer")
 	}
 
+	srv := &http.Server{
+		Addr:              cfg.Addr(),
+		Handler:           handler,
+		ReadTimeout:       cfg.ReadTimeout.Duration(),
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout.Duration(),
+		WriteTimeout:      cfg.WriteTimeout.Duration(),
+		IdleTimeout:       cfg.IdleTimeout.Duration(),
+	}
+	// An unset MaxHeaderBytes stays zero on the http.Server, which is
+	// net/http's own signal to apply http.DefaultMaxHeaderBytes; the SDK does
+	// not restate that number.
+	if cfg.MaxHeaderBytes != nil {
+		srv.MaxHeaderBytes = *cfg.MaxHeaderBytes
+	}
+
 	return &Server{
-		http: &http.Server{
-			Addr:              cfg.Addr(),
-			Handler:           handler,
-			ReadTimeout:       cfg.ReadTimeout.Duration(),
-			ReadHeaderTimeout: cfg.ReadHeaderTimeout.Duration(),
-			WriteTimeout:      cfg.WriteTimeout.Duration(),
-			IdleTimeout:       cfg.IdleTimeout.Duration(),
-		},
+		http: srv,
 		errs: make(chan error, 1),
 	}
+}
+
+// Log routes net/http's own diagnostics (TLS handshake failures, header
+// parse errors, the superfluous WriteHeader warning) through logger at warn
+// level, by bridging http.Server.ErrorLog with [slog.NewLogLogger]. Unset,
+// net/http writes them through the global log package to stderr, outside
+// the slog pipeline. Called at wiring time, like [ErrorWriter.Log]; a nil
+// logger panics, and Log after Start panics because Serve reads ErrorLog
+// concurrently.
+func (s *Server) Log(logger *slog.Logger) {
+	if logger == nil {
+		panic("web: Server.Log requires a *slog.Logger")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.listener != nil {
+		panic("web: Server.Log after Start")
+	}
+	s.http.ErrorLog = slog.NewLogLogger(logger.Handler(), slog.LevelWarn)
 }
 
 // Start binds the listener on the calling goroutine: a bind failure is the
