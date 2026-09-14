@@ -19,6 +19,24 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
   passes through untouched.
 - `Recorder.FlushError`, so a `Flush` through `http.ResponseController` commits an implicit 200
   the same way a `Write` does, instead of reaching past `Recorder` to the underlying writer.
+- `ProblemMatcher`, replacing `StatusMatcher`: a matcher returns a `Problem`, not just a status,
+  so a consumer can give its own errors a type URI, title, and extension members instead of
+  every problem the SDK writes coming back `about:blank`. `ErrorWriter.Problem` centralizes the
+  mapping; `Status` and `Write` are both one step removed from it now, and a matcher's own
+  `Detail` always ships rather than being gated by the writer's detail set.
+- `Problem.Extras`, `Problem.MarshalJSON`/`UnmarshalJSON`, and `Problem.WriteFor` (`Instance`
+  defaulted from the request path).
+- `Readiness` and `RegisterHealth` take a `notReady Problem`, so a consumer can give readiness
+  failures their own type, title, and detail instead of the `checks` member riding a bare
+  `about:blank` problem. `Status` and the `checks` extension member stay the probe's own
+  regardless of what the consumer sets.
+
+### Removed
+
+- `StatusMatcher` and `WriteProblemWith` — replaced by `ProblemMatcher` and `Problem`'s own
+  `Extras`/`WriteFor`. Breaking; no workspace repository links against this SDK's working tree
+  (each pins a released version), so this is a scheduled migration for `go-web-service` and
+  `go-web-sdk-template`, not an immediate build break.
 
 ### Fixed
 
