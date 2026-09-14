@@ -82,8 +82,11 @@ A silent import no stated line covers is a defect.
 
 - **Correlation**: neither `RequestLogger`'s nor `Recoverer`'s record carries a request or
   trace id, so the two records a panic produces are correlatable only by path and timestamp.
-  When request ID lands, both read it, and `Problem.Instance` (today just `r.URL.Path`) is the
-  natural place to surface it to clients.
+  When request ID lands, both read it, and it surfaces to clients through `Problem.Extras`, not
+  `Problem.Instance` — `Instance` already carries the request path per RFC 9457, and overwriting
+  it would lose that. The id itself is the OpenTelemetry trace id where tracing is configured;
+  the shape and the composition-root seam that supplies it are
+  `standards-lab/context/design/observability-strategy.md`.
 - The reference service's per-request gap this set closes: no handler-level deadline exists
   and the SDK default write timeout is 15 minutes; no body limit on read endpoints; no
   security headers; CORS arrives with the embedded client (`goals.v1.client`).
