@@ -85,8 +85,12 @@
 // else; an unanswered probe is the liveness signal. [Readiness] aggregates the
 // [lifecycle.Check] values the caller supplies, and answers 503 unless every
 // one of them is ready. A Check with a nil Checker reports not ready, so a
-// subsystem that failed to construct fails the probe. [RegisterHealth] mounts
-// both endpoints on a [Mounter]: liveness plain, and readiness over a
+// subsystem that failed to construct fails the probe. The 503 is notReady,
+// the [Problem] the caller supplies: a zero value takes the package
+// defaults (about:blank, "one or more readiness checks failed"), and any
+// member notReady names is used instead — except Status and a "checks" key
+// in Extras, which are always the probe's own. [RegisterHealth] mounts both
+// endpoints on a [Mounter]: liveness plain, and readiness over a
 // [lifecycle.Coordinator], queried fresh on every request rather than once at
 // registration, so a service the coordinator gains after RegisterHealth is
 // called still appears on the next probe. The coordinator itself is the first

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"maps"
 	"net/http"
 
 	"github.com/standards-lab/go-core/lifecycle"
@@ -36,10 +37,15 @@ func Liveness() http.Handler {
 	})
 }
 
-// Readiness aggregates the checks: 200 with each participant's state when all
-// are ready, and otherwise a 503 problem document naming them. Zero checks
-// report ready.
-func Readiness(checks ...lifecycle.Check) http.Handler {
+// Readiness aggregates the checks: 200 with each participant's state when
+// all are ready, and otherwise notReady written as the problem, at 503,
+// carrying the participants as its "checks" extension member. A zero
+// Problem takes the package defaults (about:blank, "one or more readiness
+// checks failed"); any member notReady names — Type, Title, Detail, or
+// Extras — is used instead. The status and the checks member are always
+// the probe's own: notReady.Status is ignored, and a "checks" key in
+// notReady.Extras is overwritten. Zero checks report ready.
+func Readiness(notReady Problem, checks ...lifecycle.Check) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		results := make([]checkResult, 0, len(checks))
 		ready := true
@@ -55,11 +61,16 @@ func Readiness(checks ...lifecycle.Check) http.Handler {
 		}
 
 		if !ready {
-			_ = Problem{
-				Status: http.StatusServiceUnavailable,
-				Detail: "one or more readiness checks failed",
-				Extras: map[string]any{"checks": results},
-			}.WriteFor(w, r)
+			p := notReady
+			p.Status = http.StatusServiceUnavailable
+			if p.Detail == "" {
+				p.Detail = "one or more readiness checks failed"
+			}
+			extras := make(map[string]any, len(notReady.Extras)+1)
+			maps.Copy(extras, notReady.Extras)
+			extras["checks"] = results
+			p.Extras = extras
+			_ = p.WriteFor(w, r)
 			return
 		}
 
@@ -73,13 +84,14 @@ func Readiness(checks ...lifecycle.Check) http.Handler {
 // RegisterHealth mounts [Liveness] at GET /healthz and a readiness probe at
 // GET /readyz over lc, queried fresh on every request rather than once at
 // registration: a service lc.Add adds after this call still appears on the
-// next probe. Exposing an in-progress service's check is safe only because
+// next probe. notReady is [Readiness]'s own parameter, passed through
+// unchanged. Exposing an in-progress service's check is safe only because
 // the caller registers its own HTTP server at [lifecycle.StageRoot], so the
 // coordinator never serves a request before every numbered stage exists.
-func RegisterHealth(m Mounter, lc *lifecycle.Coordinator) {
+func RegisterHealth(m Mounter, lc *lifecycle.Coordinator, notReady Problem) {
 	readiness := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		checks := append([]lifecycle.Check{{Name: "lifecycle", Checker: lc}}, lc.Checks()...)
-		Readiness(checks...).ServeHTTP(w, r)
+		Readiness(notReady, checks...).ServeHTTP(w, r)
 	})
 
 	m.Handle("GET "+HealthPath, Liveness())

@@ -60,7 +60,7 @@ func TestRouter_ProbesMountOutsideModuleMiddleware(t *testing.T) {
 
 	r := web.NewRouter()
 	r.Mount(web.NewModule(g))
-	web.RegisterHealth(r, lifecycle.New())
+	web.RegisterHealth(r, lifecycle.New(), web.Problem{})
 
 	if got := webtest.Probe(r, web.HealthPath).Code; got != http.StatusOK {
 		t.Fatalf("GET %s = %d, want 200", web.HealthPath, got)

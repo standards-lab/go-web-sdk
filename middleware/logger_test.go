@@ -189,7 +189,7 @@ func TestRequestLogger_ProbeFailureLogsAtInfo(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	handler := web.Chain(
-		web.Readiness(lifecycle.Check{Name: "lifecycle"}),
+		web.Readiness(web.Problem{}, lifecycle.Check{Name: "lifecycle"}),
 		middleware.RequestLogger(logger),
 	)
 	webtest.Probe(handler, web.ReadyPath)
