@@ -6,7 +6,7 @@ import (
 )
 
 // statusError is the status mapping of this package's own error types: each
-// carries its HTTP status beside its definition, and [ErrorWriter.Status]
+// carries its HTTP status beside its definition, and [ErrorWriter.Problem]
 // asks the error rather than enumerating the types. The method is
 // unexported on purpose. A consumer's status policy is declared through
 // matchers at the composition root, never by teaching an error its status,

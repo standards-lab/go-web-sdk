@@ -2,8 +2,10 @@ package web_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,7 +35,7 @@ func TestLiveness_ReportsOK(t *testing.T) {
 }
 
 func TestReadiness_NoChecksIsReady(t *testing.T) {
-	rec := webtest.Probe(web.Readiness(), web.ReadyPath)
+	rec := webtest.Probe(web.Readiness(web.Problem{}), web.ReadyPath)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200 with no checks registered", rec.Code)
@@ -45,6 +47,7 @@ func TestReadiness_NoChecksIsReady(t *testing.T) {
 
 func TestReadiness_AllReady(t *testing.T) {
 	handler := web.Readiness(
+		web.Problem{},
 		lifecycle.Check{Name: "lifecycle", Checker: staticChecker(true)},
 		lifecycle.Check{Name: "database", Checker: staticChecker(true)},
 	)
@@ -68,6 +71,7 @@ func TestReadiness_AllReady(t *testing.T) {
 
 func TestReadiness_NotReadyEmitsProblem(t *testing.T) {
 	handler := web.Readiness(
+		web.Problem{},
 		lifecycle.Check{Name: "lifecycle", Checker: staticChecker(true)},
 		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
 	)
@@ -106,8 +110,105 @@ func TestReadiness_NotReadyEmitsProblem(t *testing.T) {
 	}
 }
 
+// A consumer's own problem reaches the wire: the type hook this step adds.
+func TestReadiness_NotReadyConsumerProblemReachesTheWire(t *testing.T) {
+	const problemType = "https://example.test/probs/not-ready"
+	handler := web.Readiness(
+		web.Problem{Type: problemType, Title: "Dependency unavailable", Detail: "database is down"},
+		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
+	)
+
+	rec := webtest.Probe(handler, web.ReadyPath)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+
+	body := decodeBody(t, rec)
+	if got := body["type"]; got != problemType {
+		t.Errorf("type = %v, want %q", got, problemType)
+	}
+	if got := body["title"]; got != "Dependency unavailable" {
+		t.Errorf("title = %v, want the consumer's title", got)
+	}
+	if got := body["detail"]; got != "database is down" {
+		t.Errorf("detail = %v, want the consumer's detail", got)
+	}
+	if _, ok := body["checks"]; !ok {
+		t.Error("checks is absent, want it alongside the consumer's problem")
+	}
+}
+
+// The checks member is always the probe's own: a consumer's Extras cannot
+// shadow it.
+func TestReadiness_NotReadyChecksCannotBeOverriddenByExtras(t *testing.T) {
+	handler := web.Readiness(
+		web.Problem{Extras: map[string]any{"checks": "not the real checks"}},
+		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
+	)
+
+	rec := webtest.Probe(handler, web.ReadyPath)
+	body := decodeBody(t, rec)
+	checks, ok := body["checks"].([]any)
+	if !ok || len(checks) != 1 {
+		t.Fatalf("checks = %v, want the real one-entry check list", body["checks"])
+	}
+}
+
+// The status is always the probe's own: a consumer's Status is ignored.
+func TestReadiness_NotReadyStatusIsAlwaysServiceUnavailable(t *testing.T) {
+	handler := web.Readiness(
+		web.Problem{Status: http.StatusTeapot},
+		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
+	)
+
+	rec := webtest.Probe(handler, web.ReadyPath)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503 despite the consumer's Status", rec.Code)
+	}
+}
+
+// notReady.Extras is read, never written: several requests probing the same
+// handler concurrently must not race on it (run under -race), and each
+// must see its own "checks" entry rather than one leaking into another's
+// document.
+func TestReadiness_ConcurrentRequestsDoNotShareExtras(t *testing.T) {
+	handler := web.Readiness(
+		web.Problem{Extras: map[string]any{"tenant": "acme"}},
+		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
+	)
+
+	// t.Fatalf (inside the decodeBody helper) must only run on the test's
+	// own goroutine, so each worker decodes inline and reports with
+	// Errorf, which is safe to call concurrently.
+	const n = 50
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for range n {
+		go func() {
+			defer wg.Done()
+			rec := webtest.Probe(handler, web.ReadyPath)
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Errorf("status = %d, want 503", rec.Code)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Errorf("decode body %q: %v", rec.Body.String(), err)
+				return
+			}
+			if body["tenant"] != "acme" {
+				t.Errorf("tenant = %v, want acme", body["tenant"])
+			}
+			checks, ok := body["checks"].([]any)
+			if !ok || len(checks) != 1 {
+				t.Errorf("checks = %v, want one entry", body["checks"])
+			}
+		}()
+	}
+	wg.Wait()
+}
+
 func TestReadiness_NilCheckerIsNotReady(t *testing.T) {
-	rec := webtest.Probe(web.Readiness(lifecycle.Check{Name: "database"}), web.ReadyPath)
+	rec := webtest.Probe(web.Readiness(web.Problem{}, lifecycle.Check{Name: "database"}), web.ReadyPath)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503 for a nil checker", rec.Code)
 	}
@@ -120,7 +221,7 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 	lc := lifecycle.New()
 
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux, lc)
+	web.RegisterHealth(mux, lc, web.Problem{})
 
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -165,7 +266,7 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 
 func TestRegisterHealth_MountsBothPaths(t *testing.T) {
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux, lifecycle.New())
+	web.RegisterHealth(mux, lifecycle.New(), web.Problem{})
 
 	if got := webtest.Probe(mux, web.HealthPath).Code; got != http.StatusOK {
 		t.Errorf("GET %s = %d, want 200", web.HealthPath, got)
@@ -179,7 +280,7 @@ func TestRegisterHealth_MountsBothPaths(t *testing.T) {
 
 func TestRegisterHealth_RejectsOtherMethods(t *testing.T) {
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux, lifecycle.New())
+	web.RegisterHealth(mux, lifecycle.New(), web.Problem{})
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, web.HealthPath, nil))
@@ -195,7 +296,7 @@ func TestRegisterHealth_RejectsOtherMethods(t *testing.T) {
 func TestRegisterHealth_QueriesCoordinatorLive(t *testing.T) {
 	lc := lifecycle.New()
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux, lc)
+	web.RegisterHealth(mux, lc, web.Problem{})
 
 	lc.Add(lifecycle.Service{
 		Name:  "database",

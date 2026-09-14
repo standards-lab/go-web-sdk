@@ -27,9 +27,12 @@ build it.
     filter list with the bracket-operator grammar, as one `Query` under caller-supplied
     `Limits`; the `Page[T]` envelope carries a page of results
   - the request helpers, `IfMatch` and `DecodeJSON`
-  - the `ErrorWriter`, which maps returned errors to problem responses. Its own error types map
-    themselves and are sealed; consumer-supplied matchers decide the rest, with `Detail` and
-    `Log` set at wiring
+  - the `ErrorWriter`, which maps returned errors to problem responses through a composed
+    `ProblemMatcher` list. Its own error types map themselves and are sealed and checked first;
+    consumer-supplied matchers decide the rest and may carry their own type, title, and
+    extension members via `Problem`, not status alone. `Detail` and `Log` are set at wiring
+  - `Problem`'s `Extras` and its `MarshalJSON`/`UnmarshalJSON` pair, so a document with
+    extension members round-trips; `WriteFor` sets `Instance` from the request path
   - the error-returning handler adapter (`HandlerFunc`, `Handle`, `Group.HandleErr` under
     `Group.SetErrorWriter`), which never writes a second response
 
@@ -44,8 +47,8 @@ build it.
 
   Built at `v1.data.sql.tasks.toolkit` (2026-09-07) from the reference service's harness.
 - **Candidate direction** names what remains of the adapter story. `concepts/error-handling.md`
-  covers the problem vocabulary with the readiness type hook, router 404/405 hooks, and the
-  `ErrorLog` bridge. `concepts/middleware-sourcing.md` covers the rest of the hand-rolled
-  middleware set (request ID, timeout, content-type gate, body limit, fixed headers, conditional
-  wrap, path hygiene) and where service-collaborating middleware lives. The roadmap's `v1.web`
-  goal sequences them.
+  covers the router 404/405 hooks, the `ErrorLog` bridge, writer inheritance, `statusError`'s
+  precedence over the matchers, and the per-block config env segment. `concepts/middleware-sourcing.md`
+  covers the rest of the hand-rolled middleware set (request ID, timeout, content-type gate,
+  body limit, fixed headers, conditional wrap, path hygiene) and where service-collaborating
+  middleware lives. The roadmap's `v1.web` goal sequences them.

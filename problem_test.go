@@ -90,19 +90,17 @@ func TestWriteProblem_UsesRequestPathAsInstance(t *testing.T) {
 	}
 }
 
-func TestWriteProblemWith_CarriesExtensionMembers(t *testing.T) {
+func TestProblem_WriteForCarriesExtensionMembers(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 
-	err := web.WriteProblemWith(
-		rec, r,
-		http.StatusServiceUnavailable,
-		"",
-		"one or more readiness checks failed",
-		map[string]any{"checks": []map[string]any{{"name": "database", "ready": false}}},
-	)
+	err := web.Problem{
+		Status: http.StatusServiceUnavailable,
+		Detail: "one or more readiness checks failed",
+		Extras: map[string]any{"checks": []map[string]any{{"name": "database", "ready": false}}},
+	}.WriteFor(rec, r)
 	if err != nil {
-		t.Fatalf("WriteProblemWith: %v", err)
+		t.Fatalf("WriteFor: %v", err)
 	}
 
 	body := decodeBody(t, rec)
@@ -118,21 +116,18 @@ func TestWriteProblemWith_CarriesExtensionMembers(t *testing.T) {
 	}
 }
 
-func TestWriteProblemWith_ExtrasOverrideStandardMembers(t *testing.T) {
+func TestProblem_ExtrasOverrideStandardMembers(t *testing.T) {
 	const consumerType = "https://example.test/probs/not-ready"
 
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 
-	err := web.WriteProblemWith(
-		rec, r,
-		http.StatusServiceUnavailable,
-		"",
-		"",
-		map[string]any{"type": consumerType},
-	)
+	err := web.Problem{
+		Status: http.StatusServiceUnavailable,
+		Extras: map[string]any{"type": consumerType},
+	}.WriteFor(rec, r)
 	if err != nil {
-		t.Fatalf("WriteProblemWith: %v", err)
+		t.Fatalf("WriteFor: %v", err)
 	}
 
 	body := decodeBody(t, rec)
@@ -198,43 +193,84 @@ func TestProblem_WriteDefaultsTitleForConsumerType(t *testing.T) {
 	}
 }
 
-func TestWriteProblemWith_ExtrasCannotDesyncStatus(t *testing.T) {
-	rec := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/readyz", nil)
-
-	err := web.WriteProblemWith(
-		rec, r,
-		http.StatusServiceUnavailable,
-		"",
-		"",
-		map[string]any{"status": 200, "trace": "abc"},
-	)
+// The status member can never desync from Status, even when Extras tries
+// to override it — checked at the marshal level, since that's the one code
+// path every caller (Write, WriteFor, a bare json.Marshal) goes through.
+func TestProblem_MarshalExtrasCannotDesyncStatus(t *testing.T) {
+	p := web.Problem{
+		Status: http.StatusServiceUnavailable,
+		Extras: map[string]any{"status": 200, "trace": "abc"},
+	}
+	b, err := json.Marshal(p)
 	if err != nil {
-		t.Fatalf("WriteProblemWith: %v", err)
+		t.Fatalf("Marshal: %v", err)
 	}
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want 503", rec.Code)
+	var doc map[string]any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
 	}
-	body := decodeBody(t, rec)
-	if got := body["status"]; got != float64(http.StatusServiceUnavailable) {
-		t.Errorf("body status = %v, want 503 despite the extras override", got)
+	if got := doc["status"]; got != float64(http.StatusServiceUnavailable) {
+		t.Errorf("status = %v, want 503 despite the extras override", got)
 	}
-	if got := body["trace"]; got != "abc" {
+	if got := doc["trace"]; got != "abc" {
 		t.Errorf("trace = %v, want abc", got)
 	}
 }
 
-func TestWriteProblemWith_UnknownStatusOmitsTitle(t *testing.T) {
+func TestProblem_WriteForUnknownStatusOmitsTitle(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/x", nil)
 
-	if err := web.WriteProblemWith(rec, r, 599, "", "", nil); err != nil {
-		t.Fatalf("WriteProblemWith: %v", err)
+	if err := (web.Problem{Status: 599}).WriteFor(rec, r); err != nil {
+		t.Fatalf("WriteFor: %v", err)
 	}
 
 	body := decodeBody(t, rec)
 	if got, ok := body["title"]; ok {
 		t.Errorf("title = %v, want the member omitted for a code with no standard phrase", got)
+	}
+}
+
+// A document written with extension members must read them back: webtest's
+// Response.Problem unmarshals into Problem for exactly this reason.
+func TestProblem_MarshalUnmarshalRoundTripsExtras(t *testing.T) {
+	want := web.Problem{
+		Type:     "https://example.test/probs/out-of-credit",
+		Title:    "You do not have enough credit",
+		Status:   http.StatusForbidden,
+		Detail:   "balance is 0",
+		Instance: "/accounts/1",
+		Extras:   map[string]any{"balance": float64(0), "required": float64(5)},
+	}
+
+	b, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var got web.Problem
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	if got.Type != want.Type || got.Title != want.Title || got.Status != want.Status ||
+		got.Detail != want.Detail || got.Instance != want.Instance {
+		t.Errorf("round trip = %+v, want %+v", got, want)
+	}
+	if got.Extras["balance"] != want.Extras["balance"] || got.Extras["required"] != want.Extras["required"] {
+		t.Errorf("Extras = %v, want the extension members preserved", got.Extras)
+	}
+}
+
+// A document with no extension members round-trips with a nil Extras, not
+// an empty map: a bare RFC 9457 document should not gain a spurious member
+// list.
+func TestProblem_UnmarshalWithNoExtrasLeavesItNil(t *testing.T) {
+	var p web.Problem
+	if err := json.Unmarshal([]byte(`{"type":"about:blank","status":404}`), &p); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if p.Extras != nil {
+		t.Errorf("Extras = %v, want nil", p.Extras)
 	}
 }

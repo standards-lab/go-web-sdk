@@ -4,9 +4,10 @@ Settled at the 2026-08-31 workspace retrospective; `v1.web.adapter` in the coord
 roadmap cites this note. The adapter core landed in go-web-sdk v0.6.0 under
 `v1.data.sql.integration.websdk` (2026-09-05): `HandlerFunc`, `Handle`, `Group.SetErrorWriter`,
 `Group.HandleErr`, and the request helpers `IfMatch` and `DecodeJSON`. The committed-tracking
-`Recorder` in `recorder.go`, exported since, joined them. The code and `doc.go` express those,
-and this note keeps only what remains. It decays into the code and the package documentation
-when the adapter task lands.
+`Recorder` in `recorder.go` and the `ErrorWriter` problem vocabulary (`ProblemMatcher`,
+`Problem.Extras`, the readiness type hook) joined them since. The code and `doc.go` express
+those, and this note keeps only what remains. It decays into the code and the package
+documentation when the adapter task lands.
 
 ## Idiom
 
@@ -19,27 +20,11 @@ earlier version of this note stated the rule as "never functional options", whic
 
 ## What remains for `v1.web.adapter`
 
-Verified against v0.5.0 at the retrospective (96.5% / 89.7% coverage, all hermetic); re-read
-against v0.6.0 at this rewrite.
-
-1. **`ErrorWriter` gains a problem vocabulary.** `StatusMatcher` is `func(error) (int, bool)`
-   and `Write` sends an empty type and title, so every problem the service emits is
-   `about:blank`, distinguishable only by status — while the package documentation promises
-   consumers their own URIs through extension points that do not exist on this path.
-   Widen the matcher (or add a problem-returning matcher alongside) so a matcher can carry a
-   type URI, title, and extension members. The SDK's own errors map themselves through the
-   unexported `statusError` interface in `errors.go`, sealed on purpose because consumer policy
-   is the matcher list. Whether that interface is exported so an error can carry its problem is
-   this item's decision. Related: `WriteProblemWith` rebuilds the document as a `map[string]any`
-   while `Problem.Write` marshals the struct — two serializers for one document; unify. Also
-   related: `/readyz` attaches its `checks` extension member to an `about:blank` problem, and a
-   consumer that needs readiness failures under its own vocabulary gets a type hook on
-   `Readiness`, not an SDK-owned URI.
-2. **Router-level misses join the RFC 9457 contract.** Unmatched paths and method mismatches
+1. **Router-level misses join the RFC 9457 contract.** Unmatched paths and method mismatches
    fall through to `http.ServeMux` as `text/plain` 404/405 — bare text on an API whose whole
    error story is problem+json, with the 405's `Allow` header outside the SDK's control. Add
    NotFound/MethodNotAllowed hooks on the router (and module) so misses write problems.
-3. **`http.Server` escape hatches, and the swallowed encoder error.** `NewServer` sets `Addr`,
+2. **`http.Server` escape hatches, and the swallowed encoder error.** `NewServer` sets `Addr`,
    `Handler`, and four timeouts and nothing else. `ErrorLog` is nil, so TLS handshake failures,
    parse errors, and the superfluous-WriteHeader warning go to global `log` on stderr,
    invisible to the slog pipeline — bridge it. `MaxHeaderBytes` is unset (the body-limit
@@ -47,10 +32,17 @@ against v0.6.0 at this rewrite.
    encoder's error from `ErrorWriter.Write` with a blank assignment, as every handler does with
    `WriteJSON`; whether an encoder failure deserves a log line through `ErrorWriter.Log` is
    decided here.
-4. **Writer inheritance.** `HandleErr` requires the writer on its own group; a child mounted
+3. **Writer inheritance.** `HandleErr` requires the writer on its own group; a child mounted
    under a parent that has one still panics. If a layer wants one writer at `/api` for every
    domain group, resolution moves to `NewModule`, which walks the tree — the registration-time
    panic becomes a compile-time one, still at wiring. Wait for a consumer to ask.
+4. **`statusError` precedence over the matchers.** The built-in check still runs before
+   `ErrorWriter`'s matchers, so a consumer cannot give `*QueryError` (or the SDK's other two
+   built-in errors) its own problem type — the most common problem a paginated API emits stays
+   `about:blank`. Left alone when the problem vocabulary landed: reversing the precedence would
+   be another independently-breaking change on top of what that step already shipped, and
+   `errorwriter_test.go`'s `TestErrorWriter_BuiltInWinsOverMatchers` asserts the current order
+   deliberately. Wait for a consumer to ask.
 5. **The config env segment becomes per-block.** `config.go` hardcodes the `"server"` segment
    in every composed name (`APP_SERVER_PORT` unconditionally), so a second `web.Config` block —
    the management listener (`v1.admin-listener`) needs — cannot exist under one prefix. Give

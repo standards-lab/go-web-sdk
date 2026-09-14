@@ -17,7 +17,11 @@ func TestClient_ProblemsAndDecode(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("PUT /things/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if _, err := web.IfMatch(r); err != nil {
-			_ = web.Problem{Status: http.StatusPreconditionRequired, Detail: "If-Match required"}.Write(w)
+			_ = web.Problem{
+				Status: http.StatusPreconditionRequired,
+				Detail: "If-Match required",
+				Extras: map[string]any{"header": "If-Match"},
+			}.Write(w)
 			return
 		}
 		var body map[string]string
@@ -31,6 +35,9 @@ func TestClient_ProblemsAndDecode(t *testing.T) {
 	p := c.Put(t, "/things/1", map[string]string{"name": "x"}).Problem(t, http.StatusPreconditionRequired)
 	if p.Detail != "If-Match required" {
 		t.Errorf("problem detail = %q", p.Detail)
+	}
+	if p.Extras["header"] != "If-Match" {
+		t.Errorf("problem extras = %v, want header=If-Match", p.Extras)
 	}
 	got := webtest.Decode[map[string]string](t, c.Put(t, "/things/1", map[string]string{"name": "x"}, webtest.IfMatch(3)), http.StatusOK)
 	if got["id"] != "1" || got["name"] != "x" {
