@@ -209,4 +209,9 @@
 // code outside the standard table. [Problem.Write] applies these defaults and
 // sends the document; [Problem.WriteFor] additionally defaults Instance to
 // the request path, which [WriteProblem] and [ErrorWriter.Write] both use.
+// When the request's context carries a correlation id, set with
+// [WithRequestID] and read with [RequestIDFrom], WriteFor also surfaces it as
+// the "request_id" extension member, overriding any the caller set, without
+// touching the caller's Extras map; a request with no id writes the same
+// document shape as before.
 package web
