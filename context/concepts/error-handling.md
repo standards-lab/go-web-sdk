@@ -39,8 +39,8 @@ earlier version of this note stated the rule as "never functional options", whic
 4. **`statusError` precedence over the matchers.** The built-in check still runs before
    `ErrorWriter`'s matchers, so a consumer cannot give `*QueryError` (or the SDK's other two
    built-in errors) its own problem type — the most common problem a paginated API emits stays
-   `about:blank`. Left alone when the problem vocabulary landed: reversing the precedence is a
-   third independently-breaking change on top of that step's two, and
+   `about:blank`. Left alone when the problem vocabulary landed: reversing the precedence would
+   be another independently-breaking change on top of what that step already shipped, and
    `errorwriter_test.go`'s `TestErrorWriter_BuiltInWinsOverMatchers` asserts the current order
    deliberately. Wait for a consumer to ask.
 5. **The config env segment becomes per-block.** `config.go` hardcodes the `"server"` segment

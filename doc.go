@@ -200,8 +200,8 @@
 // Error responses are RFC 9457 problem documents. The type member identifies
 // the problem's semantics and is the member a client branches on, with title
 // advisory and status an advisory copy of the status line. This package defines
-// no type URIs of its own: every problem it emits is [ProblemTypeBlank], and a
-// consumer supplies its own URI through a [Problem]'s Type field. [Problem.Extras]
+// no type URIs of its own: every problem it emits itself is [ProblemTypeBlank],
+// and a consumer supplies its own URI through a [Problem]'s Type field. [Problem.Extras]
 // carries any further extension members, merged at the top level of the
 // marshaled document; an extras member may add or override any standard
 // member except status, which always matches Status. A zero Status defaults

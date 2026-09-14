@@ -2,8 +2,10 @@ package web_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -163,6 +165,46 @@ func TestReadiness_NotReadyStatusIsAlwaysServiceUnavailable(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503 despite the consumer's Status", rec.Code)
 	}
+}
+
+// notReady.Extras is read, never written: several requests probing the same
+// handler concurrently must not race on it (run under -race), and each
+// must see its own "checks" entry rather than one leaking into another's
+// document.
+func TestReadiness_ConcurrentRequestsDoNotShareExtras(t *testing.T) {
+	handler := web.Readiness(
+		web.Problem{Extras: map[string]any{"tenant": "acme"}},
+		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
+	)
+
+	// t.Fatalf (inside the decodeBody helper) must only run on the test's
+	// own goroutine, so each worker decodes inline and reports with
+	// Errorf, which is safe to call concurrently.
+	const n = 50
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for range n {
+		go func() {
+			defer wg.Done()
+			rec := webtest.Probe(handler, web.ReadyPath)
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Errorf("status = %d, want 503", rec.Code)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Errorf("decode body %q: %v", rec.Body.String(), err)
+				return
+			}
+			if body["tenant"] != "acme" {
+				t.Errorf("tenant = %v, want acme", body["tenant"])
+			}
+			checks, ok := body["checks"].([]any)
+			if !ok || len(checks) != 1 {
+				t.Errorf("checks = %v, want one entry", body["checks"])
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func TestReadiness_NilCheckerIsNotReady(t *testing.T) {

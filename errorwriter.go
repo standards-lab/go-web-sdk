@@ -9,9 +9,9 @@ import (
 // ProblemMatcher maps an error to the problem response that reports it. It
 // reports false for an error it does not recognize, passing the decision to
 // the next matcher. A matcher that only cares about the status returns a
-// Problem with Status set and every other member zero — Type, Title, and
-// Instance take [Problem.Write]'s defaults, the same as an unclaimed error
-// does.
+// Problem with Status set and every other member zero — Type and Title take
+// [Problem.Write]'s defaults and Instance takes [Problem.WriteFor]'s, the
+// same as an unclaimed error does.
 type ProblemMatcher func(error) (Problem, bool)
 
 // ErrorWriter turns a handler's returned error into an RFC 9457 problem

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -74,8 +75,17 @@ func (p *Problem) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return err
 	}
-	for _, k := range [...]string{"type", "title", "status", "detail", "instance"} {
-		delete(doc, k)
+	// encoding/json matches problemMembers' fields case-insensitively, so
+	// the strip has to as well - otherwise a non-conforming document (a
+	// capitalized "Status") both populates the typed field above and
+	// leaks the same member into Extras.
+	for k := range doc {
+		for _, standard := range [...]string{"type", "title", "status", "detail", "instance"} {
+			if strings.EqualFold(k, standard) {
+				delete(doc, k)
+				break
+			}
+		}
 	}
 
 	*p = Problem{
