@@ -21,6 +21,13 @@
 // through cleanly; once it has served, a Server is single-use — construct a
 // new one to serve again.
 //
+// [Server.Log] bridges net/http's own diagnostics — a TLS handshake
+// failure, a header-parse error, the superfluous-WriteHeader warning —
+// onto a caller's *slog.Logger at warn level; unset, they go through the
+// global log package to stderr, outside the slog pipeline. It is called
+// before Start; after it panics, since Serve reads the bridged logger
+// concurrently.
+//
 // # Lifecycle wiring
 //
 // The package registers no lifecycle service of its own and holds no shutdown
@@ -78,16 +85,24 @@
 //
 // # Configuration
 //
-// [Config] holds the host, the port, and the server's four timeouts, and
-// implements the Merge and Finalize contract of go-core's config package, so
-// it loads as part of an application's configuration rather than on its own. The port and
-// timeouts are pointers: nil is unset and takes the default, while an explicit
-// zero survives the load and means what it says: a disabled timeout, or an
-// ephemeral port. A file and the environment express both states identically.
-// Finalize composes its environment override names from the prefix it
-// receives (via [NewEnv], recorded on [Env] for introspection), applies
+// [Config] holds the host, the port, the server's four timeouts, and the
+// header-block limit, and implements the Merge and Finalize contract of
+// go-core's config package, so it loads as part of an application's
+// configuration rather than on its own. The port, the timeouts, and
+// MaxHeaderBytes are pointers: nil is unset and takes the default, while an
+// explicit zero survives the load and means what it says: a disabled
+// timeout, or an ephemeral port. MaxHeaderBytes carries no default of its
+// own; unset, [NewServer] leaves http.Server.MaxHeaderBytes at its zero
+// value, so net/http applies http.DefaultMaxHeaderBytes — the SDK does not
+// restate a number the standard library already owns. A file and the
+// environment express both states identically. Finalize composes its
+// environment override names from the prefix it receives, under the block
+// "server" (via [NewEnv], recorded on [Env] for introspection), applies
 // defaults, reads the overrides, and validates; an empty prefix disables the
-// overrides.
+// overrides. [Config.FinalizeBlock] is Finalize under a caller-named block
+// instead of "server", so a second Config — a management listener, say —
+// finalizes under the same prefix without its override names colliding with
+// the primary server's.
 //
 // # Health
 //
