@@ -56,7 +56,8 @@ func (ew *ErrorWriter) Detail(statuses ...int) {
 
 // Log sets the logger the writer reports to when an error cannot be
 // written: a handler adapted by [Handle] that returned an error after
-// committing its response. Unset, the writer reports through slog's default logger.
+// committing its response, or a problem whose body the encoder failed to
+// write. Unset, the writer reports through slog's default logger.
 // Called at wiring time, like [ErrorWriter.Detail].
 func (ew *ErrorWriter) Log(logger *slog.Logger) {
 	ew.logger = logger

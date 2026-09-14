@@ -104,6 +104,52 @@ func TestHandle_NeverWritesASecondResponse(t *testing.T) {
 	}
 }
 
+// brokenWriter is a ResponseWriter whose Write fails as a dropped client
+// connection does: headers and status go through, the body does not.
+type brokenWriter struct {
+	http.ResponseWriter
+	err error
+}
+
+func (w brokenWriter) Write([]byte) (int, error) { return 0, w.err }
+
+func TestHandle_LogsAProblemWriteFailure(t *testing.T) {
+	sentinel := errors.New("row is gone")
+	broken := errors.New("write tcp: connection reset by peer")
+	var log bytes.Buffer
+	ew := web.NewErrorWriter(matcherFor(sentinel, http.StatusNotFound))
+	ew.Log(slog.New(slog.NewJSONHandler(&log, nil)))
+	h := web.Handle(func(http.ResponseWriter, *http.Request) error {
+		return sentinel
+	}, ew)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(brokenWriter{rec, broken}, httptest.NewRequest(http.MethodGet, "/things/1", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d (the header goes through; only the body fails)", rec.Code, http.StatusNotFound)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(log.Bytes(), &record); err != nil {
+		t.Fatalf("no log record: %v (%q)", err, log.String())
+	}
+	for _, tc := range []struct {
+		key  string
+		want any
+	}{
+		{"msg", "failed to write problem response"},
+		{"level", "ERROR"},
+		{"method", http.MethodGet},
+		{"path", "/things/1"},
+		{"status", float64(http.StatusNotFound)},
+		{"error", broken.Error()},
+	} {
+		if got := record[tc.key]; got != tc.want {
+			t.Errorf("%s = %v, want %v", tc.key, got, tc.want)
+		}
+	}
+}
+
 func TestHandle_NilWriterPanics(t *testing.T) {
 	mustPanic(t, "Handle(fn, nil)", func() {
 		web.Handle(func(http.ResponseWriter, *http.Request) error { return nil }, nil)

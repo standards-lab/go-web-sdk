@@ -3,6 +3,7 @@ package middleware_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -169,6 +170,58 @@ func TestRecoverer_PanicAfterCommitReRaisesErrAbortHandler(t *testing.T) {
 				t.Errorf("status attr = %v, want the committed %d", logs[0]["status"], tt.status)
 			}
 		})
+	}
+}
+
+// brokenWriter is a ResponseWriter whose Write fails as a dropped client
+// connection does: headers and status go through, the body does not.
+type brokenWriter struct {
+	http.ResponseWriter
+	err error
+}
+
+func (w brokenWriter) Write([]byte) (int, error) { return 0, w.err }
+
+// When the 500 problem cannot be written, the recoverer logs that failure
+// as a second record after the panic, so the dropped response is visible
+// alongside its cause.
+func TestRecoverer_LogsAProblemWriteFailure(t *testing.T) {
+	broken := errors.New("write tcp: connection reset by peer")
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	handler := web.Chain(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("boom")
+	}), middleware.Recoverer(logger))
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(brokenWriter{rec, broken}, httptest.NewRequest(http.MethodGet, "/orders/7", nil))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500 (the header goes through; only the body fails)", rec.Code)
+	}
+	logs := records(t, buf.String())
+	if len(logs) != 2 {
+		t.Fatalf("logged %d records, want the panic and the write failure: %v", len(logs), logs)
+	}
+	if logs[0]["msg"] != "handler panicked" {
+		t.Errorf("first record = %v, want the panic", logs[0])
+	}
+	out := logs[1]
+	for _, tc := range []struct {
+		key  string
+		want any
+	}{
+		{"msg", "failed to write problem response"},
+		{"level", "ERROR"},
+		{"method", http.MethodGet},
+		{"path", "/orders/7"},
+		{"remote_addr", "192.0.2.1:1234"},
+		{"status", float64(http.StatusInternalServerError)},
+		{"error", broken.Error()},
+	} {
+		if got := out[tc.key]; got != tc.want {
+			t.Errorf("%s = %v, want %v", tc.key, got, tc.want)
+		}
 	}
 }
 

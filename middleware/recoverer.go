@@ -13,7 +13,9 @@ import (
 // error level with the panic value and the goroutine stack through logger.
 // If the handler had not committed a response, it then writes a 500
 // problem document; the panic value stays out of it, in the log only, and
-// the problem's detail is a fixed message.
+// the problem's detail is a fixed message. If that document cannot be
+// written (the encoder failed, typically because the client dropped the
+// connection), the failure is logged at error level as a second record.
 //
 // A response already committed before the panic (a status or a body
 // already written) cannot be answered with a problem document — matching
@@ -69,13 +71,25 @@ func Recoverer(logger *slog.Logger) web.Middleware {
 				if rec.Committed() {
 					panic(http.ErrAbortHandler)
 				}
-				_ = web.WriteProblem(
+				err := web.WriteProblem(
 					rec,
 					r,
 					http.StatusInternalServerError,
 					"",
 					"The server encountered an unexpected condition.",
 				)
+				if err != nil {
+					logger.LogAttrs(
+						r.Context(),
+						slog.LevelError,
+						"failed to write problem response",
+						slog.String("method", r.Method),
+						slog.String("path", r.URL.Path),
+						slog.String("remote_addr", r.RemoteAddr),
+						slog.Int("status", rec.Status()),
+						slog.String("error", err.Error()),
+					)
+				}
 			}()
 
 			next.ServeHTTP(rec, r)
