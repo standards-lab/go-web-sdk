@@ -11,14 +11,14 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// matcherFor is the consumer-matcher shape: claim errors matching a sentinel,
-// pass on everything else.
-func matcherFor(sentinel error, status int) web.StatusMatcher {
-	return func(err error) (int, bool) {
+// matcherFor is the consumer-matcher shape: claim errors matching a sentinel
+// with a status-only Problem, pass on everything else.
+func matcherFor(sentinel error, status int) web.ProblemMatcher {
+	return func(err error) (web.Problem, bool) {
 		if errors.Is(err, sentinel) {
-			return status, true
+			return web.Problem{Status: status}, true
 		}
-		return 0, false
+		return web.Problem{}, false
 	}
 }
 
@@ -47,7 +47,7 @@ func TestErrorWriter_PreconditionErrorIsBuiltIn(t *testing.T) {
 }
 
 func TestErrorWriter_BuiltInWinsOverMatchers(t *testing.T) {
-	claimAll := func(error) (int, bool) { return http.StatusTeapot, true }
+	claimAll := func(error) (web.Problem, bool) { return web.Problem{Status: http.StatusTeapot}, true }
 	ew := web.NewErrorWriter(claimAll)
 
 	builtIn := map[string]struct {
@@ -182,6 +182,90 @@ func TestErrorWriter_DetailAddsStatusesThatCarryTheErrorText(t *testing.T) {
 				t.Errorf("detail = %q, want %q", detail, tt.err.Error())
 			}
 		})
+	}
+}
+
+// A matcher's own type, title, and extension members reach the wire
+// untouched: the vocabulary this step adds.
+func TestErrorWriter_Write_MatcherSuppliedProblemReachesTheWire(t *testing.T) {
+	const problemType = "https://example.test/probs/out-of-credit"
+	sentinel := errors.New("insufficient balance")
+	ew := web.NewErrorWriter(func(err error) (web.Problem, bool) {
+		if errors.Is(err, sentinel) {
+			return web.Problem{
+				Type:   problemType,
+				Title:  "You do not have enough credit",
+				Status: http.StatusForbidden,
+				Extras: map[string]any{"balance": 0},
+			}, true
+		}
+		return web.Problem{}, false
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/charges", nil)
+	if err := ew.Write(rec, req, sentinel); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if body["type"] != problemType {
+		t.Errorf("type = %v, want %q", body["type"], problemType)
+	}
+	if body["title"] != "You do not have enough credit" {
+		t.Errorf("title = %v, want the matcher's title", body["title"])
+	}
+	if body["balance"] != float64(0) {
+		t.Errorf("balance = %v, want 0", body["balance"])
+	}
+}
+
+// A matcher's own Detail always ships, regardless of the writer's detail
+// set: a consumer that writes a detail by hand into its matcher did so on
+// purpose, and Detail's set only governs the fallback to the error's text.
+func TestErrorWriter_Write_MatcherDetailShipsOutsideTheDetailSet(t *testing.T) {
+	sentinel := errors.New("dirty at version 7")
+	ew := web.NewErrorWriter(func(err error) (web.Problem, bool) {
+		if errors.Is(err, sentinel) {
+			return web.Problem{Status: http.StatusConflict, Detail: "schema is dirty at version 7"}, true
+		}
+		return web.Problem{}, false
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/admin/schema/up", nil)
+	if err := ew.Write(rec, req, sentinel); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if body["detail"] != "schema is dirty at version 7" {
+		t.Errorf("detail = %v, want the matcher's own detail", body["detail"])
+	}
+}
+
+// A matcher that claims an error without naming a status resolves to 500,
+// the same as an error no matcher claims at all.
+func TestErrorWriter_Problem_MatcherWithZeroStatusIs500(t *testing.T) {
+	sentinel := errors.New("unnamed")
+	ew := web.NewErrorWriter(func(err error) (web.Problem, bool) {
+		if errors.Is(err, sentinel) {
+			return web.Problem{Detail: "no status set"}, true
+		}
+		return web.Problem{}, false
+	})
+
+	if got := ew.Status(sentinel); got != http.StatusInternalServerError {
+		t.Errorf("Status = %d, want %d", got, http.StatusInternalServerError)
 	}
 }
 

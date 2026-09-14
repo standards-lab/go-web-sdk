@@ -160,16 +160,21 @@
 // # Error mapping
 //
 // An [ErrorWriter] turns a handler's returned error into a problem response
-// through a composed [StatusMatcher] list: the package's own vocabulary is
+// through a composed [ProblemMatcher] list: the package's own vocabulary is
 // built in (*[QueryError] is a 400; *[PreconditionError] a 428 or a 400;
-// *[BodyError] a 413 or a 400), the consumer's matchers decide the rest
-// in order, first match wins, and an unclaimed error is a 500 — so HTTP
-// status policy stays with the application, and the SDK depends on no
-// infrastructure library's error types. The detail member carries the error
-// text only on a status in the writer's detail set (400, 413, and 428 built
-// in, the statuses that are request-shaped by construction), so no internal
-// error's text reaches the wire; [ErrorWriter.Detail] adds statuses for a
-// surface whose clients need the reason, such as an operator API's 409.
+// *[BodyError] a 413 or a 400, each an undecorated Problem with only Status
+// set), the consumer's matchers decide the rest in order, first match wins,
+// and an error no matcher claims — or a matcher that claims one without
+// naming a status — is a 500. A matcher may return a Problem with its own
+// Type, Title, Detail, and Extras, not status alone, so problem policy
+// stays with the application and the SDK depends on no infrastructure
+// library's error types or problem vocabulary. A matcher's own Detail
+// always ships; otherwise the detail member carries the error text only on
+// a status in the writer's detail set (400, 413, and 428 built in, the
+// statuses that are request-shaped by construction), so no internal
+// error's text reaches the wire by default; [ErrorWriter.Detail] adds
+// statuses for a surface whose clients need the reason, such as an
+// operator API's 409.
 //
 // # Error-returning handlers
 //
@@ -192,9 +197,12 @@
 // the problem's semantics and is the member a client branches on, with title
 // advisory and status an advisory copy of the status line. This package defines
 // no type URIs of its own: every problem it emits is [ProblemTypeBlank], and a
-// consumer supplies its own URI through [Problem.Write] or the extras map of
-// [WriteProblemWith]. Extras may add or override any member except status,
-// which always matches the status line. A zero Status defaults to 500. An empty
-// title defaults to the status phrase, and is omitted for a code outside the
-// standard table.
+// consumer supplies its own URI through a [Problem]'s Type field. [Problem.Extras]
+// carries any further extension members, merged at the top level of the
+// marshaled document; an extras member may add or override any standard
+// member except status, which always matches Status. A zero Status defaults
+// to 500. An empty title defaults to the status phrase, and is omitted for a
+// code outside the standard table. [Problem.Write] applies these defaults and
+// sends the document; [Problem.WriteFor] additionally defaults Instance to
+// the request path, which [WriteProblem] and [ErrorWriter.Write] both use.
 package web

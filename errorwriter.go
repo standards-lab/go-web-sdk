@@ -6,19 +6,23 @@ import (
 	"net/http"
 )
 
-// StatusMatcher maps an error to an HTTP status. It reports false for an
-// error it does not recognize, passing the decision to the next matcher.
-type StatusMatcher func(error) (int, bool)
+// ProblemMatcher maps an error to the problem response that reports it. It
+// reports false for an error it does not recognize, passing the decision to
+// the next matcher. A matcher that only cares about the status returns a
+// Problem with Status set and every other member zero — Type, Title, and
+// Instance take [Problem.Write]'s defaults, the same as an unclaimed error
+// does.
+type ProblemMatcher func(error) (Problem, bool)
 
 // ErrorWriter turns a handler's returned error into an RFC 9457 problem
 // response. The mappings it owns are this package's own vocabulary — a
 // *[QueryError] is a 400, a *[PreconditionError] a 428 when the header is
 // missing and a 400 otherwise, a *[BodyError] a 413 when the body is over
-// its limit and a 400 otherwise; every other status is decided by the
-// consumer's matchers, so HTTP status policy stays with the application and
-// the SDK depends on no infrastructure library's error types.
+// its limit and a 400 otherwise; every other problem is decided by the
+// consumer's matchers, so problem policy stays with the application and the
+// SDK depends on no infrastructure library's error types.
 type ErrorWriter struct {
-	matchers []StatusMatcher
+	matchers []ProblemMatcher
 	detail   map[int]struct{}
 	logger   *slog.Logger
 }
@@ -26,7 +30,7 @@ type ErrorWriter struct {
 // NewErrorWriter composes the matchers into a writer, wired once at route
 // setup. They are consulted in argument order after the built-in matches,
 // first match wins; an error no matcher claims is a 500.
-func NewErrorWriter(matchers ...StatusMatcher) *ErrorWriter {
+func NewErrorWriter(matchers ...ProblemMatcher) *ErrorWriter {
 	return &ErrorWriter{
 		matchers: matchers,
 		detail: map[int]struct{}{
@@ -65,31 +69,46 @@ func (ew *ErrorWriter) log() *slog.Logger {
 	return ew.logger
 }
 
+// Problem maps err to the problem that reports it, without writing a
+// response: this package's own errors first, then the matchers in argument
+// order, first match wins. An error no matcher claims, and a matcher that
+// claims one without naming a status, is a 500. The document is
+// undecorated — Instance is empty and [ErrorWriter.Detail]'s rule has not
+// been applied yet; [ErrorWriter.Write] does both.
+func (ew *ErrorWriter) Problem(err error) Problem {
+	if own, ok := errors.AsType[statusError](err); ok {
+		return Problem{Status: own.status()}
+	}
+	for _, match := range ew.matchers {
+		if p, ok := match(err); ok {
+			if p.Status == 0 {
+				p.Status = http.StatusInternalServerError
+			}
+			return p
+		}
+	}
+	return Problem{Status: http.StatusInternalServerError}
+}
+
 // Status maps err to its HTTP status without writing a response, for a
 // caller that needs the code alone.
 func (ew *ErrorWriter) Status(err error) int {
-	if own, ok := errors.AsType[statusError](err); ok {
-		return own.status()
-	}
-	for _, match := range ew.matchers {
-		if status, ok := match(err); ok {
-			return status
-		}
-	}
-	return http.StatusInternalServerError
+	return ew.Problem(err).Status
 }
 
-// Write sends err as a problem at [ErrorWriter.Status]'s mapping. The detail
+// Write sends err as the problem [ErrorWriter.Problem] maps it to. A
+// matcher that supplied its own Detail keeps it; otherwise the detail
 // carries the error text only on a status in the writer's detail set (400,
 // 413, and 428 built in, plus whatever [ErrorWriter.Detail] added), where it
-// is request-shaped and client-actionable; every other status sends the bare
-// title, so an internal error's text never reaches the wire. The returned
-// error is the encoder's, as from [WriteProblem].
+// is request-shaped and client-actionable — every other status sends no
+// detail, so an internal error's text never reaches the wire by default.
+// The returned error is the encoder's, as from [Problem.WriteFor].
 func (ew *ErrorWriter) Write(w http.ResponseWriter, r *http.Request, err error) error {
-	status := ew.Status(err)
-	detail := ""
-	if _, ok := ew.detail[status]; ok {
-		detail = err.Error()
+	p := ew.Problem(err)
+	if p.Detail == "" {
+		if _, ok := ew.detail[p.Status]; ok {
+			p.Detail = err.Error()
+		}
 	}
-	return WriteProblem(w, r, status, "", detail)
+	return p.WriteFor(w, r)
 }
