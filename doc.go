@@ -66,6 +66,16 @@
 // duplicate pattern, a second module at a prefix, or a sealed-group
 // mutation. Nothing recomposes or validates per request.
 //
+// A miss is a problem document too. A request no route matches is answered
+// with a 404 problem, and one whose path matches but whose method does not
+// with a 405 problem carrying the Allow header, in place of ServeMux's
+// plain-text answers; ServeMux's own path-cleaning and trailing-slash
+// redirects are served unchanged. [Router.SetNotFound] and
+// [Router.SetMethodNotAllowed] replace the handlers for the native mux, and
+// [Group.SetNotFound] and [Group.SetMethodNotAllowed], on the group passed
+// to NewModule, replace them for a module. A miss reaches no route, so no
+// group middleware runs on it; only Router.Use middleware does.
+//
 // # Configuration
 //
 // [Config] holds the host, the port, and the server's four timeouts, and

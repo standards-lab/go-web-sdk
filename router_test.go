@@ -1,7 +1,9 @@
 package web_test
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/standards-lab/go-core/lifecycle"
@@ -14,6 +16,44 @@ func module(prefix, pattern string) *web.Module {
 	g := web.NewGroup(prefix)
 	g.Handle(http.MethodGet, pattern, ok())
 	return web.NewModule(g)
+}
+
+// probe serves one request of any method through h and returns the recorder.
+func probe(h http.Handler, method, path string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+	return rec
+}
+
+// expectProblem fails the test unless rec holds a problem document with the
+// given status and title, about:blank type, and the path as instance.
+func expectProblem(t *testing.T, rec *httptest.ResponseRecorder, status int, title, path string) {
+	t.Helper()
+	if rec.Code != status {
+		t.Errorf("status = %d, want %d", rec.Code, status)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != web.ProblemMediaType {
+		t.Errorf("Content-Type = %q, want %q", ct, web.ProblemMediaType)
+	}
+	var p web.Problem
+	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
+		t.Fatalf("body is not a problem document: %v: %s", err, rec.Body.String())
+	}
+	if p.Status != status || p.Title != title || p.Type != web.ProblemTypeBlank || p.Instance != path {
+		t.Errorf("problem = %+v, want status %d, title %q, type about:blank, instance %q", p, status, title, path)
+	}
+	if p.Detail != "" {
+		t.Errorf("detail = %q, want none", p.Detail)
+	}
+}
+
+// custom is a handler that marks its response with a header, so a test can
+// tell it apart from the default.
+func custom(status int) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Custom", "yes")
+		w.WriteHeader(status)
+	})
 }
 
 // Prefixes match on segment boundaries: /api/v10 shares the string prefix
@@ -116,5 +156,91 @@ func TestRouter_UnmatchedPathIs404(t *testing.T) {
 	r := web.NewRouter()
 	if got := webtest.Probe(r, "/anything").Code; got != http.StatusNotFound {
 		t.Errorf("GET /anything = %d, want 404 from an empty router", got)
+	}
+}
+
+// A miss on the native mux is a problem document, not ServeMux's plain text.
+func TestRouter_MissIsAProblem(t *testing.T) {
+	r := web.NewRouter()
+	r.Handle("GET /status", ok())
+
+	expectProblem(t, probe(r, http.MethodGet, "/nowhere"), http.StatusNotFound, "Not Found", "/nowhere")
+	expectProblem(t, probe(r, http.MethodPost, "/nowhere"), http.StatusNotFound, "Not Found", "/nowhere")
+
+	rec := probe(r, http.MethodPost, "/status")
+	expectProblem(t, rec, http.StatusMethodNotAllowed, "Method Not Allowed", "/status")
+	if allow := rec.Header().Get("Allow"); allow != "GET, HEAD" {
+		t.Errorf("Allow = %q, want the mux's computed set preserved", allow)
+	}
+}
+
+// ServeMux's own redirects — path cleaning and the trailing-slash
+// redirect — are served as before, not swallowed into a 404.
+func TestRouter_RedirectsStillRedirect(t *testing.T) {
+	r := web.NewRouter()
+	r.Handle("GET /things/", ok())
+
+	for path, location := range map[string]string{
+		"//nowhere":   "/nowhere", // cleaned; nothing matches the cleaned path
+		"/things":     "/things/", // trailing-slash redirect to a registered pattern
+		"/things/../": "/",        // cleaned; still nothing there
+	} {
+		rec := webtest.Probe(r, path)
+		if rec.Code != http.StatusTemporaryRedirect {
+			t.Errorf("GET %s = %d, want 307; body %q", path, rec.Code, rec.Body.String())
+		}
+		if got := rec.Header().Get("Location"); got != location {
+			t.Errorf("GET %s Location = %q, want %q", path, got, location)
+		}
+	}
+}
+
+// The mux's guard against a "*" request-URI survives the change of dispatch.
+func TestRouter_AsteriskRequestURIIs400(t *testing.T) {
+	r := web.NewRouter()
+	if got := probe(r, http.MethodOptions, "*").Code; got != http.StatusBadRequest {
+		t.Errorf("OPTIONS * = %d, want 400", got)
+	}
+}
+
+func TestRouter_SetNotFoundAndSetMethodNotAllowedOverrideTheDefaults(t *testing.T) {
+	r := web.NewRouter()
+	r.Handle("GET /status", ok())
+	r.SetNotFound(custom(http.StatusNotFound))
+	r.SetMethodNotAllowed(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// The Allow header is on the response before the handler runs.
+		w.Header().Set("X-Allow-Seen", w.Header().Get("Allow"))
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}))
+
+	rec := probe(r, http.MethodGet, "/nowhere")
+	if rec.Code != http.StatusNotFound || rec.Header().Get("X-Custom") != "yes" {
+		t.Errorf("GET /nowhere = %d, X-Custom %q; want the custom 404", rec.Code, rec.Header().Get("X-Custom"))
+	}
+	rec = probe(r, http.MethodPost, "/status")
+	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("X-Allow-Seen") != "GET, HEAD" {
+		t.Errorf("POST /status = %d, X-Allow-Seen %q; want the custom 405 with Allow visible", rec.Code, rec.Header().Get("X-Allow-Seen"))
+	}
+
+	// nil restores the default.
+	r.SetNotFound(nil)
+	expectProblem(t, probe(r, http.MethodGet, "/nowhere"), http.StatusNotFound, "Not Found", "/nowhere")
+}
+
+// A miss inside a module is the module's, answered by its group's handlers,
+// not the router's.
+func TestRouter_ModuleMissUsesTheModuleHandlers(t *testing.T) {
+	g := web.NewGroup("/api")
+	g.Handle(http.MethodGet, "/things", ok())
+	g.SetNotFound(custom(http.StatusNotFound))
+
+	r := web.NewRouter()
+	r.Mount(web.NewModule(g))
+
+	if rec := webtest.Probe(r, "/api/nowhere"); rec.Header().Get("X-Custom") != "yes" {
+		t.Errorf("GET /api/nowhere did not reach the module's not-found handler: %d", rec.Code)
+	}
+	if rec := webtest.Probe(r, "/nowhere"); rec.Header().Get("X-Custom") != "" {
+		t.Errorf("GET /nowhere reached the module's not-found handler")
 	}
 }

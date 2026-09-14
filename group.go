@@ -17,12 +17,14 @@ type route struct {
 // into a servable [Module] and seals it; mutating a sealed group panics, so a
 // route added after compilation cannot be silently dead.
 type Group struct {
-	prefix     string
-	middleware []Middleware
-	routes     []route
-	groups     []*Group
-	errors     *ErrorWriter
-	sealed     bool
+	prefix           string
+	middleware       []Middleware
+	routes           []route
+	groups           []*Group
+	errors           *ErrorWriter
+	notFound         http.Handler
+	methodNotAllowed http.Handler
+	sealed           bool
 }
 
 // NewGroup returns an open group rooted at prefix. The prefix may span
@@ -79,6 +81,30 @@ func (g *Group) HandleFunc(
 func (g *Group) SetErrorWriter(ew *ErrorWriter) {
 	g.checkSeal()
 	g.errors = ew
+}
+
+// SetNotFound sets the handler the compiled module answers with when a
+// request under its prefix matches no route. Unset, or set to nil, the
+// module writes a 404 problem document (about:blank, "Not Found"). The
+// handler is the module's, so it is set on the group passed to [NewModule]:
+// a miss is not attributable to any child group, and a nested group carrying
+// one panics at NewModule rather than being silently ignored. No group
+// middleware runs on a miss; only [Router.Use] middleware sees it.
+// SetNotFound after NewModule panics.
+func (g *Group) SetNotFound(h http.Handler) {
+	g.checkSeal()
+	g.notFound = h
+}
+
+// SetMethodNotAllowed is [Group.SetNotFound] for a request whose path
+// matches a route but whose method does not. The Allow header ServeMux
+// computes is already on the response when the handler runs, so a custom
+// handler can read it back from w.Header(). Unset, or set to nil, the module
+// writes a 405 problem document (about:blank, "Method Not Allowed") with
+// Allow preserved. SetMethodNotAllowed after NewModule panics.
+func (g *Group) SetMethodNotAllowed(h http.Handler) {
+	g.checkSeal()
+	g.methodNotAllowed = h
 }
 
 // HandleErr registers an error-returning handler for method and pattern,
