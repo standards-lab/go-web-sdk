@@ -55,13 +55,11 @@ func Readiness(checks ...lifecycle.Check) http.Handler {
 		}
 
 		if !ready {
-			_ = WriteProblemWith(
-				w, r,
-				http.StatusServiceUnavailable,
-				"",
-				"one or more readiness checks failed",
-				map[string]any{"checks": results},
-			)
+			_ = Problem{
+				Status: http.StatusServiceUnavailable,
+				Detail: "one or more readiness checks failed",
+				Extras: map[string]any{"checks": results},
+			}.WriteFor(w, r)
 			return
 		}
 
