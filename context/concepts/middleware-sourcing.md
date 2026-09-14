@@ -30,7 +30,7 @@ Each is 10–50 lines over stdlib types, and the tests are obvious.
 | Conditional wrap | `Maybe(mw, pred)` — apply a middleware only when a predicate on the request holds. |
 | Path hygiene | Clean path, strip trailing slash. Prefer configuring `ServeMux` behavior first; add only if a real client needs it. |
 
-## Source or copy with attribution
+## Sourced middleware
 
 | Concern | Why not hand-roll | Standard library to take from |
 |---|---|---|
@@ -42,11 +42,15 @@ Each is 10–50 lines over stdlib types, and the tests are obvious.
 | Token verification / JWKS | Cryptography. Never hand-roll. Lands in the auth infrastructure module, not the SDK (Placement, below). | `github.com/coreos/go-oidc/v3` for OIDC discovery + verification against Keycloak; `github.com/lestrrat-go/jwx/v2` if raw JWT/JWKS handling is required. |
 | Tracing / metrics | Propagation formats and semantic conventions are a specification the industry converges on. | `go.opentelemetry.io/otel` and `otelhttp`. Infrastructure module, not the SDK. |
 
-Copy-with-attribution is first-class for CORS and real-IP: both `rs/cors` and chi are
-MIT-licensed, a few hundred lines, dependency-free. Prefer copying when the module line is the
-only objection and the upstream change rate is low (`rs/cors` fits); prefer importing when
-upstream moves with a spec (`otel`, `go-oidc`). Copied code carries the license header and
-upstream commit in the file, and a CHANGELOG line at each sync.
+Every row above is imported as a declared dependency, never copied into the tree. `rs/cors`
+passes the org's own top marker for a standard library (stdlib types at its boundary,
+`func(http.Handler) http.Handler`), and chi's `RealIP` is the shape reference for the same
+reason.
+
+CORS, real client IP, compression, and rate limiting are consolidated into their own goal,
+`v1.middleware`, split out of this task so their concrete adoption — versions, real-IP's
+trusted-proxy configuration, and each library's own entry in this README's dependency-line
+statement — gets its own planning session rather than this note prescribing it ahead of time.
 
 ## Placement
 
