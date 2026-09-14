@@ -94,9 +94,9 @@ func TestRecoverer_PanicWithNothingWrittenIsAProblem(t *testing.T) {
 		{"msg", "handler panicked"},
 		{"level", "ERROR"},
 		{"panic", "boom"},
-		{"method", http.MethodGet},
-		{"path", "/orders/7"},
-		{"remote_addr", "192.0.2.1:1234"},
+		{"http.request.method", http.MethodGet},
+		{"url.path", "/orders/7"},
+		{"client.address", "192.0.2.1:1234"},
 	} {
 		if got := out[tc.key]; got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.key, got, tc.want)
@@ -105,8 +105,8 @@ func TestRecoverer_PanicWithNothingWrittenIsAProblem(t *testing.T) {
 	if stack, _ := out["stack"].(string); !strings.Contains(stack, "recoverer_test.go") {
 		t.Errorf("stack = %q, want the panicking frame", stack)
 	}
-	if _, present := out["status"]; present {
-		t.Errorf("status = %v, want it absent when nothing was committed", out["status"])
+	if _, present := out["http.response.status_code"]; present {
+		t.Errorf("status = %v, want it absent when nothing was committed", out["http.response.status_code"])
 	}
 }
 
@@ -166,8 +166,8 @@ func TestRecoverer_PanicAfterCommitReRaisesErrAbortHandler(t *testing.T) {
 			if logs[0]["panic"] != "boom" || logs[0]["level"] != "ERROR" {
 				t.Errorf("record = %v, want the panic at error level", logs[0])
 			}
-			if logs[0]["status"] != float64(tt.status) {
-				t.Errorf("status attr = %v, want the committed %d", logs[0]["status"], tt.status)
+			if logs[0]["http.response.status_code"] != float64(tt.status) {
+				t.Errorf("status attr = %v, want the committed %d", logs[0]["http.response.status_code"], tt.status)
 			}
 		})
 	}
@@ -213,10 +213,10 @@ func TestRecoverer_LogsAProblemWriteFailure(t *testing.T) {
 	}{
 		{"msg", "failed to write problem response"},
 		{"level", "ERROR"},
-		{"method", http.MethodGet},
-		{"path", "/orders/7"},
-		{"remote_addr", "192.0.2.1:1234"},
-		{"status", float64(http.StatusInternalServerError)},
+		{"http.request.method", http.MethodGet},
+		{"url.path", "/orders/7"},
+		{"client.address", "192.0.2.1:1234"},
+		{"http.response.status_code", float64(http.StatusInternalServerError)},
 		{"error", broken.Error()},
 	} {
 		if got := out[tc.key]; got != tc.want {
@@ -251,5 +251,43 @@ func TestRecoverer_ErrAbortHandlerPropagates(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Errorf("logged an abort: %s", buf.String())
+	}
+}
+
+// Both of Recoverer's records — the panic and a failed problem write — carry
+// request_id when the request's context holds one, and omit it otherwise.
+func TestRecoverer_RequestIDOnBothRecords(t *testing.T) {
+	tests := []struct {
+		name string
+		req  *http.Request
+		id   any // nil means the attribute must be absent
+	}{
+		{"with an id", withID("/orders/7", "abc123"), "abc123"},
+		{"without an id", httptest.NewRequest(http.MethodGet, "/orders/7", nil), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&buf, nil))
+			handler := web.Chain(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				panic("boom")
+			}), middleware.Recoverer(logger))
+
+			handler.ServeHTTP(brokenWriter{httptest.NewRecorder(), errors.New("reset")}, tt.req)
+
+			logs := records(t, buf.String())
+			if len(logs) != 2 {
+				t.Fatalf("logged %d records, want the panic and the write failure: %v", len(logs), logs)
+			}
+			for _, out := range logs {
+				got, present := out["request_id"]
+				if tt.id == nil && present {
+					t.Errorf("%v: request_id = %v, want it absent", out["msg"], got)
+				}
+				if tt.id != nil && got != tt.id {
+					t.Errorf("%v: request_id = %v, want %v", out["msg"], got, tt.id)
+				}
+			}
+		})
 	}
 }

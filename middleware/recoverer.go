@@ -17,6 +17,12 @@ import (
 // written (the encoder failed, typically because the client dropped the
 // connection), the failure is logged at error level as a second record.
 //
+// Both records describe the request by OpenTelemetry's semantic-convention
+// names: http.request.method, url.path, and client.address, plus
+// http.response.status_code where a status was committed (the panic record
+// omits it when nothing was), and request_id when the request's context
+// carries a correlation id ([web.WithRequestID], as [RequestID] does).
+//
 // A response already committed before the panic (a status or a body
 // already written) cannot be answered with a problem document — matching
 // [web.Handle]'s never-write-a-second-response discipline — so after
@@ -52,15 +58,18 @@ func Recoverer(logger *slog.Logger) web.Middleware {
 				}
 
 				attrs := []slog.Attr{
-					slog.String("method", r.Method),
-					slog.String("path", r.URL.Path),
-					slog.String("remote_addr", r.RemoteAddr),
-					slog.Any("panic", p),
-					slog.String("stack", string(debug.Stack())),
+					slog.String("http.request.method", r.Method),
+					slog.String("url.path", r.URL.Path),
+					slog.String("client.address", r.RemoteAddr),
 				}
 				if rec.Committed() {
-					attrs = append(attrs, slog.Int("status", rec.Status()))
+					attrs = append(attrs, slog.Int("http.response.status_code", rec.Status()))
 				}
+				attrs = appendRequestID(attrs, r)
+				attrs = append(attrs,
+					slog.Any("panic", p),
+					slog.String("stack", string(debug.Stack())),
+				)
 				logger.LogAttrs(
 					r.Context(),
 					slog.LevelError,
@@ -79,15 +88,19 @@ func Recoverer(logger *slog.Logger) web.Middleware {
 					"The server encountered an unexpected condition.",
 				)
 				if err != nil {
+					attrs := []slog.Attr{
+						slog.String("http.request.method", r.Method),
+						slog.String("url.path", r.URL.Path),
+						slog.String("client.address", r.RemoteAddr),
+						slog.Int("http.response.status_code", rec.Status()),
+					}
+					attrs = appendRequestID(attrs, r)
+					attrs = append(attrs, slog.String("error", err.Error()))
 					logger.LogAttrs(
 						r.Context(),
 						slog.LevelError,
 						"failed to write problem response",
-						slog.String("method", r.Method),
-						slog.String("path", r.URL.Path),
-						slog.String("remote_addr", r.RemoteAddr),
-						slog.Int("status", rec.Status()),
-						slog.String("error", err.Error()),
+						attrs...,
 					)
 				}
 			}()

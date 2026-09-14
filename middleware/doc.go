@@ -12,8 +12,17 @@
 // # Request logging
 //
 // [RequestLogger] emits one record per request through a *slog.Logger the
-// caller supplies: the method, path, status, duration, and remote address,
-// at info level. A successful request to [web.HealthPath] or
+// caller supplies, at info level, with the request's method, path, matched
+// route, status, duration, remote address, and correlation id. The
+// attributes take OpenTelemetry's semantic-convention names
+// (http.request.method, url.path, http.route, http.response.status_code,
+// client.address), so an observability layer reads them without a rename;
+// duration, which the conventions do not name as a log attribute, and
+// request_id keep the SDK's own names. http.route and request_id appear
+// only when the request matched a ServeMux pattern and carries an id
+// respectively; RequestLogger documents the chain order each needs.
+// [Recoverer] and [web.Handle] name the request the same way in their own
+// failure records. A successful request to [web.HealthPath] or
 // [web.ReadyPath] logs at debug: orchestrator heartbeat, visible in
 // development and quiet in production. A failing probe stays at info.
 // Beyond that the middleware does not judge status codes: whether a 5xx was
