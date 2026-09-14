@@ -21,7 +21,7 @@ Each is 10–50 lines over stdlib types, and the tests are obvious.
 | Middleware | Notes |
 |---|---|
 | Request ID | Generate if absent, echo if present from a trusted hop, put on context, set response header. |
-| Recoverer | `recover()`, log with the panic value, write a 500 problem if nothing was written. Shares the wrapped writer (`concepts/error-handling.md` §2.1). Replaces `net/http`'s built-in recovery only for the problem body. |
+| Recoverer | Built (`middleware.Recoverer`). The chain's one recovery point, sharing `web.Recorder` with `RequestLogger` in either order; replaces `net/http`'s built-in recovery only for the problem body. `http.ErrAbortHandler` passes through untouched. |
 | Timeout | `context.WithTimeout` around the request; the handler observes `r.Context()`. Do not reimplement `http.TimeoutHandler`'s response buffering. |
 | Request logger | Already built. Keep it in-house; it is wired to `slog` and the probe paths. |
 | Content-type gate | Reject a command body whose `Content-Type` is not in an allowlist with a 415 problem. |
@@ -37,7 +37,7 @@ Each is 10–50 lines over stdlib types, and the tests are obvious.
 | CORS | Preflight rules, `Vary` correctness, credentialed-origin restrictions, `Access-Control-Max-Age` semantics, Private Network Access headers. Wrong answers look right. | `github.com/rs/cors` |
 | Real client IP | The parse is short; the threat model is not. `X-Forwarded-For` is attacker-controlled unless the trusted-proxy hop count is configured. | `chi/v5/middleware.RealIP` for the shape, but implement against a configured trusted-proxy list; see Adam Pritchard's "The perils of the 'real' client IP" for the model. |
 | Compression | Correct `ResponseWriter` wrapping, content negotiation, skipping already-compressed media types, writer pooling, preserving `Flusher`. | `github.com/klauspost/compress/gzhttp` (the current standard; `NYTimes/gziphandler` is its ancestor) |
-| Wrapped `ResponseWriter` | Preserving `Flusher`, `Hijacker`, `ReaderFrom`, `Pusher` through a wrap without an interface explosion. | None: the SDK's own `recorder`, exported and extended to cover all four (`concepts/error-handling.md` item 1); one type shared by logger, adapter, recoverer. |
+| Wrapped `ResponseWriter` | Preserving `Flusher`, `Hijacker`, `ReaderFrom`, `Pusher` through a wrap without an interface explosion. | None: the SDK's own `web.Recorder`, shared by `Handle`, `RequestLogger`, and `Recoverer` through `web.WrapWriter`. `Flusher`, `Hijacker`, and `ReaderFrom` reach through via `Unwrap` (`Flusher` also via `FlushError`, so a flush commits); `http.Pusher` does not. |
 | Rate limiting | A single-process token bucket is easy; per-key with eviction, or distributed, is not. | `golang.org/x/time/rate` for the bucket (Go-team maintained); `github.com/go-chi/httprate` for the HTTP wrapper if per-key limiting is needed. |
 | Token verification / JWKS | Cryptography. Never hand-roll. Lands in the auth infrastructure module, not the SDK (Placement, below). | `github.com/coreos/go-oidc/v3` for OIDC discovery + verification against Keycloak; `github.com/lestrrat-go/jwx/v2` if raw JWT/JWKS handling is required. |
 | Tracing / metrics | Propagation formats and semantic conventions are a specification the industry converges on. | `go.opentelemetry.io/otel` and `otelhttp`. Infrastructure module, not the SDK. |
@@ -80,19 +80,10 @@ A silent import no stated line covers is a defect.
 
 ## Build findings folded into the session
 
-- **Today a panic gives the client a dropped connection**: `RequestLogger` logs and re-panics
-  into `net/http`'s recovery, which writes nothing — no 500 problem document exists on the
-  panic path anywhere in the architecture.
-- **The recoverer/logger ordering trap**: recoverer outermost writes its 500 after the
-  logger's deferred status read (record says 200); recoverer innermost means the logger's
-  `recover()` never fires (record loses the panic value). Neither ordering works with two
-  independent recovery points — the recoverer stashes the panic on the shared wrapped writer
-  and `logger.go`'s panic branch is rewritten in the same change, not left as a stale second
-  recovery point.
-- **Correlation**: the log record carries no request or trace id; when request ID lands,
-  `RequestLogger` reads it, and `Problem.Instance` (today just `r.URL.Path`) is the natural
-  place to surface it to clients. Request ID, recoverer, and logger correlation are one
-  change, not three.
+- **Correlation**: neither `RequestLogger`'s nor `Recoverer`'s record carries a request or
+  trace id, so the two records a panic produces are correlatable only by path and timestamp.
+  When request ID lands, both read it, and `Problem.Instance` (today just `r.URL.Path`) is the
+  natural place to surface it to clients.
 - The reference service's per-request gap this set closes: no handler-level deadline exists
   and the SDK default write timeout is 15 minutes; no body limit on read endpoints; no
   security headers; CORS arrives with the embedded client (`goals.v1.client`).

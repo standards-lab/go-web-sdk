@@ -71,6 +71,21 @@ func TestRequestLogger_ImplicitStatusIsOK(t *testing.T) {
 	}
 }
 
+// A handler that writes a body and only then calls WriteHeader has already
+// committed the response — net/http sent the implicit 200 on that first
+// Write — so the later WriteHeader call is superfluous and has no effect on
+// the wire. The recorded status must be the one the client actually got.
+func TestRequestLogger_WriteThenWriteHeaderRecordsTheCommittedStatus(t *testing.T) {
+	out := record(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("partial"))
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+
+	if got := out["status"]; got != float64(http.StatusOK) {
+		t.Errorf("status = %v, want the committed 200, not the superfluous 500", got)
+	}
+}
+
 func TestRequestLogger_RecordsProblemStatus(t *testing.T) {
 	out := record(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = web.WriteProblem(w, r, http.StatusTeapot, "", "no coffee")
@@ -191,7 +206,11 @@ func TestRequestLogger_ProbeFailureLogsAtInfo(t *testing.T) {
 	}
 }
 
-func TestRequestLogger_PanicLogsAtErrorAndRepanics(t *testing.T) {
+// The logger is not a recovery point. Without a Recoverer the panic
+// continues to net/http, which drops the connection; the record says 500,
+// the failure the client saw, and carries no panic value — that belongs to
+// whichever recovery point catches it.
+func TestRequestLogger_PanicWithoutRecovererPropagatesAndLogsAFailure(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	handler := web.Chain(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -217,14 +236,111 @@ func TestRequestLogger_PanicLogsAtErrorAndRepanics(t *testing.T) {
 		want any
 	}{
 		{"msg", "request"},
-		{"level", "ERROR"},
-		{"panic", "boom"},
+		{"level", "INFO"},
+		{"status", float64(http.StatusInternalServerError)},
 		{"path", "/orders/7"},
 	} {
 		if got := out[tc.key]; got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.key, got, tc.want)
 		}
 	}
+	if _, present := out["panic"]; present {
+		t.Errorf("panic = %v, want the logger to leave the panic value to the recovery point", out["panic"])
+	}
+}
+
+// A panic committed by the handler before it unwinds is still the status
+// the client got, so the record keeps it regardless of the panic.
+func TestRequestLogger_PanicAfterCommitKeepsTheCommittedStatus(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		panic("boom")
+	}), middleware.RequestLogger(logger))
+
+	func() {
+		defer func() { _ = recover() }()
+		webtest.Probe(handler, "/orders/7")
+	}()
+
+	var out map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &out); err != nil {
+		t.Fatalf("unmarshal %q: %v", buf.String(), err)
+	}
+	if got := out["status"]; got != float64(http.StatusAccepted) {
+		t.Errorf("status = %v, want the committed 202", got)
+	}
+}
+
+// Recoverer and RequestLogger compose in either order. In Chain(h, a, b),
+// a is outermost: its deferred work runs last, so both records into one
+// buffer land in the order the middleware unwound, and that order pins
+// which one was outermost. In both orders the client gets a 500 problem,
+// the request record says 500, and the recoverer's record has the panic.
+func TestRequestLogger_WithRecovererInEitherOrder(t *testing.T) {
+	tests := []struct {
+		name  string
+		chain func(h http.Handler, recoverer, logger web.Middleware) http.Handler
+		order []string // messages in emission order
+	}{
+		{
+			"recoverer outermost",
+			func(h http.Handler, recoverer, logger web.Middleware) http.Handler {
+				return web.Chain(h, recoverer, logger)
+			},
+			[]string{"request", "handler panicked"},
+		},
+		{
+			"recoverer innermost",
+			func(h http.Handler, recoverer, logger web.Middleware) http.Handler {
+				return web.Chain(h, logger, recoverer)
+			},
+			[]string{"handler panicked", "request"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&buf, nil))
+			handler := tt.chain(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				panic("boom")
+			}), middleware.Recoverer(logger), middleware.RequestLogger(logger))
+
+			rec := webtest.Probe(handler, "/orders/7")
+
+			if rec.Code != http.StatusInternalServerError {
+				t.Errorf("status = %d, want 500", rec.Code)
+			}
+			if ct := rec.Header().Get("Content-Type"); ct != web.ProblemMediaType {
+				t.Errorf("content type = %q, want %q", ct, web.ProblemMediaType)
+			}
+
+			logs := records(t, buf.String())
+			if len(logs) != len(tt.order) {
+				t.Fatalf("logged %d records, want %d: %v", len(logs), len(tt.order), logs)
+			}
+			byMsg := map[string]map[string]any{}
+			for i, out := range logs {
+				if out["msg"] != tt.order[i] {
+					t.Errorf("record %d msg = %v, want %q", i, out["msg"], tt.order[i])
+				}
+				byMsg[out["msg"].(string)] = out
+			}
+			if got := byMsg["request"]["status"]; got != float64(http.StatusInternalServerError) {
+				t.Errorf("request status = %v, want the 500 the client got", got)
+			}
+			if got := byMsg["handler panicked"]["panic"]; got != "boom" {
+				t.Errorf("panic = %v, want boom", got)
+			}
+		})
+	}
+}
+
+func TestRequestLogger_NilLoggerPanics(t *testing.T) {
+	mustPanic(t, "RequestLogger(nil)", func() {
+		middleware.RequestLogger(nil)
+	})
 }
 
 func TestRequestLogger_HijackThroughWrapper(t *testing.T) {

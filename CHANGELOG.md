@@ -6,6 +6,40 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+### Added
+
+- `Recorder` and `WrapWriter`, exported from `Handle`'s private wrapped-writer type: the first
+  `WriteHeader` or `Write` commits the response and its status, `Status` and `Committed` read
+  it back, and wrapping is idempotent so several middleware share one instance per request.
+- `middleware.Recoverer` — the request chain's recovery point. It recovers a handler panic,
+  logs the value and a stack trace, and writes a 500 problem document if nothing was committed
+  yet, sharing `Recorder` with `RequestLogger` in either chain order. A panic after a response
+  was already committed re-raises as `http.ErrAbortHandler` instead, ending the connection
+  rather than completing a truncated body as a clean response. `http.ErrAbortHandler` itself
+  passes through untouched.
+- `Recorder.FlushError`, so a `Flush` through `http.ResponseController` commits an implicit 200
+  the same way a `Write` does, instead of reaching past `Recorder` to the underlying writer.
+
+### Fixed
+
+- `middleware.RequestLogger` recorded the wrong status for a handler that wrote a body and only
+  then called `WriteHeader`: its own wrapped writer missed the implicit commit on `Write`,
+  unlike `Handle`'s. It now wraps through the shared `Recorder`.
+- A handler panic dropped the client's connection with no response anywhere in the SDK's error
+  story; `middleware.Recoverer` answers it with a 500 problem document instead.
+- `Recorder.WriteHeader` committed on a 1xx status other than 101, so a handler using informational
+  responses (`103 Early Hints`) before its real one could lose its problem response on a later
+  panic. It now defers committing until the final status, matching `net/http`'s own treatment.
+- `middleware.RequestLogger(nil)` and `middleware.Recoverer(nil)` now panic at construction with
+  a clear message instead of panicking obscurely (and, for `Recoverer`, losing the original
+  panic value) on the first request.
+
+### Changed
+
+- `middleware.RequestLogger` no longer recovers panics itself. `middleware.Recoverer` is now
+  the chain's one recovery point, and the panic value moved to its log record; `RequestLogger`
+  logs only the resulting status.
+
 ## [v0.7.0] - 2026-09-07
 
 The integration toolkit beside `web`, promoted from the reference service's harness with its
