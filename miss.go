@@ -8,13 +8,20 @@ import "net/http"
 // ServeMux exposes no not-found hook, and a catch-all "/" pattern would
 // defeat its 405 detection (every request would match some pattern), so the
 // discrimination goes through [http.ServeMux.Handler] instead: a non-empty
-// pattern is a real match, served on w directly; an empty one is a miss of
-// some kind — a path-cleaning redirect, a 405, or a 404 — that ServeMux
-// only distinguishes by what its built-in handler writes. That handler runs
+// pattern is a real match; an empty one is a miss of some kind — a
+// path-cleaning redirect, a 405, or a 404 — that ServeMux only
+// distinguishes by what its built-in handler writes. That handler runs
 // once into a recorder that discards the body, and the recorded status
 // decides: a redirect is served on w as is (RedirectHandler is idempotent),
 // a 405 keeps the recorded Allow header and goes to methodNotAllowed, and
 // everything else is a 404.
+//
+// A match is served through [http.ServeMux.ServeHTTP], not the returned
+// handler directly: Handler does not modify the request, and only ServeHTTP
+// sets the fields behind [http.Request.Pattern] and
+// [http.Request.PathValue]. The match runs twice on the hit path; that is
+// the cost of the discrimination, since ServeMux exports no other way to
+// populate those fields.
 func serveMux(
 	w http.ResponseWriter,
 	req *http.Request,
@@ -32,7 +39,7 @@ func serveMux(
 
 	h, pattern := mux.Handler(req)
 	if pattern != "" {
-		h.ServeHTTP(w, req)
+		mux.ServeHTTP(w, req)
 		return
 	}
 

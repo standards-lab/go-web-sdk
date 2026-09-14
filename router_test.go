@@ -244,3 +244,31 @@ func TestRouter_ModuleMissUsesTheModuleHandlers(t *testing.T) {
 		t.Errorf("GET /nowhere reached the module's not-found handler")
 	}
 }
+
+// A matched request reaches its handler with the fields ServeMux.ServeHTTP
+// sets: the matched pattern and the path wildcards. ServeMux.Handler, which
+// the miss discrimination uses, leaves both empty, so a hit must still be
+// dispatched through ServeHTTP. Module routes and native-mux routes alike.
+func TestRouter_MatchSetsPatternAndPathValues(t *testing.T) {
+	var pattern, id string
+	capture := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		pattern, id = r.Pattern, r.PathValue("id")
+	})
+
+	g := web.NewGroup("/api")
+	g.Handle(http.MethodGet, "/things/{id}", capture)
+	r := web.NewRouter()
+	r.Mount(web.NewModule(g))
+	r.Handle("GET /native/{id}", capture)
+
+	webtest.Probe(r, "/api/things/42")
+	if pattern != "GET /api/things/{id}" || id != "42" {
+		t.Errorf("module route: Pattern = %q, PathValue(id) = %q; want the matched pattern and 42", pattern, id)
+	}
+
+	pattern, id = "", ""
+	webtest.Probe(r, "/native/7")
+	if pattern != "GET /native/{id}" || id != "7" {
+		t.Errorf("native route: Pattern = %q, PathValue(id) = %q; want the matched pattern and 7", pattern, id)
+	}
+}
