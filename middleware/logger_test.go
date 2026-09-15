@@ -44,10 +44,10 @@ func TestRequestLogger_DescribesTheRequest(t *testing.T) {
 	}{
 		{"msg", "request"},
 		{"level", "INFO"},
-		{"method", http.MethodGet},
-		{"path", "/orders/7"},
-		{"status", float64(http.StatusCreated)},
-		{"remote_addr", "192.0.2.1:1234"},
+		{"http.request.method", http.MethodGet},
+		{"url.path", "/orders/7"},
+		{"http.response.status_code", float64(http.StatusCreated)},
+		{"client.address", "192.0.2.1:1234"},
 	} {
 		if got := out[tc.key]; got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.key, got, tc.want)
@@ -66,7 +66,7 @@ func TestRequestLogger_ImplicitStatusIsOK(t *testing.T) {
 		_, _ = w.Write([]byte("hello"))
 	}))
 
-	if got := out["status"]; got != float64(http.StatusOK) {
+	if got := out["http.response.status_code"]; got != float64(http.StatusOK) {
 		t.Errorf("status = %v, want 200", got)
 	}
 }
@@ -81,7 +81,7 @@ func TestRequestLogger_WriteThenWriteHeaderRecordsTheCommittedStatus(t *testing.
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 
-	if got := out["status"]; got != float64(http.StatusOK) {
+	if got := out["http.response.status_code"]; got != float64(http.StatusOK) {
 		t.Errorf("status = %v, want the committed 200, not the superfluous 500", got)
 	}
 }
@@ -91,7 +91,7 @@ func TestRequestLogger_RecordsProblemStatus(t *testing.T) {
 		_ = web.WriteProblem(w, r, http.StatusTeapot, "", "no coffee")
 	}))
 
-	if got := out["status"]; got != float64(http.StatusTeapot) {
+	if got := out["http.response.status_code"]; got != float64(http.StatusTeapot) {
 		t.Errorf("status = %v, want 418", got)
 	}
 }
@@ -104,7 +104,7 @@ func TestRequestLogger_FirstStatusWins(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 
-	if got := out["status"]; got != float64(http.StatusAccepted) {
+	if got := out["http.response.status_code"]; got != float64(http.StatusAccepted) {
 		t.Errorf("status = %v, want 202", got)
 	}
 }
@@ -150,7 +150,7 @@ func TestRequestLogger_WriterSupportsReadFrom(t *testing.T) {
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &out); err != nil {
 		t.Fatalf("unmarshal %q: %v", buf.String(), err)
 	}
-	if got := out["status"]; got != float64(http.StatusOK) {
+	if got := out["http.response.status_code"]; got != float64(http.StatusOK) {
 		t.Errorf("status = %v, want 200", got)
 	}
 }
@@ -169,7 +169,7 @@ func TestRequestLogger_ProbeSuccessLogsAtDebug(t *testing.T) {
 	if got := out["level"]; got != "DEBUG" {
 		t.Errorf("level = %v, want DEBUG", got)
 	}
-	if got := out["path"]; got != web.HealthPath {
+	if got := out["url.path"]; got != web.HealthPath {
 		t.Errorf("path = %v, want %s", got, web.HealthPath)
 	}
 }
@@ -201,7 +201,7 @@ func TestRequestLogger_ProbeFailureLogsAtInfo(t *testing.T) {
 	if got := out["level"]; got != "INFO" {
 		t.Errorf("level = %v, want INFO", got)
 	}
-	if got := out["status"]; got != float64(http.StatusServiceUnavailable) {
+	if got := out["http.response.status_code"]; got != float64(http.StatusServiceUnavailable) {
 		t.Errorf("status = %v, want 503", got)
 	}
 }
@@ -237,8 +237,8 @@ func TestRequestLogger_PanicWithoutRecovererPropagatesAndLogsAFailure(t *testing
 	}{
 		{"msg", "request"},
 		{"level", "INFO"},
-		{"status", float64(http.StatusInternalServerError)},
-		{"path", "/orders/7"},
+		{"http.response.status_code", float64(http.StatusInternalServerError)},
+		{"url.path", "/orders/7"},
 	} {
 		if got := out[tc.key]; got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.key, got, tc.want)
@@ -268,7 +268,7 @@ func TestRequestLogger_PanicAfterCommitKeepsTheCommittedStatus(t *testing.T) {
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &out); err != nil {
 		t.Fatalf("unmarshal %q: %v", buf.String(), err)
 	}
-	if got := out["status"]; got != float64(http.StatusAccepted) {
+	if got := out["http.response.status_code"]; got != float64(http.StatusAccepted) {
 		t.Errorf("status = %v, want the committed 202", got)
 	}
 }
@@ -327,7 +327,7 @@ func TestRequestLogger_WithRecovererInEitherOrder(t *testing.T) {
 				}
 				byMsg[out["msg"].(string)] = out
 			}
-			if got := byMsg["request"]["status"]; got != float64(http.StatusInternalServerError) {
+			if got := byMsg["request"]["http.response.status_code"]; got != float64(http.StatusInternalServerError) {
 				t.Errorf("request status = %v, want the 500 the client got", got)
 			}
 			if got := byMsg["handler panicked"]["panic"]; got != "boom" {
@@ -368,5 +368,186 @@ func TestRequestLogger_HijackThroughWrapper(t *testing.T) {
 
 	if err := <-hijackErr; err != nil {
 		t.Errorf("Hijack through the wrapper: %v", err)
+	}
+}
+
+// logged serves req through h and returns the one record the request logger
+// wrote to buf.
+func logged(t *testing.T, h http.Handler, buf *bytes.Buffer, req *http.Request) map[string]any {
+	t.Helper()
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	logs := records(t, buf.String())
+	if len(logs) != 1 {
+		t.Fatalf("logged %d records, want 1: %v", len(logs), logs)
+	}
+	return logs[0]
+}
+
+// withID returns a GET for path whose context carries id as the request id,
+// as RequestID would have set it.
+func withID(path, id string) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	return req.WithContext(web.WithRequestID(req.Context(), id))
+}
+
+// http.route is the matched ServeMux pattern without its method token, for
+// a module route and a native-mux route alike, whether the logger wraps the
+// whole dispatch (Router.Use) or runs inside the route's own chain.
+func TestRequestLogger_RouteIsTheMatchedPattern(t *testing.T) {
+	tests := []struct {
+		name  string
+		build func(logger web.Middleware) http.Handler
+		path  string
+		route string
+	}{
+		{
+			"module route under Router.Use",
+			func(logger web.Middleware) http.Handler {
+				g := web.NewGroup("/api")
+				g.Handle(http.MethodGet, "/orders/{id}", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+				r := web.NewRouter()
+				r.Mount(web.NewModule(g))
+				r.Use(logger)
+				return r
+			},
+			"/api/orders/7",
+			"/api/orders/{id}",
+		},
+		{
+			"method-less native pattern",
+			func(logger web.Middleware) http.Handler {
+				r := web.NewRouter()
+				r.Handle("/status", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+				r.Use(logger)
+				return r
+			},
+			"/status",
+			"/status",
+		},
+		{
+			"logger inside the route's chain",
+			func(logger web.Middleware) http.Handler {
+				g := web.NewGroup("/api")
+				g.Use(logger)
+				g.Handle(http.MethodGet, "/orders/{id}", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+				r := web.NewRouter()
+				r.Mount(web.NewModule(g))
+				return r
+			},
+			"/api/orders/7",
+			"/api/orders/{id}",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			h := tt.build(middleware.RequestLogger(slog.New(slog.NewJSONHandler(&buf, nil))))
+
+			out := logged(t, h, &buf, httptest.NewRequest(http.MethodGet, tt.path, nil))
+
+			if got := out["http.route"]; got != tt.route {
+				t.Errorf("http.route = %v, want %q", got, tt.route)
+			}
+			if got := out["url.path"]; got != tt.path {
+				t.Errorf("url.path = %v, want %q", got, tt.path)
+			}
+		})
+	}
+}
+
+// A request that matched no pattern has no route: a bare request that never
+// went through a mux, and a router miss answered by the not-found handler.
+// The attribute is omitted, not logged empty.
+func TestRequestLogger_RouteOmittedWithoutAMatch(t *testing.T) {
+	t.Run("bare request", func(t *testing.T) {
+		out := record(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		if route, present := out["http.route"]; present {
+			t.Errorf("http.route = %v, want it absent", route)
+		}
+	})
+	t.Run("router miss", func(t *testing.T) {
+		var buf bytes.Buffer
+		r := web.NewRouter()
+		r.Handle("GET /status", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		r.Use(middleware.RequestLogger(slog.New(slog.NewJSONHandler(&buf, nil))))
+
+		out := logged(t, r, &buf, httptest.NewRequest(http.MethodGet, "/nowhere", nil))
+
+		if got := out["http.response.status_code"]; got != float64(http.StatusNotFound) {
+			t.Errorf("status = %v, want 404", got)
+		}
+		if route, present := out["http.route"]; present {
+			t.Errorf("http.route = %v, want it absent", route)
+		}
+	})
+}
+
+// ServeMux sets Pattern on the request it is handed, and RequestLogger reads
+// it from the request it passed down. RequestID forwards a derived request,
+// so with RequestID between the logger and the mux the logger's request
+// never sees the pattern (or the id): http.route and request_id are both
+// omitted. With RequestID outside the logger, both are present.
+func TestRequestLogger_RouteAndIDNeedRequestIDOutside(t *testing.T) {
+	tests := []struct {
+		name    string
+		chain   func(h http.Handler, logger, id web.Middleware) http.Handler
+		present bool
+	}{
+		{
+			"RequestID outside RequestLogger",
+			func(h http.Handler, logger, id web.Middleware) http.Handler {
+				return web.Chain(h, id, logger)
+			},
+			true,
+		},
+		{
+			"RequestID between RequestLogger and the mux",
+			func(h http.Handler, logger, id web.Middleware) http.Handler {
+				return web.Chain(h, logger, id)
+			},
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			r := web.NewRouter()
+			r.Handle("GET /status", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+			logger := middleware.RequestLogger(slog.New(slog.NewJSONHandler(&buf, nil)))
+			h := tt.chain(r, logger, middleware.RequestID())
+
+			out := logged(t, h, &buf, httptest.NewRequest(http.MethodGet, "/status", nil))
+
+			for _, key := range []string{"http.route", "request_id"} {
+				_, present := out[key]
+				if present != tt.present {
+					t.Errorf("%s present = %v, want %v (record %v)", key, present, tt.present, out)
+				}
+			}
+			if tt.present && out["http.route"] != "/status" {
+				t.Errorf("http.route = %v, want /status", out["http.route"])
+			}
+		})
+	}
+}
+
+// request_id is the correlation id from the request's context, present only
+// when one is set; a chain with no RequestID logs no empty id.
+func TestRequestLogger_RequestIDFromContext(t *testing.T) {
+	var buf bytes.Buffer
+	h := web.Chain(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		middleware.RequestLogger(slog.New(slog.NewJSONHandler(&buf, nil))),
+	)
+
+	out := logged(t, h, &buf, withID("/orders/7", "abc123"))
+	if got := out["request_id"]; got != "abc123" {
+		t.Errorf("request_id = %v, want abc123", got)
+	}
+
+	buf.Reset()
+	out = logged(t, h, &buf, httptest.NewRequest(http.MethodGet, "/orders/7", nil))
+	if id, present := out["request_id"]; present {
+		t.Errorf("request_id = %v, want it absent", id)
 	}
 }

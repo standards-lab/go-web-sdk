@@ -19,11 +19,12 @@ const (
 	defaultIdleTimeout       = 2 * time.Minute
 )
 
-// Env names the environment variables [Config.Finalize] reads, composed from
-// the prefix it receives: SERVER_HOST, SERVER_PORT, and the four timeout
-// names under whatever prefix [config.EnvName] produces. An empty name
-// disables that one override, and the zero Env (an empty prefix) disables
-// all of them. Populated by Finalize and exposed for introspection.
+// Env names the environment variables [Config.FinalizeBlock] reads, composed
+// from the prefix and block it receives: <BLOCK>_HOST, <BLOCK>_PORT, and the
+// four timeout names under whatever prefix [config.EnvName] produces. An
+// empty name disables that one override, and the zero Env (an empty prefix)
+// disables all of them. Populated by FinalizeBlock and exposed for
+// introspection.
 type Env struct {
 	Host              string
 	Port              string
@@ -33,41 +34,49 @@ type Env struct {
 	IdleTimeout       string
 }
 
-// NewEnv composes the standard override names from a prefix: SERVER_HOST,
-// SERVER_PORT, and the four timeout names under whatever prefix
-// [config.EnvName] produces. An empty prefix returns the zero Env, disabling
+// NewEnv composes the standard override names from a prefix and a block
+// segment: <BLOCK>_HOST, <BLOCK>_PORT, and the four timeout names under
+// whatever prefix [config.EnvName] produces. The block distinguishes one
+// Config from another under the same prefix, so a second listener (block
+// "management", say) composes names that do not collide with the primary
+// server's (block "server"). An empty prefix returns the zero Env, disabling
 // the overrides.
-func NewEnv(prefix string) Env {
+func NewEnv(prefix, block string) Env {
 	if prefix == "" {
 		return Env{}
 	}
 	return Env{
 		Host: config.EnvName(
-			prefix, "server", "host",
+			prefix, block, "host",
 		),
 		Port: config.EnvName(
-			prefix, "server", "port",
+			prefix, block, "port",
 		),
 		ReadTimeout: config.EnvName(
-			prefix, "server", "read", "timeout",
+			prefix, block, "read", "timeout",
 		),
 		ReadHeaderTimeout: config.EnvName(
-			prefix, "server", "read", "header", "timeout",
+			prefix, block, "read", "header", "timeout",
 		),
 		WriteTimeout: config.EnvName(
-			prefix, "server", "write", "timeout",
+			prefix, block, "write", "timeout",
 		),
 		IdleTimeout: config.EnvName(
-			prefix, "server", "idle", "timeout",
+			prefix, block, "idle", "timeout",
 		),
 	}
 }
 
-// Config holds the server's address and timeouts. The port and timeouts are
-// tri-state pointers: nil is unset and takes the default, while an explicit
-// zero survives the load and means what it says: a disabled timeout, or an
-// ephemeral port. Env records the environment-variable names Finalize
-// composed and read; it is excluded from JSON.
+// Config holds the server's address, timeouts, and header limit. The port and
+// timeouts are tri-state pointers: nil is unset and takes the default, while
+// an explicit zero survives the load and means what it says: a disabled
+// timeout, or an ephemeral port. MaxHeaderBytes is the same tri-state
+// pointer without an SDK default: nil stays nil through Finalize, and
+// [NewServer] then leaves http.Server.MaxHeaderBytes unset so net/http
+// applies its own [http.DefaultMaxHeaderBytes]; a set value bounds the
+// request header block, and net/http reads an explicit zero as its default
+// too. Env records the environment-variable names Finalize composed and
+// read; it is excluded from JSON.
 type Config struct {
 	Host              string           `json:"host"`
 	Port              *int             `json:"port"`
@@ -75,6 +84,7 @@ type Config struct {
 	ReadHeaderTimeout *config.Duration `json:"read_header_timeout"`
 	WriteTimeout      *config.Duration `json:"write_timeout"`
 	IdleTimeout       *config.Duration `json:"idle_timeout"`
+	MaxHeaderBytes    *int             `json:"max_header_bytes"`
 	Env               Env              `json:"-"`
 }
 
@@ -107,13 +117,26 @@ func (c *Config) Merge(src *Config) {
 	if src.IdleTimeout != nil {
 		c.IdleTimeout = src.IdleTimeout
 	}
+	if src.MaxHeaderBytes != nil {
+		c.MaxHeaderBytes = src.MaxHeaderBytes
+	}
 }
 
-// Finalize composes the environment override names from envPrefix (an empty
-// prefix disables overrides), applies defaults, applies the overrides, and
-// validates.
+// Finalize finalizes the receiver as the primary server: it delegates to
+// [Config.FinalizeBlock] with the block "server", so the override names it
+// composes are SERVER_HOST, SERVER_PORT, and the four SERVER_*_TIMEOUT names
+// under envPrefix. This is the method [config.Load] calls.
 func (c *Config) Finalize(envPrefix string) error {
-	c.Env = NewEnv(envPrefix)
+	return c.FinalizeBlock(envPrefix, "server")
+}
+
+// FinalizeBlock composes the environment override names from envPrefix and
+// block (an empty prefix disables overrides), applies defaults, applies the
+// overrides, and validates. The block segment lets a second Config (a
+// management listener, say) finalize under the same prefix as the primary
+// server without their override names colliding.
+func (c *Config) FinalizeBlock(envPrefix, block string) error {
+	c.Env = NewEnv(envPrefix, block)
 	c.applyDefaults()
 	if err := c.applyEnv(); err != nil {
 		return err
@@ -180,6 +203,9 @@ func (c *Config) validate() error {
 	}
 	if *c.IdleTimeout < 0 {
 		return fmt.Errorf("invalid idle_timeout: %s", c.IdleTimeout)
+	}
+	if c.MaxHeaderBytes != nil && *c.MaxHeaderBytes < 0 {
+		return fmt.Errorf("invalid max_header_bytes: %d", *c.MaxHeaderBytes)
 	}
 	return nil
 }

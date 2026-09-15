@@ -21,6 +21,13 @@
 // through cleanly; once it has served, a Server is single-use — construct a
 // new one to serve again.
 //
+// [Server.Log] bridges net/http's own diagnostics — a TLS handshake
+// failure, a header-parse error, the superfluous-WriteHeader warning —
+// onto a caller's *slog.Logger at warn level; unset, they go through the
+// global log package to stderr, outside the slog pipeline. It is called
+// before Start; after it panics, since Serve reads the bridged logger
+// concurrently.
+//
 // # Lifecycle wiring
 //
 // The package registers no lifecycle service of its own and holds no shutdown
@@ -66,18 +73,36 @@
 // duplicate pattern, a second module at a prefix, or a sealed-group
 // mutation. Nothing recomposes or validates per request.
 //
+// A miss is a problem document too. A request no route matches is answered
+// with a 404 problem, and one whose path matches but whose method does not
+// with a 405 problem carrying the Allow header, in place of ServeMux's
+// plain-text answers; ServeMux's own path-cleaning and trailing-slash
+// redirects are served unchanged. [Router.SetNotFound] and
+// [Router.SetMethodNotAllowed] replace the handlers for the native mux, and
+// [Group.SetNotFound] and [Group.SetMethodNotAllowed], on the group passed
+// to NewModule, replace them for a module. A miss reaches no route, so no
+// group middleware runs on it; only Router.Use middleware does.
+//
 // # Configuration
 //
-// [Config] holds the host, the port, and the server's four timeouts, and
-// implements the Merge and Finalize contract of go-core's config package, so
-// it loads as part of an application's configuration rather than on its own. The port and
-// timeouts are pointers: nil is unset and takes the default, while an explicit
-// zero survives the load and means what it says: a disabled timeout, or an
-// ephemeral port. A file and the environment express both states identically.
-// Finalize composes its environment override names from the prefix it
-// receives (via [NewEnv], recorded on [Env] for introspection), applies
+// [Config] holds the host, the port, the server's four timeouts, and the
+// header-block limit, and implements the Merge and Finalize contract of
+// go-core's config package, so it loads as part of an application's
+// configuration rather than on its own. The port, the timeouts, and
+// MaxHeaderBytes are pointers: nil is unset and takes the default, while an
+// explicit zero survives the load and means what it says: a disabled
+// timeout, or an ephemeral port. MaxHeaderBytes carries no default of its
+// own; unset, [NewServer] leaves http.Server.MaxHeaderBytes at its zero
+// value, so net/http applies http.DefaultMaxHeaderBytes — the SDK does not
+// restate a number the standard library already owns. A file and the
+// environment express both states identically. Finalize composes its
+// environment override names from the prefix it receives, under the block
+// "server" (via [NewEnv], recorded on [Env] for introspection), applies
 // defaults, reads the overrides, and validates; an empty prefix disables the
-// overrides.
+// overrides. [Config.FinalizeBlock] is Finalize under a caller-named block
+// instead of "server", so a second Config — a management listener, say —
+// finalizes under the same prefix without its override names colliding with
+// the primary server's.
 //
 // # Health
 //
@@ -209,4 +234,9 @@
 // code outside the standard table. [Problem.Write] applies these defaults and
 // sends the document; [Problem.WriteFor] additionally defaults Instance to
 // the request path, which [WriteProblem] and [ErrorWriter.Write] both use.
+// When the request's context carries a correlation id, set with
+// [WithRequestID] and read with [RequestIDFrom], WriteFor also surfaces it as
+// the "request_id" extension member, overriding any the caller set, without
+// touching the caller's Extras map; a request with no id writes the same
+// document shape as before.
 package web

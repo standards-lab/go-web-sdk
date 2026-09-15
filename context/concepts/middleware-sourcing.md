@@ -1,11 +1,10 @@
 # The middleware set: hand-roll or source
 
-Settled at the 2026-08-31 workspace retrospective; `v1.web.middleware` in the coordinator's
-roadmap cites this note. The org-wide rule and the "standard library" markers live at the
-coordinator (`standards-lab/context/design/dependency-sourcing.md`); this note carries the
-middleware-specific catalog — what the SDK hand-rolls, what it sources, and from where — plus
-the retrospective's build findings. It decays into the code and the package documentation
-when the sessions land.
+Settled at the 2026-08-31 workspace retrospective. `v1.web.tasks.middleware`'s close (2026-09-14)
+landed the hand-rolled catalog in full except path hygiene, and the org-wide rule and the
+"standard library" markers live at the coordinator
+(`standards-lab/context/design/dependency-sourcing.md`); this note now carries what remains: the
+one deferred hand-rolled item, and the sourced set `goals.v1.middleware` has yet to adopt.
 
 ## The rule
 
@@ -14,21 +13,12 @@ on hand-rolled and sourced code are the coordinator's
 `standards-lab/context/design/dependency-sourcing.md`; this note applies them middleware by
 middleware.
 
-## Hand-roll in the SDK
+## Path hygiene: deferred
 
-Each is 10–50 lines over stdlib types, and the tests are obvious.
-
-| Middleware | Notes |
-|---|---|
-| Request ID | Generate if absent, echo if present from a trusted hop, put on context, set response header. |
-| Recoverer | Built (`middleware.Recoverer`). The chain's one recovery point, sharing `web.Recorder` with `RequestLogger` in either order; replaces `net/http`'s built-in recovery only for the problem body. `http.ErrAbortHandler` passes through untouched. |
-| Timeout | `context.WithTimeout` around the request; the handler observes `r.Context()`. Do not reimplement `http.TimeoutHandler`'s response buffering. |
-| Request logger | Already built. Keep it in-house; it is wired to `slog` and the probe paths. |
-| Content-type gate | Reject a command body whose `Content-Type` is not in an allowlist with a 415 problem. |
-| Body limit | `http.MaxBytesReader` as middleware, so the limit is declared at the route rather than inside `decode`. |
-| Fixed headers | Security headers, `Cache-Control: no-store` for API responses. A map and a loop. |
-| Conditional wrap | `Maybe(mw, pred)` — apply a middleware only when a predicate on the request holds. |
-| Path hygiene | Clean path, strip trailing slash. Prefer configuring `ServeMux` behavior first; add only if a real client needs it. |
+Clean path, strip trailing slash. `net/http.ServeMux` already redirects an unclean path and
+handles a trailing slash on its own, and the catalog's own condition — add only if a real
+client needs behavior `ServeMux` doesn't already give it — has not fired. Recorded unbuilt at
+`v1.web.tasks.middleware`'s close, not silently dropped.
 
 ## Sourced middleware
 
@@ -81,19 +71,6 @@ this catalog is a stated enhancement per the coordinator's rule: the session tha
 the first sourced or copied middleware states the admitted categories (a specification
 surface, a threat model; cryptography stays out of this SDK entirely) beside that principle.
 A silent import no stated line covers is a defect.
-
-## Build findings folded into the session
-
-- **Correlation**: neither `RequestLogger`'s nor `Recoverer`'s record carries a request or
-  trace id, so the two records a panic produces are correlatable only by path and timestamp.
-  When request ID lands, both read it, and it surfaces to clients through `Problem.Extras`, not
-  `Problem.Instance` — `Instance` already carries the request path per RFC 9457, and overwriting
-  it would lose that. The id itself is the OpenTelemetry trace id where tracing is configured;
-  the shape and the composition-root seam that supplies it are
-  `standards-lab/context/design/observability-strategy.md`.
-- The reference service's per-request gap this set closes: no handler-level deadline exists
-  and the SDK default write timeout is 15 minutes; no body limit on read endpoints; no
-  security headers; CORS arrives with the embedded client (`goals.v1.client`).
 
 ## Maintenance obligation
 

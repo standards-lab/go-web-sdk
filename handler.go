@@ -16,9 +16,15 @@ type HandlerFunc func(w http.ResponseWriter, r *http.Request) error
 // problem response through ew. The adapter never writes a second response.
 // A handler that has already committed a response — written a status or a
 // body — and then returns an error produces a logged failure, at error
-// level through the writer's logger, and nothing on the wire. A nil writer
-// panics: the adapter has no fallback policy, and a missing writer is a
-// wiring mistake.
+// level through the writer's logger, and nothing on the wire. A problem
+// whose body cannot be written (the encoder failed, typically because the
+// client dropped the connection) is also logged at error level through the
+// writer's logger. Either record names the request by OpenTelemetry's
+// semantic conventions (http.request.method, url.path,
+// http.response.status_code) and carries request_id when the request's
+// context holds a correlation id ([WithRequestID]). A nil writer panics:
+// the adapter has no fallback policy, and a missing writer is a wiring
+// mistake.
 func Handle(fn HandlerFunc, ew *ErrorWriter) http.Handler {
 	if ew == nil {
 		panic("web: Handle requires an ErrorWriter; wire one with NewErrorWriter")
@@ -34,13 +40,34 @@ func Handle(fn HandlerFunc, ew *ErrorWriter) http.Handler {
 				r.Context(),
 				slog.LevelError,
 				"handler returned an error after committing its response",
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.Int("status", rec.Status()),
-				slog.String("error", err.Error()),
+				handleAttrs(r, rec.Status(), err)...,
 			)
 			return
 		}
-		_ = ew.Write(rec, r, err)
+		if werr := ew.Write(rec, r, err); werr != nil {
+			ew.log().LogAttrs(
+				r.Context(),
+				slog.LevelError,
+				"failed to write problem response",
+				handleAttrs(r, rec.Status(), werr)...,
+			)
+		}
 	})
+}
+
+// handleAttrs builds the attribute set of a [Handle] failure record: the
+// request by OpenTelemetry's semantic-convention names, the committed
+// status, the request's correlation id when its context carries one (a
+// chain with no request-id middleware must not log an empty one), and the
+// error.
+func handleAttrs(r *http.Request, status int, err error) []slog.Attr {
+	attrs := []slog.Attr{
+		slog.String("http.request.method", r.Method),
+		slog.String("url.path", r.URL.Path),
+		slog.Int("http.response.status_code", status),
+	}
+	if id, ok := RequestIDFrom(r.Context()); ok && id != "" {
+		attrs = append(attrs, slog.String("request_id", id))
+	}
+	return append(attrs, slog.String("error", err.Error()))
 }

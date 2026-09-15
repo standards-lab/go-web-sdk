@@ -122,10 +122,21 @@ func (p Problem) Write(w http.ResponseWriter) error {
 }
 
 // WriteFor is [Problem.Write], with Instance set to the request path first
-// when p.Instance is empty.
+// when p.Instance is empty, and the request's correlation id surfaced as the
+// "request_id" extension member when the request's context carries a
+// non-empty one (see [WithRequestID]). The id is the SDK's own assertion of
+// which request the document answers, so it overrides a "request_id" key the
+// caller put in Extras. Extras is copied before the id is merged in; the
+// caller's map is never written.
 func (p Problem) WriteFor(w http.ResponseWriter, r *http.Request) error {
 	if p.Instance == "" {
 		p.Instance = r.URL.Path
+	}
+	if id, ok := RequestIDFrom(r.Context()); ok && id != "" {
+		extras := make(map[string]any, len(p.Extras)+1)
+		maps.Copy(extras, p.Extras)
+		extras[requestIDMember] = id
+		p.Extras = extras
 	}
 	return p.Write(w)
 }

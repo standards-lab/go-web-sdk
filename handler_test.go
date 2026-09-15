@@ -94,13 +94,59 @@ func TestHandle_NeverWritesASecondResponse(t *testing.T) {
 			if record["level"] != "ERROR" {
 				t.Errorf("level = %v, want ERROR", record["level"])
 			}
-			if record["error"] != "stream broke" || record["path"] != "/things" || record["method"] != http.MethodGet {
+			if record["error"] != "stream broke" || record["url.path"] != "/things" || record["http.request.method"] != http.MethodGet {
 				t.Errorf("record = %v, want the error, path, and method", record)
 			}
-			if int(record["status"].(float64)) != tt.status {
-				t.Errorf("status attr = %v, want %d", record["status"], tt.status)
+			if int(record["http.response.status_code"].(float64)) != tt.status {
+				t.Errorf("status attr = %v, want %d", record["http.response.status_code"], tt.status)
 			}
 		})
+	}
+}
+
+// brokenWriter is a ResponseWriter whose Write fails as a dropped client
+// connection does: headers and status go through, the body does not.
+type brokenWriter struct {
+	http.ResponseWriter
+	err error
+}
+
+func (w brokenWriter) Write([]byte) (int, error) { return 0, w.err }
+
+func TestHandle_LogsAProblemWriteFailure(t *testing.T) {
+	sentinel := errors.New("row is gone")
+	broken := errors.New("write tcp: connection reset by peer")
+	var log bytes.Buffer
+	ew := web.NewErrorWriter(matcherFor(sentinel, http.StatusNotFound))
+	ew.Log(slog.New(slog.NewJSONHandler(&log, nil)))
+	h := web.Handle(func(http.ResponseWriter, *http.Request) error {
+		return sentinel
+	}, ew)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(brokenWriter{rec, broken}, httptest.NewRequest(http.MethodGet, "/things/1", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d (the header goes through; only the body fails)", rec.Code, http.StatusNotFound)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(log.Bytes(), &record); err != nil {
+		t.Fatalf("no log record: %v (%q)", err, log.String())
+	}
+	for _, tc := range []struct {
+		key  string
+		want any
+	}{
+		{"msg", "failed to write problem response"},
+		{"level", "ERROR"},
+		{"http.request.method", http.MethodGet},
+		{"url.path", "/things/1"},
+		{"http.response.status_code", float64(http.StatusNotFound)},
+		{"error", broken.Error()},
+	} {
+		if got := record[tc.key]; got != tc.want {
+			t.Errorf("%s = %v, want %v", tc.key, got, tc.want)
+		}
 	}
 }
 
@@ -208,5 +254,74 @@ func TestHandleErr_EndToEnd(t *testing.T) {
 				t.Errorf("instance = %q, want %q", problem["instance"], tt.req.URL.Path)
 			}
 		})
+	}
+}
+
+// Both of Handle's failure records — an error after a committed response and
+// a failed problem write — carry request_id when the request's context holds
+// one, and omit it otherwise.
+func TestHandle_RequestIDOnFailureRecords(t *testing.T) {
+	withID := func(path, id string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		return req.WithContext(web.WithRequestID(req.Context(), id))
+	}
+	sentinel := errors.New("row is gone")
+	sites := []struct {
+		name string
+		fn   web.HandlerFunc
+		w    func(*httptest.ResponseRecorder) http.ResponseWriter
+		msg  string
+	}{
+		{
+			"error after commit",
+			func(w http.ResponseWriter, _ *http.Request) error {
+				w.WriteHeader(http.StatusAccepted)
+				return errors.New("stream broke")
+			},
+			func(rec *httptest.ResponseRecorder) http.ResponseWriter { return rec },
+			"handler returned an error after committing its response",
+		},
+		{
+			"problem write failure",
+			func(http.ResponseWriter, *http.Request) error { return sentinel },
+			func(rec *httptest.ResponseRecorder) http.ResponseWriter {
+				return brokenWriter{rec, errors.New("reset")}
+			},
+			"failed to write problem response",
+		},
+	}
+	requests := []struct {
+		name string
+		req  *http.Request
+		id   any // nil means the attribute must be absent
+	}{
+		{"with an id", withID("/things/1", "abc123"), "abc123"},
+		{"without an id", httptest.NewRequest(http.MethodGet, "/things/1", nil), nil},
+	}
+	for _, site := range sites {
+		for _, tt := range requests {
+			t.Run(site.name+" "+tt.name, func(t *testing.T) {
+				var log bytes.Buffer
+				ew := web.NewErrorWriter(matcherFor(sentinel, http.StatusNotFound))
+				ew.Log(slog.New(slog.NewJSONHandler(&log, nil)))
+
+				web.Handle(site.fn, ew).ServeHTTP(site.w(httptest.NewRecorder()), tt.req)
+
+				var record map[string]any
+				if err := json.Unmarshal(log.Bytes(), &record); err != nil {
+					t.Fatalf("no log record: %v (%q)", err, log.String())
+				}
+				if record["msg"] != site.msg {
+					t.Fatalf("msg = %v, want %q", record["msg"], site.msg)
+				}
+				got, present := record["request_id"]
+				if tt.id == nil && present {
+					t.Errorf("request_id = %v, want it absent", got)
+				}
+				if tt.id != nil && got != tt.id {
+					t.Errorf("request_id = %v, want %v", got, tt.id)
+				}
+			})
+		}
 	}
 }

@@ -14,13 +14,21 @@ type Module struct {
 // group middleware outermost, ordered root to leaf, then per-route
 // middleware. The tree is then sealed against further mutation. Composition
 // happens once, here; nothing recomposes per request. A duplicate or malformed
-// pattern panics at registration, from the mux itself.
+// pattern panics at registration, from the mux itself. A request under the
+// prefix that matches no route is answered by the root group's not-found and
+// method-not-allowed handlers ([Group.SetNotFound],
+// [Group.SetMethodNotAllowed]), problem documents by default, in place of
+// the mux's plain-text answers.
 func NewModule(g *Group) *Module {
 	mux := http.NewServeMux()
 	compile(mux, "", nil, g)
+	notFound := orDefault(g.notFound, defaultNotFound)
+	methodNotAllowed := orDefault(g.methodNotAllowed, defaultMethodNotAllowed)
 	return &Module{
-		prefix:  g.prefix,
-		handler: mux,
+		prefix: g.prefix,
+		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			serveMux(w, r, mux, notFound, methodNotAllowed)
+		}),
 	}
 }
 
@@ -53,6 +61,12 @@ func (m *Module) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func compile(mux *http.ServeMux, parent string, outer []Middleware, g *Group) {
 	g.sealed = true
 	prefix := parent + g.prefix
+	// The miss handlers are the module's, read from the root group alone;
+	// one set on a nested group would be dead wiring, so it panics like
+	// every other registration mistake.
+	if parent != "" && (g.notFound != nil || g.methodNotAllowed != nil) {
+		panic("web: SetNotFound/SetMethodNotAllowed on a nested group; set them on the group passed to NewModule: " + prefix)
+	}
 	chain := append(append([]Middleware{}, outer...), g.middleware...)
 
 	for _, rt := range g.routes {

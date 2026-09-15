@@ -13,7 +13,15 @@ import (
 // error level with the panic value and the goroutine stack through logger.
 // If the handler had not committed a response, it then writes a 500
 // problem document; the panic value stays out of it, in the log only, and
-// the problem's detail is a fixed message.
+// the problem's detail is a fixed message. If that document cannot be
+// written (the encoder failed, typically because the client dropped the
+// connection), the failure is logged at error level as a second record.
+//
+// Both records describe the request by OpenTelemetry's semantic-convention
+// names: http.request.method, url.path, and client.address, plus
+// http.response.status_code where a status was committed (the panic record
+// omits it when nothing was), and request_id when the request's context
+// carries a correlation id ([web.WithRequestID], as [RequestID] does).
 //
 // A response already committed before the panic (a status or a body
 // already written) cannot be answered with a problem document — matching
@@ -50,15 +58,18 @@ func Recoverer(logger *slog.Logger) web.Middleware {
 				}
 
 				attrs := []slog.Attr{
-					slog.String("method", r.Method),
-					slog.String("path", r.URL.Path),
-					slog.String("remote_addr", r.RemoteAddr),
-					slog.Any("panic", p),
-					slog.String("stack", string(debug.Stack())),
+					slog.String("http.request.method", r.Method),
+					slog.String("url.path", r.URL.Path),
+					slog.String("client.address", r.RemoteAddr),
 				}
 				if rec.Committed() {
-					attrs = append(attrs, slog.Int("status", rec.Status()))
+					attrs = append(attrs, slog.Int("http.response.status_code", rec.Status()))
 				}
+				attrs = appendRequestID(attrs, r)
+				attrs = append(attrs,
+					slog.Any("panic", p),
+					slog.String("stack", string(debug.Stack())),
+				)
 				logger.LogAttrs(
 					r.Context(),
 					slog.LevelError,
@@ -69,13 +80,29 @@ func Recoverer(logger *slog.Logger) web.Middleware {
 				if rec.Committed() {
 					panic(http.ErrAbortHandler)
 				}
-				_ = web.WriteProblem(
+				err := web.WriteProblem(
 					rec,
 					r,
 					http.StatusInternalServerError,
 					"",
 					"The server encountered an unexpected condition.",
 				)
+				if err != nil {
+					attrs := []slog.Attr{
+						slog.String("http.request.method", r.Method),
+						slog.String("url.path", r.URL.Path),
+						slog.String("client.address", r.RemoteAddr),
+						slog.Int("http.response.status_code", rec.Status()),
+					}
+					attrs = appendRequestID(attrs, r)
+					attrs = append(attrs, slog.String("error", err.Error()))
+					logger.LogAttrs(
+						r.Context(),
+						slog.LevelError,
+						"failed to write problem response",
+						attrs...,
+					)
+				}
 			}()
 
 			next.ServeHTTP(rec, r)

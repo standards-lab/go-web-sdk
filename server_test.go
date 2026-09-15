@@ -1,18 +1,40 @@
 package web_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/standards-lab/go-web-sdk"
 )
+
+// lockedBuffer is a log sink a live server's goroutines can write while the
+// test goroutine reads it back.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
 
 // failsafe bounds every wait for an event that should occur, so a broken server
 // fails the test instead of hanging it.
@@ -44,8 +66,15 @@ func finalized(t *testing.T, cfg web.Config) web.Config {
 // startTestServer binds a server on an ephemeral port.
 func startTestServer(t *testing.T, handler http.Handler) *web.Server {
 	t.Helper()
+	return startServer(t, web.Config{Host: "127.0.0.1", Port: new(0)}, handler)
+}
 
-	srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), handler)
+// startServer binds cfg's server (finalized here, so cfg names the ephemeral
+// port itself) and registers its shutdown.
+func startServer(t *testing.T, cfg web.Config, handler http.Handler) *web.Server {
+	t.Helper()
+
+	srv := web.NewServer(finalized(t, cfg), handler)
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -260,6 +289,111 @@ func TestServer_ShutdownBeforeStartLeavesServerUsable(t *testing.T) {
 	if err := srv.Shutdown(ctx); err != nil {
 		t.Errorf("Shutdown after Start: %v", err)
 	}
+}
+
+// getWithHeader sends GET / carrying one header of size bytes and returns
+// the status; net/http answers an oversized header block with a 431.
+func getWithHeader(t *testing.T, addr string, size int) int {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodGet, "http://"+addr+"/", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("X-Padding", strings.Repeat("x", size))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET / with a %d-byte header: %v", size, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode
+}
+
+func TestServer_MaxHeaderBytesBoundsTheHeaderBlock(t *testing.T) {
+	// net/http reads up to MaxHeaderBytes plus a fixed 4 KiB of slack before
+	// it answers 431, so the padding is well past both.
+	const padding = 16 << 10
+
+	bounded := startServer(t, web.Config{Host: "127.0.0.1", Port: new(0), MaxHeaderBytes: new(1024)}, http.NewServeMux())
+	if got := getWithHeader(t, bounded.Addr(), padding); got != http.StatusRequestHeaderFieldsTooLarge {
+		t.Errorf("status with MaxHeaderBytes 1024 = %d, want 431", got)
+	}
+
+	// Unset, net/http's own default (1 MiB) applies and the same header fits.
+	unbounded := startServer(t, web.Config{Host: "127.0.0.1", Port: new(0)}, http.NewServeMux())
+	if got := getWithHeader(t, unbounded.Addr(), padding); got != http.StatusNotFound {
+		t.Errorf("status with MaxHeaderBytes unset = %d, want 404 (the header fits; the mux has no routes)", got)
+	}
+}
+
+func TestServer_LogRoutesNetHTTPDiagnosticsThroughSlog(t *testing.T) {
+	var sink lockedBuffer
+	logger := slog.New(slog.NewJSONHandler(&sink, nil))
+
+	// A second WriteHeader is net/http's "superfluous response.WriteHeader"
+	// warning, which it reports through http.Server.ErrorLog.
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /twice", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), mux)
+	srv.Log(logger)
+	if err := srv.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), failsafe)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	})
+
+	resp, err := http.Get("http://" + srv.Addr() + "/twice")
+	if err != nil {
+		t.Fatalf("GET /twice: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	got := sink.String()
+	if !strings.Contains(got, "superfluous response.WriteHeader") {
+		t.Fatalf("log = %q, want net/http's superfluous WriteHeader warning", got)
+	}
+	if !strings.Contains(got, `"level":"WARN"`) {
+		t.Errorf("log = %q, want the warning at WARN", got)
+	}
+}
+
+func TestServer_LogPanicsOnNilLogger(t *testing.T) {
+	srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), http.NewServeMux())
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("Log(nil) did not panic")
+		}
+		if want := "web: Server.Log requires a *slog.Logger"; r != want {
+			t.Fatalf("panic = %v, want %q", r, want)
+		}
+	}()
+	srv.Log(nil)
+}
+
+func TestServer_LogAfterStartPanics(t *testing.T) {
+	srv := startTestServer(t, http.NewServeMux())
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("Log after Start did not panic")
+		}
+		if want := "web: Server.Log after Start"; r != want {
+			t.Fatalf("panic = %v, want %q", r, want)
+		}
+	}()
+	srv.Log(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)))
 }
 
 func TestServer_WiresReadHeaderTimeoutFromConfig(t *testing.T) {

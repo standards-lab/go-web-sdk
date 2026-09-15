@@ -44,23 +44,25 @@ func DecodeJSON[T any](w http.ResponseWriter, r *http.Request, limit int64) (T, 
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&v); err != nil {
-		return v, bodyError(err, limit)
+		return v, bodyError(err)
 	}
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		if err == nil {
 			err = errors.New("unexpected data after the JSON value")
 		}
-		return v, bodyError(err, limit)
+		return v, bodyError(err)
 	}
 	return v, nil
 }
 
 // bodyError classifies a decoder failure: the reader's overflow is TooLarge,
-// an immediate EOF is an empty body, and anything else carries the
-// decoder's own reason.
-func bodyError(err error, limit int64) *BodyError {
-	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		return &BodyError{TooLarge: true, Reason: fmt.Sprintf("exceeds the %d-byte limit", limit)}
+// named by the limit the read actually hit — the reader's own, from
+// [http.MaxBytesError], which is the tighter of DecodeJSON's limit and an
+// outer [middleware.BodyLimit]'s when both wrap the body — an immediate EOF
+// is an empty body, and anything else carries the decoder's own reason.
+func bodyError(err error) *BodyError {
+	if mbe, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		return &BodyError{TooLarge: true, Reason: fmt.Sprintf("exceeds the %d-byte limit", mbe.Limit)}
 	}
 	if errors.Is(err, io.EOF) {
 		return &BodyError{Reason: "empty body"}
