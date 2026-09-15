@@ -15,9 +15,19 @@ The code and each package's `doc.go` are authoritative for what is built. An unb
 build it.
 
 - **web** is the HTTP layer. It provides:
-  - the bind-then-serve server, declared as go-core's root-stage lifecycle service
-  - route groups, modules, and the router
+  - the bind-then-serve server, declared as go-core's root-stage lifecycle service; `Server.Log`
+    bridges `http.Server.ErrorLog` to a `*slog.Logger`
+  - route groups, modules, and the router; a request matching no route, or the wrong method,
+    answers with an RFC 9457 problem document (`Allow` preserved on a 405) rather than
+    `ServeMux`'s plain text, overridable per router (`Router.SetNotFound`/`SetMethodNotAllowed`)
+    or per module (the same pair on `Group`, set on the group passed to `NewModule`)
   - the probes, aggregating `lifecycle.Check` values
+  - `Config`'s per-block environment segment: `FinalizeBlock` finalizes under a caller-named
+    block instead of `"server"`, so a second `Config` composes under the same prefix without
+    colliding; `MaxHeaderBytes` carries no SDK default and leaves `net/http`'s own in place when
+    unset
+  - the request-id seam: `WithRequestID`/`RequestIDFrom` carry a request's correlation id on its
+    context, and `Problem.WriteFor` surfaces it as the `request_id` extension member
   - the problem writers
   - the `Middleware` type, with `Chain`
   - `Recorder`, the wrapped-writer that records whether a response has been committed and with
@@ -34,11 +44,14 @@ build it.
   - `Problem`'s `Extras` and its `MarshalJSON`/`UnmarshalJSON` pair, so a document with
     extension members round-trips; `WriteFor` sets `Instance` from the request path
   - the error-returning handler adapter (`HandlerFunc`, `Handle`, `Group.HandleErr` under
-    `Group.SetErrorWriter`), which never writes a second response
+    `Group.SetErrorWriter`), which never writes a second response; a write failure and a
+    post-commit error are both logged rather than swallowed
 
   Built.
-- **middleware** holds the middleware implementations: the request logger and the recoverer, the
-  chain's one recovery point. Built.
+- **middleware** holds the middleware implementations: the request logger (its attributes named
+  by OpenTelemetry's semantic conventions, plus `http.route` and `request_id` when present), the
+  recoverer, the chain's one recovery point, `RequestID` (a correlation id with a source seam for
+  a tracer), `Timeout`, `Headers`, `Maybe`, `ContentType`, and `BodyLimit`. Built.
 - **webtest** is the integration toolkit beside `web`. It provides:
   - the client a black-box suite drives a running service through, reading responses and
     problems as `web` writes them
@@ -46,9 +59,8 @@ build it.
   - the recorder helper for a handler test
 
   Built at `v1.data.sql.tasks.toolkit` (2026-09-07) from the reference service's harness.
-- **Candidate direction** names what remains of the adapter story. `concepts/error-handling.md`
-  covers the router 404/405 hooks, the `ErrorLog` bridge, writer inheritance, `statusError`'s
-  precedence over the matchers, and the per-block config env segment. `concepts/middleware-sourcing.md`
-  covers the rest of the hand-rolled middleware set (request ID, timeout, content-type gate,
-  body limit, fixed headers, conditional wrap, path hygiene) and where service-collaborating
-  middleware lives. The roadmap's `v1.web` goal sequences them.
+- **Candidate direction**: three extension points stay deliberately unbuilt, each waiting on a
+  consumer that has not yet asked. `concepts/error-handling.md` covers writer inheritance and
+  `statusError`'s precedence over the matchers. `concepts/middleware-sourcing.md` covers path
+  hygiene, and, unrelated to this story, still carries the catalog and placement rule for the
+  sourced middleware set `goals.v1.middleware` has yet to adopt.
