@@ -4,6 +4,17 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the module adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-17
+
+### Added
+
+- `Problem.Error`, so a `Problem` serves directly as the `error` a caller receives, with no
+  wrapper type needed to bridge it to the interface. It's a value-receiver method, matching
+  `Problem`'s own `Write`/`WriteFor`/`MarshalJSON` rather than the pointer-receiver convention of
+  this package's other error types (`QueryError`, `PreconditionError`, `BodyError`): every
+  existing call site constructs and passes `Problem` by value, and a value-receiver `Error`
+  keeps a bare `Problem{}` usable as an `error` with no address-of needed.
+
 ## [0.8.0] - 2026-09-14
 
 The adapter's remaining items and the hand-rolled middleware set, closing

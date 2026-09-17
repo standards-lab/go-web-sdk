@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"net/http"
 	"strings"
@@ -96,6 +97,23 @@ func (p *Problem) UnmarshalJSON(data []byte) error {
 		p.Extras = doc
 	}
 	return nil
+}
+
+// Error renders the problem as a status line: the status code and title,
+// followed by ": " and the detail when one is set, with an empty title
+// falling back to the status phrase. It lets a Problem serve directly as
+// the error a caller receives, with no wrapper type needed to bridge it to
+// the error interface.
+func (p Problem) Error() string {
+	title := p.Title
+	if title == "" {
+		title = http.StatusText(p.Status)
+	}
+	line := fmt.Sprintf("%d %s", p.Status, title)
+	if p.Detail != "" {
+		line += ": " + p.Detail
+	}
+	return line
 }
 
 func (p *Problem) applyDefaults() {
