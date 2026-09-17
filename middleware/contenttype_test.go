@@ -191,7 +191,7 @@ func TestContentType_ScopedToWritesThroughMaybe(t *testing.T) {
 func TestContentType_UnscopedGateRejectsABodylessRead(t *testing.T) {
 	handler := web.Chain(noContent, middleware.ContentType("application/json"))
 
-	problem415(t, send(handler, http.MethodGet, ""))
+	_ = problem415(t, send(handler, http.MethodGet, ""))
 }
 
 func TestContentType_NoAllowedTypesPanics(t *testing.T) {

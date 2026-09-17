@@ -274,3 +274,31 @@ func TestProblem_UnmarshalWithNoExtrasLeavesItNil(t *testing.T) {
 		t.Errorf("Extras = %v, want nil", p.Extras)
 	}
 }
+
+func TestProblem_ErrorIsTheStatusTitleAndDetail(t *testing.T) {
+	p := web.Problem{
+		Status: http.StatusConflict,
+		Title:  "Order Already Shipped",
+		Detail: "order 42 shipped 2026-09-10",
+	}
+	want := "409 Order Already Shipped: order 42 shipped 2026-09-10"
+	if got := p.Error(); got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+func TestProblem_ErrorFallsBackToTheStatusTitle(t *testing.T) {
+	p := web.Problem{Status: http.StatusNotFound}
+	want := "404 Not Found"
+	if got := p.Error(); got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+func TestProblem_ErrorOmitsAnEmptyDetail(t *testing.T) {
+	p := web.Problem{Status: http.StatusForbidden, Title: "You do not have enough credit"}
+	want := "403 You do not have enough credit"
+	if got := p.Error(); got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
