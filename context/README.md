@@ -42,7 +42,9 @@ build it.
     consumer-supplied matchers decide the rest and may carry their own type, title, and
     extension members via `Problem`, not status alone. `Detail` and `Log` are set at wiring
   - `Problem`'s `Extras` and its `MarshalJSON`/`UnmarshalJSON` pair, so a document with
-    extension members round-trips; `WriteFor` sets `Instance` from the request path
+    extension members round-trips; `WriteFor` sets `Instance` from the request path; `Error`
+    renders the status, title, and detail as one line, so a `Problem` serves directly as the
+    `error` a caller receives, with no wrapper type needed to bridge it to the interface
   - the error-returning handler adapter (`HandlerFunc`, `Handle`, `Group.HandleErr` under
     `Group.SetErrorWriter`), which never writes a second response; a write failure and a
     post-commit error are both logged rather than swallowed
