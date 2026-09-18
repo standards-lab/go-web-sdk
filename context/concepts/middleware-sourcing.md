@@ -42,6 +42,38 @@ CORS, real client IP, compression, and rate limiting are consolidated into their
 trusted-proxy configuration, and each library's own entry in this README's dependency-line
 statement — gets its own planning session rather than this note prescribing it ahead of time.
 
+## Rate limiting's keying, settled ahead of real client IP
+
+`v1.middleware`'s planning session (2026-09-18) started rate limiting first, ahead of real client
+IP: `httprate` only earns its place over the plain `x/time/rate` bucket if per-key limiting is
+wanted, and per-key limiting needs a trustworthy key. Keying on `X-Forwarded-For` now would
+reproduce the exact attacker-controlled-header problem the real-IP row above exists to solve, so
+rate limiting keys on `httprate`'s default instead — `net/http.Request.RemoteAddr`, the direct TCP
+peer, not a forwarded header. That's safe without a trusted-proxy configuration, so it doesn't
+need real client IP as a prerequisite.
+
+When real client IP lands, rate limiting's key source moves from `RemoteAddr` to that
+middleware's output — a forward trigger for whichever session builds real client IP, not a
+blocker on the session that already shipped rate limiting.
+
+## What triggers real client IP and compression
+
+Neither has a recorded trigger yet (2026-09-18); both wait on a consumer, not a version or a
+sequencing slot.
+
+- **Real client IP** becomes necessary once something needs a client identity it can trust: a
+  reverse proxy or load balancer sits in front of the service (the deployment goal, unscoped), or
+  a consumer other than logging needs one — geo-blocking, per-client abuse detection, an audit
+  trail keyed on IP. Until then, `RemoteAddr` already serves the two consumers that exist:
+  `RequestLogger`'s and `Recoverer`'s `client.address` field, and rate limiting's key (above).
+- **Compression** becomes necessary once a response is large enough for the wrapping and content
+  negotiation to pay for themselves — a domain endpoint returning many rows (the data layer's
+  paginated lists, once domains beyond `organization` land) or a bulk admin export. No such
+  response exists yet; the service has no large-payload endpoint to compress.
+
+A session that lands either writes its task under `goals.v1.middleware.tasks` in the roadmap at
+the point its trigger fires, the same way rate limiting's did.
+
 ## Placement
 
 - Transport-generic, no infrastructure import → `go-web-sdk/middleware`.
