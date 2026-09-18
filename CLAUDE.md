@@ -19,12 +19,20 @@ architecture repository through its `context/`.
 
 ## Repository specifics
 
-- **Module layout** — one Go module rooted at `github.com/standards-lab/go-web-sdk`. The `web`
-  package occupies the module root, and `middleware` and `webtest` are its sub-packages. There
-  are no sub-modules.
-- **Dependencies** — the standard library and go-core, per the Go Elemental dependency line.
-- **Releases, CI, tests, tasks** — per the Go Elemental standard principles in the architecture repository
-  (root `v<semver>` tags from `CHANGELOG.md`, hermetic `httptest`/port-0 tests with the
-  recorder helper from `webtest`, mise tasks).
+- **Module layout** — one base module rooted at `github.com/standards-lab/go-web-sdk`, holding
+  the `web` package at its root with `middleware` and `webtest` beside it. A middleware that
+  needs a third-party library carries it in a sub-module of its own under `middleware/`, with
+  its own `go.mod` and its own release tag — `middleware/rate-limit` today. The base module
+  never imports one.
+- **Dependencies** — the base module takes the standard library and go-core, per the Go Elemental
+  dependency line. A sourced dependency enters only through a middleware sub-module's `go.mod`:
+  `httprate` through `middleware/rate-limit`.
+- **Local development** — development uses the committed root `go.work`. Pinned `require`
+  versions are the committed steady state; a `replace` directive is only a transient bridge
+  while a sub-module builds against unreleased base changes.
+- **Releases, CI, tests, tasks** — per the Go Elemental standard principles in the architecture
+  repository (base `v<semver>` tags and `middleware/<name>/v<semver>` tags from each module's own
+  `CHANGELOG.md`, a per-module CI matrix, hermetic `httptest`/port-0 tests with the recorder
+  helper from `webtest`, mise tasks looping over the modules).
 - **Public repo.** The module resolves through the public Go proxy; CI carries no private-module
   config.
