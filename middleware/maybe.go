@@ -44,3 +44,13 @@ func Maybe(mw web.Middleware, pred func(*http.Request) bool) web.Middleware {
 		})
 	}
 }
+
+// NotProbe reports false for a request to [web.HealthPath] or
+// [web.ReadyPath], true otherwise. It is [Maybe]'s predicate for excluding
+// the SDK's own liveness and readiness probes from a middleware that
+// judges a request before the handler runs — a rate limit, for one — since
+// an orchestrator's probe answered by that middleware instead of the
+// handler it protects reads as the process being down.
+func NotProbe(r *http.Request) bool {
+	return r.URL.Path != web.HealthPath && r.URL.Path != web.ReadyPath
+}

@@ -4,6 +4,15 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the module adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `middleware.NotProbe`, `Maybe`'s predicate for excluding `web.HealthPath` and `web.ReadyPath`
+  from a middleware that would otherwise judge them — a rate limit among them, since an
+  orchestrator's probe answered by that middleware instead of the handler it protects reads as
+  the process being down.
+
 ## [0.9.0] - 2026-09-17
 
 ### Added
