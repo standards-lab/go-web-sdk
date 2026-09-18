@@ -6,6 +6,8 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.10.0] - 2026-09-18
+
 ### Added
 
 - `middleware.NotProbe`, `Maybe`'s predicate for excluding `web.HealthPath` and `web.ReadyPath`
@@ -290,7 +292,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.10.0...HEAD
+[v0.10.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.9.0...v0.10.0
 [v0.7.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.4.0...v0.5.0
