@@ -9,6 +9,11 @@
 // type. The capability supplies the collaborator; this package supplies the
 // middleware that consumes it.
 //
+// A middleware whose implementation needs a third-party dependency is not
+// in this package: it is a sub-module of its own under middleware/, with
+// its own go.mod and release tag, so a caller that does not use it never
+// compiles that dependency. middleware/rate-limit is the first.
+//
 // # Correlation
 //
 // [RequestID] gives every request a correlation id, chosen by the first of
