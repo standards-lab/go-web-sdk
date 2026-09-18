@@ -108,7 +108,9 @@
 // holds, composing that middleware once at wiring time rather than per
 // request, so a route can gate part of its traffic — a body limit on
 // writes, a header on browser-facing responses — without splitting the
-// route in two.
+// route in two. [NotProbe] is the predicate for the common case of
+// excluding [web.HealthPath] and [web.ReadyPath] from a middleware that
+// would otherwise judge them, a rate limit among them.
 //
 // # Request shape
 //

@@ -135,3 +135,42 @@ func TestMaybe_NilPredicatePanics(t *testing.T) {
 		middleware.Maybe(marking, nil)
 	})
 }
+
+func TestNotProbe(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{web.HealthPath, false},
+		{web.ReadyPath, false},
+		{"/orders/7", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			if got := middleware.NotProbe(req); got != tt.want {
+				t.Errorf("NotProbe(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+// A middleware wrapped in Maybe(mw, NotProbe) never runs against either
+// probe path, and does run against an ordinary route.
+func TestMaybe_WithNotProbeExcludesBothProbes(t *testing.T) {
+	handler := web.Chain(noContent, middleware.Maybe(marking, middleware.NotProbe))
+
+	for _, path := range []string{web.HealthPath, web.ReadyPath} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if _, present := rec.Header()["X-Marked"]; present {
+			t.Errorf("path %s: X-Marked present, want the probe excluded", path)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/orders/7", nil))
+	if got := rec.Header().Get("X-Marked"); got != "yes" {
+		t.Errorf("X-Marked = %q, want yes: an ordinary route still runs the middleware", got)
+	}
+}
