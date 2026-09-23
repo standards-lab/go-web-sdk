@@ -61,8 +61,5 @@ build it.
   - the recorder helper for a handler test
 
   Built at `v1.data.sql.tasks.toolkit` (2026-09-07) from the reference service's harness.
-- **Candidate direction**: three extension points stay deliberately unbuilt, each waiting on a
-  consumer that has not yet asked. `concepts/error-handling.md` covers writer inheritance and
-  `statusError`'s precedence over the matchers. `concepts/middleware-sourcing.md` covers path
-  hygiene, and, unrelated to this story, still carries the catalog and placement rule for the
-  sourced middleware set `goals.v1.middleware` has yet to adopt.
+- **Candidate direction**: `error-handling.md` holds the error handler's two deferred extension
+  points, and `middleware-sourcing.md` the rest of the middleware set.
