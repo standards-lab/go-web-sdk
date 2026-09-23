@@ -1,9 +1,11 @@
 # Middleware sourcing
 
-The organization's rule decides whether a middleware is hand-rolled or sourced
-(`architecture/context/dependency-sourcing.md`, landed for a page). The README states where each kind lives.
-This note holds what remains of the middleware set: one hand-rolled item and three sourced ones.
-CORS is planned under `v1.middleware`; real client IP and compression wait in the backlog.
+This note records the unbuilt middleware: one hand-rolled item and three sourced ones. CORS is
+planned under `v1.middleware`; real client IP and compression wait in the backlog.
+
+The organization's rule (`architecture/context/dependency-sourcing.md`, a note until the
+architecture repository writes its page) decides whether a middleware is hand-rolled or sourced, and
+the README states where each kind lives.
 
 ## Path hygiene
 
@@ -23,7 +25,7 @@ Token verification and tracing are sourced too, in the infrastructure libraries 
 SDK: `github.com/coreos/go-oidc/v3` for OIDC against Keycloak, and `otelhttp` in
 go-observability.
 
-## Triggers
+## What triggers each sourced middleware
 
 Each waits on a consumer. The session that meets the trigger for a backlog item moves it to a
 task under `v1.middleware`.
@@ -31,13 +33,13 @@ task under `v1.middleware`.
 - **Real client IP**: a reverse proxy or load balancer in front of the service, or a consumer
   that needs a trusted client identity, such as geo-blocking, abuse detection, or an audit trail
   keyed on IP. Until then `RemoteAddr` serves the request logger, the recoverer, and
-  `middleware/rate-limit`. When it lands, rate limiting's key moves from `RemoteAddr` to this
-  middleware's output.
+  `middleware/rate-limit`. Once it is built, rate limiting takes its key from this middleware's
+  output instead of `RemoteAddr`.
 - **Compression**: a response large enough to pay for the wrapping, such as a paginated list over
   many rows or a bulk export.
 - **CORS**: the client layer, `v1.client`.
 
-## Maintenance
+## Maintenance of the hand-rolled set
 
 Each release re-checks the hand-rolled set against `net/http` changes: `http.ResponseController`,
 `ServeMux` pattern semantics, and new `http.Server` fields.

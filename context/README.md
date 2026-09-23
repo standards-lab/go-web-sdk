@@ -59,7 +59,5 @@ build it.
     problems as `web` writes them
   - the liveness observation a harness passes to go-core's `processtest`
   - the recorder helper for a handler test
-
-  Built at `v1.data.sql.tasks.toolkit` (2026-09-07) from the reference service's harness.
-- **Candidate direction**: `error-handling.md` holds the error handler's two deferred extension
-  points, and `middleware-sourcing.md` the rest of the middleware set.
+- **Candidate direction**: `error-handling.md` records the error handler's two deferred
+  extension points, and `middleware-sourcing.md` records the middleware still unbuilt.
