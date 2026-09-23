@@ -1,7 +1,7 @@
 # Middleware sourcing
 
 The organization's rule decides whether a middleware is hand-rolled or sourced
-(`standards-lab/context/design/dependency-sourcing.md`). The README states where each kind lives.
+(`architecture/context/dependency-sourcing.md`, landed for a page). The README states where each kind lives.
 This note holds what remains of the middleware set: one hand-rolled item and three sourced ones.
 CORS is planned under `v1.middleware`; real client IP and compression wait in the backlog.
 
