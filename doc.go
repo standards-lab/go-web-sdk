@@ -83,6 +83,15 @@
 // to NewModule, replace them for a module. A miss reaches no route, so no
 // group middleware runs on it; only Router.Use middleware does.
 //
+// # Wiring-time methods
+//
+// Optional behavior is set by a method called while the application is
+// wired, before it serves: [Group.Use], [Group.SetErrorWriter],
+// [ErrorWriter.Detail], [ErrorWriter.Log], [Server.Log], and
+// [Router.SetNotFound]. A constructor takes only what the value cannot work
+// without. Configuration accumulated from files and the environment is a
+// struct instead, the way [Config] loads through go-core's config package.
+//
 // # Configuration
 //
 // [Config] holds the host, the port, the server's four timeouts, and the
