@@ -8,6 +8,13 @@ only; the base module keeps its own.
 
 ## [Unreleased]
 
+## [v0.1.1] - 2026-09-24
+
+### Changed
+
+- Built against `github.com/standards-lab/go-web-sdk v0.11.0` and `github.com/standards-lab/go-core
+  v0.4.1`, the pins the workspace builds on. The middleware's own behavior is unchanged.
+
 ## [v0.1.0] - 2026-09-18
 
 The first release of the rate-limiting middleware, against
@@ -21,5 +28,6 @@ The first release of the rate-limiting middleware, against
   `Retry-After` header. `Config` loads through go-core's config contract under the block
   `rate_limit`, defaulting to 300 requests per minute.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.1...HEAD
+[v0.1.1]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.0...middleware/rate-limit/v0.1.1
 [v0.1.0]: https://github.com/standards-lab/go-web-sdk/releases/tag/middleware/rate-limit/v0.1.0
