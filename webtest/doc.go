@@ -8,7 +8,9 @@
 // [Client] issues requests against one service and returns each [Response]
 // whole, so a test asserts on status, headers, and body without a transport
 // in view; [Response.Problem] asserts a problem document, [Decode] the
-// common read. [IfMatch] is the precondition header a guarded command takes.
+// common read. [IfMatch] is the precondition header a guarded command takes,
+// and [Raw] is a body sent under its own media type, such as a file's bytes
+// for an upload.
 // [Live] reports whether a service answers its liveness probe, the condition
 // a harness passes to processtest's Await.
 //
