@@ -40,11 +40,12 @@ type Object struct {
 // stored rather than wrote, and a browser must not reinterpret them as
 // another type. A request whose If-None-Match names o's entity tag (by weak
 // comparison, RFC 9110 §13.1.2) or is * answers 304 Not Modified with no
-// body, and a HEAD request answers with the headers alone. Headers the caller set before the call, such as
-// Content-Disposition or Cache-Control, are kept. body is read to its end
-// and is the caller's to close. The returned error is the copy's, after the
-// response is committed, so an adapted handler logs it rather than writing
-// a second response.
+// body, and a HEAD request answers with the headers alone. Headers the
+// caller set before the call, such as Content-Disposition or Cache-Control,
+// are kept. WriteObject reads body to its end and leaves it to the caller
+// to close. The returned error is the copy's, after the response is
+// committed, so an adapted handler logs it rather than writing a second
+// response.
 func WriteObject(w http.ResponseWriter, r *http.Request, o Object, body io.Reader) error {
 	h := w.Header()
 	if o.ETag != "" {

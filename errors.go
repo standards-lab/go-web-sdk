@@ -18,8 +18,8 @@ type statusError interface {
 
 // QueryError reports one rejected query parameter: which parameter
 // ("page", "size", "sort", "cursor", or a filter's key), the offending
-// input, and why. [ErrorWriter]
-// maps it to a 400; this package mints no problem types.
+// input, and why. [ErrorWriter] maps it to a 400; this package mints no
+// problem types.
 type QueryError struct {
 	Param  string
 	Value  string
@@ -77,12 +77,11 @@ func (e *BodyError) status() int {
 }
 
 // UploadError reports a raw request body [ReadUpload] refused before
-// reading it: Header names the missing or unreadable header, either
-// "Content-Type" or "Content-Length", and otherwise TooLarge marks a
-// declared length over the caller's limit. [ErrorWriter] maps a missing or
-// unreadable Content-Type to a 415, since the service cannot tell what it
-// would be storing, a missing Content-Length to a 411, and TooLarge to a
-// 413.
+// reading it. Header names the missing or unparsable header, "Content-Type"
+// or "Content-Length"; otherwise TooLarge marks a declared length over the
+// caller's limit. [ErrorWriter] maps a missing or unparsable Content-Type
+// to a 415, since the service cannot tell what it would be storing, a
+// missing Content-Length to a 411, and TooLarge to a 413.
 type UploadError struct {
 	Header   string
 	TooLarge bool

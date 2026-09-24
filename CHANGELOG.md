@@ -18,13 +18,13 @@ files through the SDK: `goals.v1.storage.tasks.service`.
 - `Page.More` and `Page.Next`: whether a further page exists, and the token that continues to it.
 - `Paging`, what a fulfilled read reports beyond its items (total, more, next), which a data
   layer's collection type maps onto field for field.
-- `ReadUpload` and `Upload`: a raw body accepted by its headers before any byte is read, a
-  parsable `Content-Type` and a declared `Content-Length` within the caller's limit, bounded at
-  that limit. `UploadError` maps itself: 415 for a missing or unparsable type, 411 for a missing
-  length, 413 for a declared length over the limit.
-- `WriteObject` and `Object`: a stored object proxied as the response, with `Content-Type`,
-  `Content-Length`, `ETag`, `Last-Modified`, and `X-Content-Type-Options: nosniff`, a 304 on a
-  weakly matching `If-None-Match`, and headers alone for `HEAD`.
+- `ReadUpload` and `Upload`: accept a raw body by its headers before any byte is read — a
+  parsable `Content-Type` and a declared `Content-Length` within the caller's limit — and bound
+  the body at that limit. `UploadError` maps itself: 415 for a missing or unparsable type, 411
+  for a missing length, 413 for a declared length over the limit.
+- `WriteObject` and `Object`: proxy a stored object as the response with `Content-Type`,
+  `Content-Length`, `ETag`, `Last-Modified`, and `X-Content-Type-Options: nosniff`; answer a
+  weakly matching `If-None-Match` with a 304, and a `HEAD` request with the headers alone.
 - `webtest.Raw`: a request body sent as is under its own media type.
 
 ### Changed
@@ -33,7 +33,7 @@ files through the SDK: `goals.v1.storage.tasks.service`.
 - **Breaking:** `Page.Total` is `*int`, omitted from the envelope when the read did not count, so
   an uncounted read never reads as an empty collection; a page read by cursor omits `page`.
 - 411 and 415 join the error writer's default detail set, as request-shaped statuses.
-- `go-core` v0.4.1.
+- The go-core pin moves to v0.4.1.
 
 ## [v0.10.0] - 2026-09-18
 

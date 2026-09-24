@@ -50,8 +50,8 @@ func IfMatch(version int64) Header {
 
 // Raw is a request body sent as is under its own media type, such as a
 // file's bytes for an upload, rather than encoded as JSON. An empty
-// ContentType sends no Content-Type header, the request a server refuses
-// for not naming one.
+// ContentType sends no Content-Type header, so a test can send the request
+// a server refuses for lacking one.
 type Raw struct {
 	ContentType string
 	Body        []byte

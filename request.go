@@ -73,8 +73,8 @@ type Upload struct {
 // A missing or unparsable type, a missing length (a chunked body), or a
 // declared length over limit is a *[UploadError]. The body is bounded at
 // limit through http.MaxBytesReader, as [DecodeJSON]'s is, and net/http
-// itself holds the body to its declared length. The accept is headers only:
-// whether the service stores that media type is the consumer's check.
+// itself holds the body to its declared length. ReadUpload checks headers
+// only: whether the service stores that media type is the consumer's check.
 func ReadUpload(w http.ResponseWriter, r *http.Request, limit int64) (Upload, error) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" {

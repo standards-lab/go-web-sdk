@@ -286,8 +286,8 @@ func TestReadUpload_Refusals(t *testing.T) {
 }
 
 func TestReadUpload_BodyIsBoundedAtTheLimit(t *testing.T) {
-	// A length the handler was told but the body overruns: the bound holds
-	// even where net/http's own length enforcement does not apply.
+	// The body overruns its declared length: the bound holds even where
+	// net/http's own length enforcement does not apply.
 	u, _, err := upload(t, strings.NewReader(strings.Repeat("x", 100)), "text/plain", 8, 8)
 	if err != nil {
 		t.Fatalf("ReadUpload: %v", err)

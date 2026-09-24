@@ -160,12 +160,12 @@
 // # Paginated reads
 //
 // [ParseQuery] parses a read request's query string in full into a [Query]:
-// the page, size, sort, and cursor parameters, and every remaining parameter
-// as the filter set — one call yields both halves, so a handler cannot parse the
-// paging parameters and forget to strip them from the filters. Sort is
-// comma-separated field names, "-" prefixing a descending key
-// ("sort=name,-code"), honored across every occurrence of the parameter. A
-// filter is a field name with an optional operator in brackets
+// the page, size, sort, and cursor parameters, and every remaining
+// parameter as the filter set — one call yields both halves, so a handler
+// cannot parse the paging parameters and forget to strip them from the
+// filters. Sort is comma-separated field names, "-" prefixing a descending
+// key ("sort=name,-code"), honored across every occurrence of the
+// parameter. A filter is a field name with an optional operator in brackets
 // ("status=active", "created[gte]=2026-01-01"), a repeated parameter
 // carrying several values under one [Filter]; the filters come back ordered
 // by field and operator, so a consumer composes a deterministic predicate.

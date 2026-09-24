@@ -50,9 +50,9 @@ func TestClient_ProblemsAndDecode(t *testing.T) {
 	}
 }
 
-// A Raw body travels under its own media type with its length, the upload
-// ReadUpload accepts; one with no media type is refused; and the proxied
-// bytes and their headers come back whole.
+// A Raw body is sent under its own media type with its length, as
+// ReadUpload requires; a Raw body with no media type is refused; and a read
+// returns the proxied bytes and their headers whole.
 func TestClient_RawUploadAndObjectRead(t *testing.T) {
 	var stored []byte
 	var storedType string
