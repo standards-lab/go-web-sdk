@@ -6,6 +6,35 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.11.0] - 2026-09-24
+
+The read contract's cursor, the raw-body helpers, and the object proxy, for a service that stores
+files through the SDK: `goals.v1.storage.tasks.service`.
+
+### Added
+
+- `Query.Cursor`: `cursor` is a reserved parameter naming a read by the token a previous page
+  returned. A cursor read has `Page` 0, and a cursor together with `page` is a `*QueryError`.
+- `Page.More` and `Page.Next`: whether a further page exists, and the token that continues to it.
+- `Paging`, what a fulfilled read reports beyond its items (total, more, next), which a data
+  layer's collection type maps onto field for field.
+- `ReadUpload` and `Upload`: a raw body accepted by its headers before any byte is read, a
+  parsable `Content-Type` and a declared `Content-Length` within the caller's limit, bounded at
+  that limit. `UploadError` maps itself: 415 for a missing or unparsable type, 411 for a missing
+  length, 413 for a declared length over the limit.
+- `WriteObject` and `Object`: a stored object proxied as the response, with `Content-Type`,
+  `Content-Length`, `ETag`, `Last-Modified`, and `X-Content-Type-Options: nosniff`, a 304 on a
+  weakly matching `If-None-Match`, and headers alone for `HEAD`.
+- `webtest.Raw`: a request body sent as is under its own media type.
+
+### Changed
+
+- **Breaking:** `NewPage` takes a `Paging` in place of the total.
+- **Breaking:** `Page.Total` is `*int`, omitted from the envelope when the read did not count, so
+  an uncounted read never reads as an empty collection; a page read by cursor omits `page`.
+- 411 and 415 join the error writer's default detail set, as request-shaped statuses.
+- `go-core` v0.4.1.
+
 ## [v0.10.0] - 2026-09-18
 
 ### Added
@@ -15,7 +44,7 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
   orchestrator's probe answered by that middleware instead of the handler it protects reads as
   the process being down.
 
-## [0.9.0] - 2026-09-17
+## [v0.9.0] - 2026-09-17
 
 ### Added
 
@@ -26,7 +55,7 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
   existing call site constructs and passes `Problem` by value, and a value-receiver `Error`
   keeps a bare `Problem{}` usable as an `error` with no address-of needed.
 
-## [0.8.0] - 2026-09-14
+## [v0.8.0] - 2026-09-14
 
 The adapter's remaining items and the hand-rolled middleware set, closing
 `goals.v1.web.tasks.adapter` and `goals.v1.web.tasks.middleware`.
@@ -292,8 +321,11 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.11.0...HEAD
+[v0.11.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.10.0...v0.11.0
 [v0.10.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.9.0...v0.10.0
+[v0.9.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.8.0...v0.9.0
+[v0.8.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.4.0...v0.5.0

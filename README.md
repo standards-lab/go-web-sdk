@@ -43,6 +43,11 @@ Its repository-level principles:
   - a `net/http` server wired for go-core's lifecycle, with its configuration block, route
     groups, modules, and the router
   - RFC 9457 problem responses and a JSON writer
+  - the read contract: a request's paging, sort, cursor, and filters parsed as one `Query`, and
+    the `Page` envelope with its total, `more`, and `next`
+  - the request helpers: the `If-Match` precondition, a strict JSON body, and a raw upload
+    accepted by its declared type and length
+  - the proxied object response, with its validators and a 304 on a matching `If-None-Match`
   - the `/healthz` and `/readyz` probes
   - the middleware primitives
 - `middleware` holds the hand-rolled middleware implementations: the request logger, the
@@ -50,8 +55,8 @@ Its repository-level principles:
   middleware with a third-party dependency is a sub-module of its own under `middleware/`;
   `middleware/rate-limit` is the first.
 - `webtest` is the integration toolkit. It provides:
-  - the client a black-box suite drives a running service through, reading responses and
-    RFC 9457 problems as `web` writes them
+  - the client a black-box suite drives a running service through, sending JSON or raw bodies
+    and reading responses and RFC 9457 problems as `web` writes them
   - the liveness observation a harness waits on
   - the recorder helper for a handler test
 
