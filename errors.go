@@ -17,7 +17,8 @@ type statusError interface {
 }
 
 // QueryError reports one rejected query parameter: which parameter
-// ("page", "size", or "sort"), the offending input, and why. [ErrorWriter]
+// ("page", "size", "sort", "cursor", or a filter's key), the offending
+// input, and why. [ErrorWriter]
 // maps it to a 400; this package mints no problem types.
 type QueryError struct {
 	Param  string

@@ -160,8 +160,8 @@
 // # Paginated reads
 //
 // [ParseQuery] parses a read request's query string in full into a [Query]:
-// the page, size, and sort parameters, and every remaining parameter as the
-// filter set — one call yields both halves, so a handler cannot parse the
+// the page, size, sort, and cursor parameters, and every remaining parameter
+// as the filter set — one call yields both halves, so a handler cannot parse the
 // paging parameters and forget to strip them from the filters. Sort is
 // comma-separated field names, "-" prefixing a descending key
 // ("sort=name,-code"), honored across every occurrence of the parameter. A
@@ -174,9 +174,17 @@
 // SDK enumerates no operators of its own. Policy belongs to the caller: a [Limits]
 // value supplies the default and maximum size (invalid limits panic as a
 // wiring mistake), and a malformed or out-of-bounds parameter returns a
-// *[QueryError]. On success, [NewPage] assembles the [Page] envelope (items,
-// page, size, total, with nil items marshaling as []), and [WriteJSON] sends
-// it as the response body.
+// *[QueryError].
+//
+// A read is addressed by number (page=3) or by cursor (cursor=<token>), never
+// both. A cursor is the opaque token a previous page's Next carried; the
+// read continues after that page's last item, so a collection that changes
+// between requests neither skips nor repeats a row. On success, [NewPage]
+// assembles the [Page] envelope from the items, the query, and the read's
+// [Paging]: the page number (omitted under a cursor), the size, the total
+// (omitted when the read did not count, so an uncounted read never reads as
+// empty), whether a further page exists, and the cursor to it. Nil items
+// marshal as [], and [WriteJSON] sends the envelope as the response body.
 //
 // # Request helpers
 //

@@ -11,9 +11,10 @@ import (
 // reserved names the query parameters [ParseQuery] consumes itself; every
 // other parameter passes through as a filter. No other layer knows this set.
 var reserved = map[string]struct{}{
-	"page": {},
-	"size": {},
-	"sort": {},
+	"page":   {},
+	"size":   {},
+	"sort":   {},
+	"cursor": {},
 }
 
 // Sort is one sort key parsed from a request: a field name and direction.
@@ -38,18 +39,25 @@ type Filter struct {
 	Values []string
 }
 
-// Query is one read request's parsed query string: the page, size, and sort
-// parameters, and every remaining parameter as the filter set. Page is
-// 1-based and defaults to 1; Size is defaulted and capped by the [Limits]
-// given to [ParseQuery]; Sort preserves request order and is nil when the
-// request carries no sort. Filters is never nil and is ordered by field
-// name, then operator — url.Values carries no request order, and a fixed
-// order lets a consumer compose a deterministic predicate from it.
+// Query is one read request's parsed query string: the page, size, sort,
+// and cursor parameters, and every remaining parameter as the filter set.
+// A read is addressed one of two ways. By number, Page is 1-based and
+// defaults to 1. By cursor, Cursor is the opaque token a previous page's
+// [Page.Next] carried and Page is 0: the read continues after that page's
+// last item rather than at an offset, so it neither skips nor repeats a row
+// when the collection changes between requests. Size is defaulted and
+// capped by the [Limits] given to [ParseQuery] under either address; Sort
+// preserves request order and is nil when the request carries no sort.
+// Filters is never nil and is ordered by field name, then operator —
+// url.Values carries no request order, and a fixed order lets a consumer
+// compose a deterministic predicate from it. The cursor is lexical only:
+// whether it continues the read it is sent with is the data layer's check.
 type Query struct {
 	Page    int
 	Size    int
 	Sort    []Sort
 	Filters []Filter
+	Cursor  string
 }
 
 // Limits bounds query parsing: the page size when a request omits one, and
@@ -62,21 +70,24 @@ type Limits struct {
 	MaxSize     int
 }
 
-// ParseQuery parses one read request's query string in full: the page, size,
-// and sort parameters under the given limits, and every remaining parameter
-// as the filter set. One call yields both halves, so a handler cannot parse
-// the paging parameters and forget to strip them from the filters. An absent
-// page is 1 and an absent size is the default. Sort is comma-separated field
-// names, each optionally prefixed with "-" for descending, honored across
-// every occurrence of the parameter in order; an empty parameter value reads
-// as omitted.
+// ParseQuery parses one read request's query string in full: the page,
+// size, sort, and cursor parameters under the given limits, and every
+// remaining parameter as the filter set. One call yields both halves, so a
+// handler cannot parse the paging parameters and forget to strip them from
+// the filters. An absent page is 1 and an absent size is the default. Sort
+// is comma-separated field names, each optionally prefixed with "-" for
+// descending, honored across every occurrence of the parameter in order; an
+// empty parameter value reads as omitted. A cursor names the read by the
+// token a previous page returned, and a request naming both a cursor and a
+// page is rejected, since the two addresses disagree about where the page
+// starts.
 //
 // A filter parameter is a field name, optionally followed by an operator in
 // brackets: "status=active" is the field alone, "created[gte]=2026-01-01"
 // names an operator, and a repeated parameter carries several values under
 // one [Filter]. The operator passes through as text. A key with unbalanced,
 // misplaced, or repeated brackets, an empty name, or an empty operator is
-// rejected, as is an operator on page, size, or sort. A malformed or
+// rejected, as is an operator on page, size, sort, or cursor. A malformed or
 // out-of-bounds parameter is a *[QueryError].
 func ParseQuery(q url.Values, l Limits) (Query, error) {
 	if l.DefaultSize < 1 || l.MaxSize < l.DefaultSize {
@@ -97,6 +108,17 @@ func ParseQuery(q url.Values, l Limits) (Query, error) {
 			}
 		}
 		out.Page = n
+	}
+
+	if v := q.Get("cursor"); v != "" {
+		if p := q.Get("page"); p != "" {
+			return Query{}, &QueryError{
+				Param: "cursor", Value: v,
+				Reason: "cannot be combined with page",
+			}
+		}
+		out.Page = 0
+		out.Cursor = v
 	}
 
 	if v := q.Get("size"); v != "" {
