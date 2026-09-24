@@ -18,7 +18,7 @@ type ProblemMatcher func(error) (Problem, bool)
 // response. The mappings it owns are this package's own vocabulary — a
 // *[QueryError] is a 400, a *[PreconditionError] a 428 when the header is
 // missing and a 400 otherwise, a *[BodyError] a 413 when the body is over
-// its limit and a 400 otherwise; every other problem is decided by the
+// its limit and a 400 otherwise, an *[UploadError] a 415, 411, or 413; every other problem is decided by the
 // consumer's matchers, so problem policy stays with the application and the
 // SDK depends on no infrastructure library's error types.
 type ErrorWriter struct {
@@ -35,7 +35,9 @@ func NewErrorWriter(matchers ...ProblemMatcher) *ErrorWriter {
 		matchers: matchers,
 		detail: map[int]struct{}{
 			http.StatusBadRequest:            {},
+			http.StatusLengthRequired:        {},
 			http.StatusRequestEntityTooLarge: {},
+			http.StatusUnsupportedMediaType:  {},
 			http.StatusPreconditionRequired:  {},
 		},
 	}
@@ -44,8 +46,8 @@ func NewErrorWriter(matchers ...ProblemMatcher) *ErrorWriter {
 // Detail adds statuses whose problems carry the error text as their detail
 // member, for a surface whose clients need the reason: an operator API
 // reporting which schema version is dirty on a 409, or that this
-// environment does not seed on a 403. The built-in set is 400, 413, and 428,
-// the statuses that are request-shaped by construction; Detail only ever
+// environment does not seed on a 403. The built-in set is 400, 411, 413,
+// 415, and 428, the statuses that are request-shaped by construction; Detail only ever
 // adds to it, and the writer does not second-guess a status the consumer
 // names. Called at wiring time, like [Group.Use].
 func (ew *ErrorWriter) Detail(statuses ...int) {
@@ -100,7 +102,7 @@ func (ew *ErrorWriter) Status(err error) int {
 // Write sends err as the problem [ErrorWriter.Problem] maps it to. A
 // matcher that supplied its own Detail keeps it; otherwise the detail
 // carries the error text only on a status in the writer's detail set (400,
-// 413, and 428 built in, plus whatever [ErrorWriter.Detail] added), where it
+// 411, 413, 415, and 428 built in, plus whatever [ErrorWriter.Detail] added), where it
 // is request-shaped and client-actionable — every other status sends no
 // detail, so an internal error's text never reaches the wire by default.
 // The returned error is the encoder's, as from [Problem.WriteFor].

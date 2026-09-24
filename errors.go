@@ -75,3 +75,31 @@ func (e *BodyError) status() int {
 	}
 	return http.StatusBadRequest
 }
+
+// UploadError reports a raw request body [ReadUpload] refused before
+// reading it: Header names the missing or unreadable header, either
+// "Content-Type" or "Content-Length", and otherwise TooLarge marks a
+// declared length over the caller's limit. [ErrorWriter] maps a missing or
+// unreadable Content-Type to a 415, since the service cannot tell what it
+// would be storing, a missing Content-Length to a 411, and TooLarge to a
+// 413.
+type UploadError struct {
+	Header   string
+	TooLarge bool
+	Reason   string
+}
+
+func (e *UploadError) Error() string {
+	return "upload: " + e.Reason
+}
+
+func (e *UploadError) status() int {
+	switch {
+	case e.TooLarge:
+		return http.StatusRequestEntityTooLarge
+	case e.Header == "Content-Length":
+		return http.StatusLengthRequired
+	default:
+		return http.StatusUnsupportedMediaType
+	}
+}

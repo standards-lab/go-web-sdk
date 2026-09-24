@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/standards-lab/go-web-sdk"
 )
@@ -90,5 +92,116 @@ func TestPage_ZeroTotalIsCountedNotAbsent(t *testing.T) {
 
 	if p.Total == nil || *p.Total != 0 {
 		t.Errorf("total = %v, want a counted 0", p.Total)
+	}
+}
+
+func objectRequest(method string, headers ...string) *http.Request {
+	r := httptest.NewRequest(method, "/files/1/content", nil)
+	for i := 0; i+1 < len(headers); i += 2 {
+		r.Header.Set(headers[i], headers[i+1])
+	}
+	return r
+}
+
+var logo = web.Object{
+	ContentType: "image/png",
+	Size:        9,
+	ETag:        `"0x8DC"`,
+	ModifiedAt:  time.Date(2026, 9, 24, 12, 0, 0, 0, time.FixedZone("EDT", -4*3600)),
+}
+
+func TestWriteObject_ProxiesTheBytesWithTheirHeaders(t *testing.T) {
+	rec := httptest.NewRecorder()
+	rec.Header().Set("Content-Disposition", `inline; filename="logo.png"`)
+
+	if err := web.WriteObject(rec, objectRequest(http.MethodGet), logo, strings.NewReader("png-bytes")); err != nil {
+		t.Fatalf("WriteObject: %v", err)
+	}
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+	want := map[string]string{
+		"Content-Type":           "image/png",
+		"Content-Length":         "9",
+		"ETag":                   `"0x8DC"`,
+		"Last-Modified":          "Thu, 24 Sep 2026 16:00:00 GMT",
+		"X-Content-Type-Options": "nosniff",
+		"Content-Disposition":    `inline; filename="logo.png"`,
+	}
+	for name, value := range want {
+		if got := rec.Header().Get(name); got != value {
+			t.Errorf("%s = %q, want %q", name, got, value)
+		}
+	}
+	if rec.Body.String() != "png-bytes" {
+		t.Errorf("body = %q, want png-bytes", rec.Body.String())
+	}
+}
+
+func TestWriteObject_MatchingIfNoneMatchIs304(t *testing.T) {
+	for _, header := range []string{`"0x8DC"`, `W/"0x8DC"`, `"other", "0x8DC"`, "*"} {
+		t.Run(header, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+
+			err := web.WriteObject(rec, objectRequest(http.MethodGet, "If-None-Match", header), logo, strings.NewReader("png-bytes"))
+			if err != nil {
+				t.Fatalf("WriteObject: %v", err)
+			}
+
+			if rec.Code != http.StatusNotModified {
+				t.Errorf("status = %d, want 304", rec.Code)
+			}
+			if rec.Body.Len() != 0 {
+				t.Errorf("body = %q, want none", rec.Body.String())
+			}
+			if got := rec.Header().Get("ETag"); got != `"0x8DC"` {
+				t.Errorf("ETag = %q, want the object's", got)
+			}
+		})
+	}
+}
+
+func TestWriteObject_StaleIfNoneMatchSendsTheBytes(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	err := web.WriteObject(rec, objectRequest(http.MethodGet, "If-None-Match", `"0x1"`), logo, strings.NewReader("png-bytes"))
+	if err != nil {
+		t.Fatalf("WriteObject: %v", err)
+	}
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "png-bytes" {
+		t.Errorf("status, body = %d, %q, want 200, png-bytes", rec.Code, rec.Body.String())
+	}
+}
+
+func TestWriteObject_HeadSendsHeadersOnly(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	if err := web.WriteObject(rec, objectRequest(http.MethodHead), logo, strings.NewReader("png-bytes")); err != nil {
+		t.Fatalf("WriteObject: %v", err)
+	}
+
+	if rec.Code != http.StatusOK || rec.Body.Len() != 0 {
+		t.Errorf("status, body = %d, %q, want 200 and none", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Length"); got != "9" {
+		t.Errorf("Content-Length = %q, want 9", got)
+	}
+}
+
+func TestWriteObject_OmitsAbsentValidators(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	err := web.WriteObject(rec, objectRequest(http.MethodGet, "If-None-Match", `"x"`), web.Object{ContentType: "text/plain", Size: 2}, strings.NewReader("hi"))
+	if err != nil {
+		t.Fatalf("WriteObject: %v", err)
+	}
+
+	if rec.Header().Get("ETag") != "" || rec.Header().Get("Last-Modified") != "" {
+		t.Errorf("validators = %q, %q, want none", rec.Header().Get("ETag"), rec.Header().Get("Last-Modified"))
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
 	}
 }

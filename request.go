@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -53,6 +54,49 @@ func DecodeJSON[T any](w http.ResponseWriter, r *http.Request, limit int64) (T, 
 		return v, bodyError(err)
 	}
 	return v, nil
+}
+
+// Upload is a raw request body declared by its own headers: the media type
+// the client named, the exact size it declared, and the body, which reads
+// at most Size bytes.
+type Upload struct {
+	ContentType string
+	Size        int64
+	Body        io.Reader
+}
+
+// ReadUpload accepts a raw request body, such as a file's bytes, by its
+// headers alone, before any byte is read: the request must name a
+// Content-Type that parses as a media type, and must declare a
+// Content-Length, so the size is known before the body is stored anywhere
+// and a store that needs it up front never buffers the stream to learn it.
+// A missing or unparsable type, a missing length (a chunked body), or a
+// declared length over limit is a *[UploadError]. The body is bounded at
+// limit through http.MaxBytesReader, as [DecodeJSON]'s is, and net/http
+// itself holds the body to its declared length. The accept is headers only:
+// whether the service stores that media type is the consumer's check.
+func ReadUpload(w http.ResponseWriter, r *http.Request, limit int64) (Upload, error) {
+	ct := r.Header.Get("Content-Type")
+	if ct == "" {
+		return Upload{}, &UploadError{Header: "Content-Type", Reason: "the request requires a Content-Type header"}
+	}
+	if _, _, err := mime.ParseMediaType(ct); err != nil {
+		return Upload{}, &UploadError{Header: "Content-Type", Reason: fmt.Sprintf("Content-Type %q: %v", ct, err)}
+	}
+	if r.ContentLength < 0 {
+		return Upload{}, &UploadError{Header: "Content-Length", Reason: "the request requires a Content-Length header"}
+	}
+	if r.ContentLength > limit {
+		return Upload{}, &UploadError{
+			TooLarge: true,
+			Reason:   fmt.Sprintf("the declared %d bytes exceed the %d-byte limit", r.ContentLength, limit),
+		}
+	}
+	return Upload{
+		ContentType: ct,
+		Size:        r.ContentLength,
+		Body:        http.MaxBytesReader(w, r.Body, limit),
+	}, nil
 }
 
 // bodyError classifies a decoder failure: the reader's overflow is TooLarge,

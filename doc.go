@@ -203,23 +203,43 @@
 // with a 413 when the body is over its limit and a 400 otherwise. The decode
 // is syntax and shape only; the values' validity is the command's own check.
 //
+// [ReadUpload] accepts a raw body, such as a file's bytes, by its headers
+// before any byte is read: a parsable Content-Type and a declared
+// Content-Length within the caller's limit, returned as an [Upload] whose
+// body is bounded at that limit. A missing or unparsable type is an
+// *[UploadError] answered with a 415, a missing length (a chunked body) a
+// 411, and a declared length over the limit a 413. The declared length is
+// what lets a store that needs the size up front take the stream without
+// buffering it.
+//
+// # Proxied objects
+//
+// [WriteObject] sends a stored object's bytes as the response, described by
+// an [Object]: Content-Type, Content-Length, ETag, and Last-Modified from
+// the object, and X-Content-Type-Options: nosniff, since the bytes are
+// stored content a browser must not reinterpret. A request whose
+// If-None-Match names the object's tag answers 304 with no body, and HEAD
+// answers with the headers alone. Proxying keeps every read behind the
+// service's own authorization, where a redirect to a presigned URL would
+// hand out a bearer credential the service cannot revoke.
+//
 // # Error mapping
 //
 // An [ErrorWriter] turns a handler's returned error into a problem response
 // through a composed [ProblemMatcher] list: the package's own vocabulary is
 // built in (*[QueryError] is a 400; *[PreconditionError] a 428 or a 400;
-// *[BodyError] a 413 or a 400, each an undecorated Problem with only Status
-// set), the consumer's matchers decide the rest in order, first match wins,
-// and an error no matcher claims — or a matcher that claims one without
-// naming a status — is a 500. A matcher may return a Problem with its own
-// Type, Title, Detail, and Extras, not status alone, so problem policy
-// stays with the application and the SDK depends on no infrastructure
-// library's error types or problem vocabulary. A matcher's own Detail
-// always ships; otherwise the detail member carries the error text only on
-// a status in the writer's detail set (400, 413, and 428 built in, the
-// statuses that are request-shaped by construction), so no internal
-// error's text reaches the wire by default; [ErrorWriter.Detail] adds
-// statuses for a surface whose clients need the reason, such as an
+// *[BodyError] a 413 or a 400; *[UploadError] a 415, 411, or 413, each an
+// undecorated Problem with only Status set), the consumer's matchers decide
+// the rest in order, first match wins, and an error no matcher claims — or a
+// matcher that claims one without naming a status — is a 500. A matcher may
+// return a Problem with its own Type, Title, Detail, and Extras, not status
+// alone, so problem policy stays with the application and the SDK depends on
+// no infrastructure library's error types or problem vocabulary. A matcher's
+// own Detail always ships; otherwise the detail member carries the error
+// text only on a status in the writer's detail set (400, 411, 413, 415, and
+// 428 built in, the statuses that are request-shaped by construction), so no
+// internal error's text reaches the wire by default; [ErrorWriter.Detail]
+// adds statuses for a surface whose clients need the reason, such as an
 // operator API's 409.
 //
 // # Error-returning handlers
