@@ -160,12 +160,12 @@
 // # Paginated reads
 //
 // [ParseQuery] parses a read request's query string in full into a [Query]:
-// the page, size, and sort parameters, and every remaining parameter as the
-// filter set — one call yields both halves, so a handler cannot parse the
-// paging parameters and forget to strip them from the filters. Sort is
-// comma-separated field names, "-" prefixing a descending key
-// ("sort=name,-code"), honored across every occurrence of the parameter. A
-// filter is a field name with an optional operator in brackets
+// the page, size, sort, and cursor parameters, and every remaining
+// parameter as the filter set — one call yields both halves, so a handler
+// cannot parse the paging parameters and forget to strip them from the
+// filters. Sort is comma-separated field names, "-" prefixing a descending
+// key ("sort=name,-code"), honored across every occurrence of the
+// parameter. A filter is a field name with an optional operator in brackets
 // ("status=active", "created[gte]=2026-01-01"), a repeated parameter
 // carrying several values under one [Filter]; the filters come back ordered
 // by field and operator, so a consumer composes a deterministic predicate.
@@ -174,9 +174,20 @@
 // SDK enumerates no operators of its own. Policy belongs to the caller: a [Limits]
 // value supplies the default and maximum size (invalid limits panic as a
 // wiring mistake), and a malformed or out-of-bounds parameter returns a
-// *[QueryError]. On success, [NewPage] assembles the [Page] envelope (items,
-// page, size, total, with nil items marshaling as []), and [WriteJSON] sends
-// it as the response body.
+// *[QueryError].
+//
+// A read is addressed by number (page=3) or by cursor (cursor=<token>), never
+// both. A cursor is the opaque token a previous page's Next carried; the
+// read continues after that page's last item, so a collection that changes
+// between requests neither skips nor repeats a row. A read opts in to the
+// cursor through [Limits], and a read that does not refuses one, so a data
+// layer that cannot continue by cursor never serves the wrong page. On
+// success, [NewPage] assembles the [Page] envelope from the items, the
+// query, and the read's [Paging]: the page number (omitted under a cursor),
+// the size, the total (omitted for [NoTotal], so an uncounted read never
+// reads as empty), whether a further page exists, and the cursor to it. Nil
+// items marshal as [], and [WriteJSON] sends the envelope as the response
+// body.
 //
 // # Request helpers
 //
@@ -195,23 +206,50 @@
 // with a 413 when the body is over its limit and a 400 otherwise. The decode
 // is syntax and shape only; the values' validity is the command's own check.
 //
+// [ReadUpload] accepts a raw body, such as a file's bytes, by its headers
+// before any byte is read: a parsable Content-Type and a declared
+// Content-Length within the caller's limit, returned as an [Upload] whose
+// body is bounded at that limit. A missing or unparsable type is an
+// *[UploadError] answered with a 415, a chunked body with no declared
+// length a 411, and a declared length over the limit a 413; a request with
+// neither a length nor chunked encoding has no body and is a 0-byte upload.
+// The declared length is what lets a store that needs the size up front
+// take the stream without buffering it. [Upload.MediaType] is the type
+// lower-cased without parameters, for a consumer's allowlist, and a
+// consumer's own refusal is an *[UploadError] on Content-Type, a 415.
+//
+// # Proxied objects
+//
+// [WriteObject] sends a stored object's bytes as the response, described by
+// an [Object]: Content-Type, Content-Length, ETag, and Last-Modified from
+// the object, and X-Content-Type-Options: nosniff, since the bytes are
+// stored content a browser must not reinterpret. Preconditions are
+// answered from the Object alone: an If-None-Match naming its tag, or an
+// If-Modified-Since no earlier than its change when If-None-Match is
+// absent, answers 304, and HEAD answers with the headers alone. The bytes
+// are opened only when they are sent, so a revalidation costs the store
+// nothing, and an error opening them is returned uncommitted, for the
+// error writer to answer. Proxying keeps every read behind the
+// service's own authorization, where a redirect to a presigned URL would
+// hand out a bearer credential the service cannot revoke.
+//
 // # Error mapping
 //
 // An [ErrorWriter] turns a handler's returned error into a problem response
 // through a composed [ProblemMatcher] list: the package's own vocabulary is
 // built in (*[QueryError] is a 400; *[PreconditionError] a 428 or a 400;
-// *[BodyError] a 413 or a 400, each an undecorated Problem with only Status
-// set), the consumer's matchers decide the rest in order, first match wins,
-// and an error no matcher claims — or a matcher that claims one without
-// naming a status — is a 500. A matcher may return a Problem with its own
-// Type, Title, Detail, and Extras, not status alone, so problem policy
-// stays with the application and the SDK depends on no infrastructure
-// library's error types or problem vocabulary. A matcher's own Detail
-// always ships; otherwise the detail member carries the error text only on
-// a status in the writer's detail set (400, 413, and 428 built in, the
-// statuses that are request-shaped by construction), so no internal
-// error's text reaches the wire by default; [ErrorWriter.Detail] adds
-// statuses for a surface whose clients need the reason, such as an
+// *[BodyError] a 413 or a 400; *[UploadError] a 415, 411, or 413, each an
+// undecorated Problem with only Status set), the consumer's matchers decide
+// the rest in order, first match wins, and an error no matcher claims — or a
+// matcher that claims one without naming a status — is a 500. A matcher may
+// return a Problem with its own Type, Title, Detail, and Extras, not status
+// alone, so problem policy stays with the application and the SDK depends on
+// no infrastructure library's error types or problem vocabulary. A matcher's
+// own Detail always ships; otherwise the detail member carries the error
+// text only on a status in the writer's detail set (400, 411, 413, 415, and
+// 428 built in, the statuses that are request-shaped by construction), so no
+// internal error's text reaches the wire by default; [ErrorWriter.Detail]
+// adds statuses for a surface whose clients need the reason, such as an
 // operator API's 409.
 //
 // # Error-returning handlers

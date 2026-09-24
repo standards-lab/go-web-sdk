@@ -1,7 +1,9 @@
 package webtest_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,6 +48,51 @@ func TestClient_ProblemsAndDecode(t *testing.T) {
 	if res := c.Get(t, "/missing"); res.Status != http.StatusNotFound {
 		t.Errorf("GET /missing = %d", res.Status)
 	}
+}
+
+// A Raw body is sent under its own media type with its length, as
+// ReadUpload requires; a Raw body with no media type is refused; and a read
+// returns the proxied bytes and their headers whole.
+func TestClient_RawUploadAndObjectRead(t *testing.T) {
+	var stored []byte
+	var storedType string
+	mux := http.NewServeMux()
+	ew := web.NewErrorWriter()
+	mux.Handle("PUT /files/{name}", web.Handle(func(w http.ResponseWriter, r *http.Request) error {
+		u, err := web.ReadUpload(w, r, 1<<10)
+		if err != nil {
+			return err
+		}
+		stored, err = io.ReadAll(u.Body)
+		storedType = u.ContentType
+		if err != nil {
+			return err
+		}
+		w.WriteHeader(http.StatusCreated)
+		return nil
+	}, ew))
+	mux.Handle("GET /files/{name}", web.Handle(func(w http.ResponseWriter, r *http.Request) error {
+		return web.WriteObject(w, r, web.Object{ContentType: storedType, Size: int64(len(stored)), ETag: `"1"`}, func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(stored)), nil
+		})
+	}, ew))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	c := webtest.NewClient(srv.URL)
+
+	png := []byte{0x89, 'P', 'N', 'G'}
+	c.Put(t, "/files/logo.png", webtest.Raw{ContentType: "image/png", Body: png}).Expect(t, http.StatusCreated)
+	_ = c.Put(t, "/files/logo.png", webtest.Raw{Body: png}).Problem(t, http.StatusUnsupportedMediaType)
+	c.Put(t, "/files/logo.png", &webtest.Raw{ContentType: "image/png", Body: png}).Expect(t, http.StatusCreated)
+
+	res := c.Get(t, "/files/logo.png").Expect(t, http.StatusOK)
+	if !bytes.Equal(res.Body, png) {
+		t.Errorf("body = %v, want %v", res.Body, png)
+	}
+	if ct := res.Header.Get("Content-Type"); ct != "image/png" {
+		t.Errorf("Content-Type = %q, want image/png", ct)
+	}
+	c.Get(t, "/files/logo.png", webtest.Header{Name: "If-None-Match", Value: `"1"`}).Expect(t, http.StatusNotModified)
 }
 
 // Live is true only for a server answering the liveness probe with 200.

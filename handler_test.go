@@ -178,7 +178,7 @@ func TestHandleErr_EndToEnd(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return web.WriteJSON(w, http.StatusOK, web.NewPage([]string{"a"}, q, 1))
+		return web.WriteJSON(w, http.StatusOK, web.NewPage([]string{"a"}, q, web.Paging{Total: 1}))
 	})
 	things.HandleErr(http.MethodPatch, "/{id}", func(w http.ResponseWriter, r *http.Request) error {
 		version, err := web.IfMatch(r)

@@ -48,6 +48,15 @@ func IfMatch(version int64) Header {
 	return Header{"If-Match", fmt.Sprintf("%q", fmt.Sprint(version))}
 }
 
+// Raw is a request body sent as is under its own media type, such as a
+// file's bytes for an upload, rather than encoded as JSON. An empty
+// ContentType sends no Content-Type header, so a test can send the request
+// a server refuses for lacking one.
+type Raw struct {
+	ContentType string
+	Body        []byte
+}
+
 // Response is one response, read whole.
 type Response struct {
 	Status int
@@ -56,13 +65,21 @@ type Response struct {
 }
 
 // Do sends method path with body encoded as JSON when it is not nil (a
-// []byte or string body is sent as is), and reads the response whole. A
-// transport failure fails the test.
+// []byte or string body is sent as is under the JSON media type, and a
+// [Raw] body under its own), and reads the response whole. Every body is
+// sent with its Content-Length. A transport failure fails the test.
 func (c *Client) Do(t testing.TB, method, path string, body any, headers ...Header) *Response {
 	t.Helper()
 	var reader io.Reader
+	contentType := "application/json"
 	switch b := body.(type) {
 	case nil:
+	case Raw:
+		reader = bytes.NewReader(b.Body)
+		contentType = b.ContentType
+	case *Raw:
+		reader = bytes.NewReader(b.Body)
+		contentType = b.ContentType
 	case []byte:
 		reader = bytes.NewReader(b)
 	case string:
@@ -78,8 +95,8 @@ func (c *Client) Do(t testing.TB, method, path string, body any, headers ...Head
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if body != nil && contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	for _, h := range headers {
 		req.Header.Set(h.Name, h.Value)
