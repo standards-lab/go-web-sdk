@@ -179,12 +179,15 @@
 // A read is addressed by number (page=3) or by cursor (cursor=<token>), never
 // both. A cursor is the opaque token a previous page's Next carried; the
 // read continues after that page's last item, so a collection that changes
-// between requests neither skips nor repeats a row. On success, [NewPage]
-// assembles the [Page] envelope from the items, the query, and the read's
-// [Paging]: the page number (omitted under a cursor), the size, the total
-// (omitted when the read did not count, so an uncounted read never reads as
-// empty), whether a further page exists, and the cursor to it. Nil items
-// marshal as [], and [WriteJSON] sends the envelope as the response body.
+// between requests neither skips nor repeats a row. A read opts in to the
+// cursor through [Limits], and a read that does not refuses one, so a data
+// layer that cannot continue by cursor never serves the wrong page. On
+// success, [NewPage] assembles the [Page] envelope from the items, the
+// query, and the read's [Paging]: the page number (omitted under a cursor),
+// the size, the total (omitted for [NoTotal], so an uncounted read never
+// reads as empty), whether a further page exists, and the cursor to it. Nil
+// items marshal as [], and [WriteJSON] sends the envelope as the response
+// body.
 //
 // # Request helpers
 //
@@ -207,19 +210,26 @@
 // before any byte is read: a parsable Content-Type and a declared
 // Content-Length within the caller's limit, returned as an [Upload] whose
 // body is bounded at that limit. A missing or unparsable type is an
-// *[UploadError] answered with a 415, a missing length (a chunked body) a
-// 411, and a declared length over the limit a 413. The declared length is
-// what lets a store that needs the size up front take the stream without
-// buffering it.
+// *[UploadError] answered with a 415, a chunked body with no declared
+// length a 411, and a declared length over the limit a 413; a request with
+// neither a length nor chunked encoding has no body and is a 0-byte upload.
+// The declared length is what lets a store that needs the size up front
+// take the stream without buffering it. [Upload.MediaType] is the type
+// lower-cased without parameters, for a consumer's allowlist, and a
+// consumer's own refusal is an *[UploadError] on Content-Type, a 415.
 //
 // # Proxied objects
 //
 // [WriteObject] sends a stored object's bytes as the response, described by
 // an [Object]: Content-Type, Content-Length, ETag, and Last-Modified from
 // the object, and X-Content-Type-Options: nosniff, since the bytes are
-// stored content a browser must not reinterpret. A request whose
-// If-None-Match names the object's tag answers 304 with no body, and HEAD
-// answers with the headers alone. Proxying keeps every read behind the
+// stored content a browser must not reinterpret. Preconditions are
+// answered from the Object alone: an If-None-Match naming its tag, or an
+// If-Modified-Since no earlier than its change when If-None-Match is
+// absent, answers 304, and HEAD answers with the headers alone. The bytes
+// are opened only when they are sent, so a revalidation costs the store
+// nothing, and an error opening them is returned uncommitted, for the
+// error writer to answer. Proxying keeps every read behind the
 // service's own authorization, where a redirect to a presigned URL would
 // hand out a bearer credential the service cannot revoke.
 //

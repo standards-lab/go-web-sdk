@@ -81,7 +81,9 @@ func (e *BodyError) status() int {
 // or "Content-Length"; otherwise TooLarge marks a declared length over the
 // caller's limit. [ErrorWriter] maps a missing or unparsable Content-Type
 // to a 415, since the service cannot tell what it would be storing, a
-// missing Content-Length to a 411, and TooLarge to a 413.
+// missing Content-Length (a chunked body) to a 411, and TooLarge to a 413.
+// A consumer refusing a media type its allowlist does not hold returns one
+// with Header "Content-Type", answered 415 the same way.
 type UploadError struct {
 	Header   string
 	TooLarge bool

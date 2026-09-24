@@ -77,6 +77,9 @@ func (c *Client) Do(t testing.TB, method, path string, body any, headers ...Head
 	case Raw:
 		reader = bytes.NewReader(b.Body)
 		contentType = b.ContentType
+	case *Raw:
+		reader = bytes.NewReader(b.Body)
+		contentType = b.ContentType
 	case []byte:
 		reader = bytes.NewReader(b)
 	case string:

@@ -13,26 +13,41 @@ files through the SDK: `goals.v1.storage.tasks.service`.
 
 ### Added
 
-- `Query.Cursor`: `cursor` is a reserved parameter naming a read by the token a previous page
-  returned. A cursor read has `Page` 0, and a cursor together with `page` is a `*QueryError`.
+- `Query.Cursor` and `Limits.Cursor`: `cursor` is a reserved parameter naming a read by the token
+  a previous page returned, accepted only where `Limits.Cursor` opts the read in and otherwise a
+  `*QueryError`. A cursor read has `Page` 0, and a cursor together with `page` is a
+  `*QueryError`.
 - `Page.More` and `Page.Next`: whether a further page exists, and the token that continues to it.
-- `Paging`, what a fulfilled read reports beyond its items (total, more, next), which a data
-  layer's collection type maps onto field for field.
+- `Paging`, what a fulfilled read reports beyond its items (total, more, next), onto which a data
+  layer's collection type maps directly, and `NoTotal`, the total of a read that did not count.
+  The zero `Paging` reports a counted, empty read.
 - `ReadUpload` and `Upload`: accept a raw body by its headers before any byte is read — a
   parsable `Content-Type` and a declared `Content-Length` within the caller's limit — and bound
-  the body at that limit. `UploadError` maps itself: 415 for a missing or unparsable type, 411
-  for a missing length, 413 for a declared length over the limit.
-- `WriteObject` and `Object`: proxy a stored object as the response with `Content-Type`,
-  `Content-Length`, `ETag`, `Last-Modified`, and `X-Content-Type-Options: nosniff`; answer a
-  weakly matching `If-None-Match` with a 304, and a `HEAD` request with the headers alone.
-- `webtest.Raw`: a request body sent as is under its own media type.
+  the body at that limit. `Upload.MediaType` is the type lower-cased without parameters, for a
+  consumer's allowlist. `UploadError` maps itself: 415 for a missing, unparsable, or
+  consumer-refused type, 411 for a chunked body with no declared length, 413 for a declared
+  length over the limit. A request with neither a length nor chunked encoding has no body and is
+  a 0-byte upload.
+- `WriteObject` and `Object`: proxy a stored object as the response to a GET or HEAD with
+  `Content-Type` (`application/octet-stream` when empty), `Content-Length` (omitted for a
+  negative size), `ETag`, `Last-Modified`, and `X-Content-Type-Options: nosniff`. Preconditions
+  are answered from the `Object` alone (RFC 9110 §13.2.2): a weakly matching `If-None-Match`, or
+  an `If-Modified-Since` no earlier than the change when `If-None-Match` is absent, answers 304.
+  The bytes come from an opener called only when they are sent, so a revalidation or a `HEAD`
+  never touches the store, and an opener's error is returned uncommitted for the error writer.
+- `webtest.Raw`: a request body sent as is under its own media type, by value or pointer.
 
 ### Changed
 
 - **Breaking:** `NewPage` takes a `Paging` in place of the total.
 - **Breaking:** `Page.Total` is `*int`, omitted from the envelope when the read did not count, so
-  an uncounted read never reads as an empty collection; a page read by cursor omits `page`.
-- 411 and 415 join the error writer's default detail set, as request-shaped statuses.
+  an uncounted read never reads as an empty collection; a page read by cursor omits `page`, and
+  the envelope always carries `more`.
+- **Breaking:** `cursor` is reserved. It no longer passes through as a filter, and a read whose
+  `Limits` do not opt in refuses it with a 400.
+- 411 and 415 join the error writer's default detail set, as request-shaped statuses. A consumer
+  matcher mapping its own error to either status without a `Detail` of its own now sends the
+  error text as the problem's detail.
 - The go-core pin moves to v0.4.1.
 
 ## [v0.10.0] - 2026-09-18

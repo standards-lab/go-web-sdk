@@ -1,9 +1,12 @@
 package web_test
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -214,7 +217,7 @@ func TestReadUpload_AcceptsADeclaredBody(t *testing.T) {
 		t.Fatalf("ReadUpload: %v", err)
 	}
 
-	if u.ContentType != "image/png" || u.Size != 9 {
+	if u.ContentType != "image/png" || u.MediaType != "image/png" || u.Size != 9 {
 		t.Errorf("upload = %q, %d, want image/png, 9", u.ContentType, u.Size)
 	}
 	got, err := io.ReadAll(u.Body)
@@ -227,13 +230,16 @@ func TestReadUpload_AcceptsADeclaredBody(t *testing.T) {
 }
 
 func TestReadUpload_KeepsMediaTypeParameters(t *testing.T) {
-	u, _, err := upload(t, strings.NewReader("a"), "text/plain; charset=utf-8", 1, 64)
+	u, _, err := upload(t, strings.NewReader("a"), "Text/Plain; charset=utf-8", 1, 64)
 	if err != nil {
 		t.Fatalf("ReadUpload: %v", err)
 	}
 
-	if u.ContentType != "text/plain; charset=utf-8" {
+	if u.ContentType != "Text/Plain; charset=utf-8" {
 		t.Errorf("ContentType = %q, want the declared value whole", u.ContentType)
+	}
+	if u.MediaType != "text/plain" {
+		t.Errorf("MediaType = %q, want text/plain", u.MediaType)
 	}
 }
 
@@ -296,5 +302,75 @@ func TestReadUpload_BodyIsBoundedAtTheLimit(t *testing.T) {
 	_, err = io.ReadAll(u.Body)
 	if _, ok := errors.AsType[*http.MaxBytesError](err); !ok {
 		t.Errorf("read error = %v, want *http.MaxBytesError", err)
+	}
+}
+
+// On a live server, a request with neither a length nor chunked encoding
+// has no body and arrives as a 0-byte upload; a chunked one is refused
+// with a 411.
+func TestReadUpload_OnTheWire(t *testing.T) {
+	srv := httptest.NewServer(web.Handle(func(w http.ResponseWriter, r *http.Request) error {
+		u, err := web.ReadUpload(w, r, 64)
+		if err != nil {
+			return err
+		}
+		n, err := io.Copy(io.Discard, u.Body)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(w, "size=%d read=%d", u.Size, n)
+		return err
+	}, web.NewErrorWriter()))
+	defer srv.Close()
+
+	tests := []struct {
+		name    string
+		request string
+		status  int
+		body    string
+	}{
+		{
+			"no length header",
+			"PUT / HTTP/1.1\r\nHost: x\r\nContent-Type: image/png\r\nConnection: close\r\n\r\n",
+			http.StatusOK, "size=0 read=0",
+		},
+		{
+			"chunked",
+			"PUT / HTTP/1.1\r\nHost: x\r\nContent-Type: image/png\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n3\r\nabc\r\n0\r\n\r\n",
+			http.StatusLengthRequired, "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conn, err := net.Dial("tcp", srv.Listener.Addr().String())
+			if err != nil {
+				t.Fatalf("dial: %v", err)
+			}
+			defer func() { _ = conn.Close() }()
+			if _, err := io.WriteString(conn, tt.request); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			res, err := http.ReadResponse(bufio.NewReader(conn), nil)
+			if err != nil {
+				t.Fatalf("read response: %v", err)
+			}
+			body, _ := io.ReadAll(res.Body)
+			_ = res.Body.Close()
+
+			if res.StatusCode != tt.status {
+				t.Errorf("status = %d, want %d; body: %s", res.StatusCode, tt.status, body)
+			}
+			if tt.body != "" && string(body) != tt.body {
+				t.Errorf("body = %q, want %q", body, tt.body)
+			}
+		})
+	}
+}
+
+func TestUploadError_ConsumerRefusalIs415(t *testing.T) {
+	err := &web.UploadError{Header: "Content-Type", Reason: "image/gif is not an accepted logo type"}
+
+	if got := web.NewErrorWriter().Status(err); got != http.StatusUnsupportedMediaType {
+		t.Errorf("Status = %d, want 415", got)
 	}
 }

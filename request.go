@@ -56,11 +56,14 @@ func DecodeJSON[T any](w http.ResponseWriter, r *http.Request, limit int64) (T, 
 	return v, nil
 }
 
-// Upload is a raw request body declared by its own headers: the media type
-// the client named, the exact size it declared, and the body, which reads
-// at most Size bytes.
+// Upload is a raw request body declared by its own headers: the
+// Content-Type the client sent, whole, for storing and serving back; its
+// media type, lower-cased with the parameters set aside, for a consumer's
+// allowlist; the size it declared; and the body, bounded at the caller's
+// limit and, on a live server, held by net/http to Size bytes.
 type Upload struct {
 	ContentType string
+	MediaType   string
 	Size        int64
 	Body        io.Reader
 }
@@ -70,21 +73,28 @@ type Upload struct {
 // Content-Type that parses as a media type, and must declare a
 // Content-Length, so the size is known before the body is stored anywhere
 // and a store that needs it up front never buffers the stream to learn it.
-// A missing or unparsable type, a missing length (a chunked body), or a
-// declared length over limit is a *[UploadError]. The body is bounded at
-// limit through http.MaxBytesReader, as [DecodeJSON]'s is, and net/http
-// itself holds the body to its declared length. ReadUpload checks headers
-// only: whether the service stores that media type is the consumer's check.
+// A missing or unparsable type, a chunked body (one with no declared
+// length), or a declared length over limit is a *[UploadError]. A request
+// with neither a length nor chunked encoding has no body under HTTP/1.1
+// and arrives as a 0-byte upload, which is valid, since an empty file is;
+// a consumer that refuses empty files checks Size. The body is bounded at
+// limit through http.MaxBytesReader, as [DecodeJSON]'s is.
+//
+// ReadUpload checks headers only: whether the service stores that media
+// type is the consumer's check, made against [Upload.MediaType], and a
+// refusal returned as &UploadError{Header: "Content-Type", Reason: ...}
+// answers 415 like ReadUpload's own.
 func ReadUpload(w http.ResponseWriter, r *http.Request, limit int64) (Upload, error) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" {
 		return Upload{}, &UploadError{Header: "Content-Type", Reason: "the request requires a Content-Type header"}
 	}
-	if _, _, err := mime.ParseMediaType(ct); err != nil {
+	mediaType, _, err := mime.ParseMediaType(ct)
+	if err != nil {
 		return Upload{}, &UploadError{Header: "Content-Type", Reason: fmt.Sprintf("Content-Type %q: %v", ct, err)}
 	}
 	if r.ContentLength < 0 {
-		return Upload{}, &UploadError{Header: "Content-Length", Reason: "the request requires a Content-Length header"}
+		return Upload{}, &UploadError{Header: "Content-Length", Reason: "the request requires a Content-Length header, not a chunked body"}
 	}
 	if r.ContentLength > limit {
 		return Upload{}, &UploadError{
@@ -94,6 +104,7 @@ func ReadUpload(w http.ResponseWriter, r *http.Request, limit int64) (Upload, er
 	}
 	return Upload{
 		ContentType: ct,
+		MediaType:   mediaType,
 		Size:        r.ContentLength,
 		Body:        http.MaxBytesReader(w, r.Body, limit),
 	}, nil

@@ -47,8 +47,10 @@ func TestParseQuery_PageAndSize(t *testing.T) {
 	}
 }
 
+var cursorLimits = web.Limits{DefaultSize: 25, MaxSize: 100, Cursor: true}
+
 func TestParseQuery_CursorAddressesTheReadWithoutANumber(t *testing.T) {
-	q, err := web.ParseQuery(url.Values{"cursor": {"opaque-token"}, "size": {"10"}, "status": {"active"}}, limits)
+	q, err := web.ParseQuery(url.Values{"cursor": {"opaque-token"}, "size": {"10"}, "status": {"active"}}, cursorLimits)
 	if err != nil {
 		t.Fatalf("ParseQuery: %v", err)
 	}
@@ -64,13 +66,34 @@ func TestParseQuery_CursorAddressesTheReadWithoutANumber(t *testing.T) {
 }
 
 func TestParseQuery_EmptyCursorReadsAsOmitted(t *testing.T) {
-	q, err := web.ParseQuery(url.Values{"cursor": {""}, "page": {"2"}}, limits)
+	q, err := web.ParseQuery(url.Values{"cursor": {""}, "page": {"2"}}, cursorLimits)
 	if err != nil {
 		t.Fatalf("ParseQuery: %v", err)
 	}
 
 	if q.Page != 2 || q.Cursor != "" {
 		t.Errorf("page, cursor = %d, %q, want 2, empty", q.Page, q.Cursor)
+	}
+}
+
+func TestParseQuery_CursorWithAPageIsRefused(t *testing.T) {
+	_, err := web.ParseQuery(url.Values{"cursor": {"abc"}, "page": {"2"}}, cursorLimits)
+
+	qerr, ok := errors.AsType[*web.QueryError](err)
+	if !ok || qerr.Param != "cursor" || qerr.Reason != "cannot be combined with page" {
+		t.Fatalf("error = %v, want the cursor-and-page refusal", err)
+	}
+}
+
+func TestParseQuery_CursorOnlyWhereTheReadOptsIn(t *testing.T) {
+	_, err := web.ParseQuery(url.Values{"cursor": {"opaque-token"}}, limits)
+
+	qerr, ok := errors.AsType[*web.QueryError](err)
+	if !ok {
+		t.Fatalf("error = %v, want *QueryError", err)
+	}
+	if qerr.Param != "cursor" {
+		t.Errorf("param = %q, want cursor", qerr.Param)
 	}
 }
 
@@ -244,7 +267,7 @@ func TestParseQuery_Rejections(t *testing.T) {
 		{"size over the cap", url.Values{"size": {"101"}}, "size"},
 		{"sort trailing comma", url.Values{"sort": {"name,"}}, "sort"},
 		{"sort bare minus", url.Values{"sort": {"-"}}, "sort"},
-		{"cursor with a page", url.Values{"cursor": {"abc"}, "page": {"2"}}, "cursor"},
+		{"cursor where the read does not opt in", url.Values{"cursor": {"abc"}}, "cursor"},
 		{"cursor with an operator", url.Values{"cursor[eq]": {"abc"}}, "cursor"},
 	}
 	for _, tt := range tests {

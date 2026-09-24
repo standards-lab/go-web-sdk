@@ -72,7 +72,9 @@ func TestClient_RawUploadAndObjectRead(t *testing.T) {
 		return nil
 	}, ew))
 	mux.Handle("GET /files/{name}", web.Handle(func(w http.ResponseWriter, r *http.Request) error {
-		return web.WriteObject(w, r, web.Object{ContentType: storedType, Size: int64(len(stored)), ETag: `"1"`}, bytes.NewReader(stored))
+		return web.WriteObject(w, r, web.Object{ContentType: storedType, Size: int64(len(stored)), ETag: `"1"`}, func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(stored)), nil
+		})
 	}, ew))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -81,6 +83,7 @@ func TestClient_RawUploadAndObjectRead(t *testing.T) {
 	png := []byte{0x89, 'P', 'N', 'G'}
 	c.Put(t, "/files/logo.png", webtest.Raw{ContentType: "image/png", Body: png}).Expect(t, http.StatusCreated)
 	_ = c.Put(t, "/files/logo.png", webtest.Raw{Body: png}).Problem(t, http.StatusUnsupportedMediaType)
+	c.Put(t, "/files/logo.png", &webtest.Raw{ContentType: "image/png", Body: png}).Expect(t, http.StatusCreated)
 
 	res := c.Get(t, "/files/logo.png").Expect(t, http.StatusOK)
 	if !bytes.Equal(res.Body, png) {

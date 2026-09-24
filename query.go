@@ -60,14 +60,19 @@ type Query struct {
 	Cursor  string
 }
 
-// Limits bounds query parsing: the page size when a request omits one, and
-// the largest size a request may ask for. The package holds no policy
-// numbers of its own; a consumer declares them here. DefaultSize must be at
-// least 1 and MaxSize at least DefaultSize — [ParseQuery] panics
-// otherwise, since invalid limits are a wiring mistake, not request input.
+// Limits bounds query parsing: the page size when a request omits one, the
+// largest size a request may ask for, and whether the read continues by
+// cursor. The package holds no policy numbers of its own; a consumer
+// declares them here. DefaultSize must be at least 1 and MaxSize at least
+// DefaultSize — [ParseQuery] panics otherwise, since invalid limits are a
+// wiring mistake, not request input. Cursor opts a read in to the cursor
+// parameter: a read whose data layer cannot continue by cursor leaves it
+// false, and a request naming one is refused rather than served from the
+// wrong page.
 type Limits struct {
 	DefaultSize int
 	MaxSize     int
+	Cursor      bool
 }
 
 // ParseQuery parses one read request's query string in full: the page,
@@ -78,9 +83,9 @@ type Limits struct {
 // is comma-separated field names, each optionally prefixed with "-" for
 // descending, honored across every occurrence of the parameter in order; an
 // empty parameter value reads as omitted. A cursor names the read by the
-// token a previous page returned, and a request naming both a cursor and a
-// page is rejected, since the two addresses disagree about where the page
-// starts.
+// token a previous page returned; it is refused where [Limits] does not opt
+// the read in, and a request naming both a cursor and a page is rejected,
+// since the two addresses disagree about where the page starts.
 //
 // A filter parameter is a field name, optionally followed by an operator in
 // brackets: "status=active" is the field alone, "created[gte]=2026-01-01"
@@ -111,6 +116,12 @@ func ParseQuery(q url.Values, l Limits) (Query, error) {
 	}
 
 	if v := q.Get("cursor"); v != "" {
+		if !l.Cursor {
+			return Query{}, &QueryError{
+				Param: "cursor", Value: v,
+				Reason: "this read does not continue by cursor",
+			}
+		}
 		if p := q.Get("page"); p != "" {
 			return Query{}, &QueryError{
 				Param: "cursor", Value: v,
