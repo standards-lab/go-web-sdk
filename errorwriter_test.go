@@ -2,6 +2,7 @@ package web_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -311,48 +312,94 @@ func TestErrorWriter_WriteAboveA400SendsNoErrorText(t *testing.T) {
 	}
 }
 
-// A 500 carries no detail on the wire, so its cause goes to the log with
-// the request and its correlation id; a claimed status is not logged.
-func TestErrorWriter_Write500LogsTheCause(t *testing.T) {
+// A 5xx carries no detail on the wire, so its cause goes to the log with
+// the request, its status, and its correlation id: a 503 at warn, any
+// other 5xx at error, a client's hang-up at debug. A 4xx is not logged.
+func TestErrorWriter_Write5xxLogsTheCause(t *testing.T) {
+	errDown := errors.New("store: connection refused")
+	cases := map[string]struct {
+		err    error
+		cancel bool
+		status float64
+		level  string
+	}{
+		"unclaimed":      {errors.New("driver: connection reset"), false, 500, "ERROR"},
+		"claimed 500":    {errBroken, false, 500, "ERROR"},
+		"no status":      {errNoStatus, false, 500, "ERROR"},
+		"outage":         {errDown, false, 503, "WARN"},
+		"client hang-up": {fmt.Errorf("read body: %w", context.Canceled), true, 500, "DEBUG"},
+		"server cancel":  {fmt.Errorf("query: %w", context.Canceled), false, 500, "ERROR"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			ew := web.NewErrorWriter(
+				matcherFor(errDown, http.StatusServiceUnavailable),
+				matcherFor(errBroken, http.StatusInternalServerError),
+				matcherFor(errNoStatus, 0),
+			)
+			ew.Log(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+			req := httptest.NewRequest(http.MethodPost, "/things", nil)
+			ctx := web.WithRequestID(req.Context(), "req-1")
+			if c.cancel {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			rec := httptest.NewRecorder()
+			if err := ew.Write(rec, req.WithContext(ctx), c.err); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(rec.Body.String(), c.err.Error()) {
+				t.Errorf("body = %s, want the cause withheld", rec.Body)
+			}
+			var entry map[string]any
+			if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+				t.Fatalf("log = %q: %v", buf.String(), err)
+			}
+			want := map[string]any{
+				"level":                     c.level,
+				"error":                     c.err.Error(),
+				"http.request.method":       "POST",
+				"url.path":                  "/things",
+				"http.response.status_code": c.status,
+				"request_id":                "req-1",
+			}
+			for k, v := range want {
+				if entry[k] != v {
+					t.Errorf("log %s = %v, want %v", k, entry[k], v)
+				}
+			}
+		})
+	}
+
 	var buf bytes.Buffer
 	ew := web.NewErrorWriter(matcherFor(errConflict, http.StatusConflict))
-	ew.Log(slog.New(slog.NewJSONHandler(&buf, nil)))
-
-	req := httptest.NewRequest(http.MethodPost, "/things", nil)
-	req = req.WithContext(web.WithRequestID(req.Context(), "req-1"))
-	rec := httptest.NewRecorder()
-	if err := ew.Write(rec, req, errors.New("driver: connection reset")); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(rec.Body.String(), "connection reset") {
-		t.Errorf("body = %s, want the cause withheld", rec.Body)
-	}
-
-	var entry map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
-		t.Fatalf("log = %q: %v", buf.String(), err)
-	}
-	want := map[string]any{
-		"level":                     "ERROR",
-		"error":                     "driver: connection reset",
-		"http.request.method":       "POST",
-		"url.path":                  "/things",
-		"http.response.status_code": float64(500),
-		"request_id":                "req-1",
-	}
-	for k, v := range want {
-		if entry[k] != v {
-			t.Errorf("log %s = %v, want %v", k, entry[k], v)
-		}
-	}
-
-	buf.Reset()
-	if err := ew.Write(httptest.NewRecorder(), req, errConflict); err != nil {
+	ew.Log(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	if err := ew.Write(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil), errConflict); err != nil {
 		t.Fatal(err)
 	}
 	if buf.Len() != 0 {
 		t.Errorf("a claimed 409 logged %q, want nothing", buf.String())
 	}
 }
+
+// A 500 through Handle is one error record, the writer's: Handle logs only
+// what it could not write.
+func TestHandle_500IsLoggedOnce(t *testing.T) {
+	var buf bytes.Buffer
+	ew := web.NewErrorWriter()
+	ew.Log(slog.New(slog.NewJSONHandler(&buf, nil)))
+	h := web.Handle(func(http.ResponseWriter, *http.Request) error { return errors.New("boom") }, ew)
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	if n := strings.Count(buf.String(), "\n"); n != 1 {
+		t.Errorf("records = %d (%q), want one", n, buf.String())
+	}
+}
+
+var (
+	errBroken   = errors.New("broken invariant")
+	errNoStatus = errors.New("claimed without a status")
+)
 
 var errConflict = errors.New("conflict")

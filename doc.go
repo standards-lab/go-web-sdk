@@ -233,7 +233,7 @@
 // service's own authorization, where a redirect to a presigned URL would
 // hand out a bearer credential the service cannot revoke. [Attachment]
 // builds a download's Content-Disposition header: the RFC 6266 filename,
-// plus its RFC 8187 form for a name outside ASCII. A handler sets the
+// plus its RFC 8187 form for a name outside printable ASCII or holding a %. A handler sets the
 // header before calling WriteObject, which keeps it.
 //
 // # Error mapping

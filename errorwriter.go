@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -58,7 +59,7 @@ func (ew *ErrorWriter) Detail(statuses ...int) {
 }
 
 // Log sets the logger the writer reports to. The writer logs the cause of
-// every 500 it writes, since the response carries no detail and the cause
+// every 5xx it writes, since the response carries no detail and the cause
 // would otherwise be lost. It also logs an error it cannot write: one that a
 // handler adapted by [Handle] returned after committing its response, or a
 // problem whose body the encoder failed to write. Unset, the writer reports
@@ -108,15 +109,19 @@ func (ew *ErrorWriter) Status(err error) int {
 // 411, 413, 415, and 428 built in, plus whatever [ErrorWriter.Detail]
 // added), where it is request-shaped and client-actionable — every other
 // status sends no detail, so an internal error's text never reaches the
-// wire by default. Write logs a 500's cause instead, at error level
-// through [ErrorWriter.Log]'s logger, with the attributes [Handle]'s
-// failure records carry. No other status is logged, since each reports the
-// client's error or a named condition.
+// wire by default. Write logs the cause of every 5xx instead, since the
+// response withholds it, through [ErrorWriter.Log]'s logger with the
+// attributes [Handle]'s failure records carry: a 503 at warn level, as a
+// dependency's outage the service reports rather than a fault of its own,
+// and every other 5xx at error level. A cause that is the request's own
+// cancellation, the client having gone away, is logged at debug level,
+// since it says nothing about the service. A 4xx is the client's and is
+// not logged.
 // The returned error is the encoder's, as from [Problem.WriteFor].
 func (ew *ErrorWriter) Write(w http.ResponseWriter, r *http.Request, err error) error {
 	p := ew.Problem(err)
-	if p.Status == http.StatusInternalServerError {
-		ew.logCause(r, err)
+	if p.Status >= http.StatusInternalServerError {
+		ew.logCause(r, p.Status, err)
 	}
 	if p.Detail == "" {
 		if _, ok := ew.detail[p.Status]; ok {
@@ -126,13 +131,16 @@ func (ew *ErrorWriter) Write(w http.ResponseWriter, r *http.Request, err error) 
 	return p.WriteFor(w, r)
 }
 
-// logCause reports the error behind a 500, which the response withholds,
-// with the attribute set [Handle]'s failure records carry.
-func (ew *ErrorWriter) logCause(r *http.Request, err error) {
-	ew.log().LogAttrs(
-		r.Context(),
-		slog.LevelError,
-		"internal server error",
-		handleAttrs(r, http.StatusInternalServerError, err)...,
-	)
+// logCause reports the error behind a 5xx, which the response withholds,
+// with the attribute set [Handle]'s failure records carry, at the level
+// [ErrorWriter.Write] documents.
+func (ew *ErrorWriter) logCause(r *http.Request, status int, err error) {
+	level := slog.LevelError
+	switch {
+	case errors.Is(err, context.Canceled) && r.Context().Err() != nil:
+		level = slog.LevelDebug
+	case status == http.StatusServiceUnavailable:
+		level = slog.LevelWarn
+	}
+	ew.log().LogAttrs(r.Context(), level, "server error response", handleAttrs(r, status, err)...)
 }

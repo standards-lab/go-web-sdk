@@ -41,30 +41,33 @@ type Object struct {
 // Attachment returns the Content-Disposition value that makes a response a
 // download named name, never rendered inline (RFC 6266). The value carries
 // the name as a quoted filename, with a quote or a backslash escaped as a
-// quoted pair. For a name outside printable ASCII, the quoted filename is a
-// fallback with each rune outside that range replaced by an underscore, and
-// filename* follows with the exact name in RFC 8187's encoding, which a
-// recipient prefers. A handler sets the header before calling [WriteObject],
+// quoted pair. For a name outside printable ASCII, or one holding a %,
+// which some browsers percent-decode in a plain filename, the quoted
+// filename is a fallback with each such character replaced by an
+// underscore, and filename* follows with the name in RFC 8187's encoding,
+// which a recipient prefers; a byte that is not valid UTF-8 is carried
+// there as U+FFFD. A handler sets the header before calling [WriteObject],
 // which keeps it.
 func Attachment(name string) string {
 	var fallback strings.Builder
-	ascii := true
+	plain := true
 	for _, c := range name {
 		switch {
 		case c == '"' || c == '\\':
 			fallback.WriteByte('\\')
 			fallback.WriteRune(c)
-		case c < 0x20 || c > 0x7e:
-			ascii = false
+		case c < 0x20 || c > 0x7e || c == '%':
+			plain = false
 			fallback.WriteByte('_')
 		default:
 			fallback.WriteRune(c)
 		}
 	}
 	header := `attachment; filename="` + fallback.String() + `"`
-	if ascii {
+	if plain {
 		return header
 	}
+	name = strings.ToValidUTF8(name, "\uFFFD")
 	var encoded strings.Builder
 	for i := 0; i < len(name); i++ {
 		if b := name[i]; attrChar(b) {
