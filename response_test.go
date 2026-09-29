@@ -342,3 +342,25 @@ func TestNoTotal_OmitsTheTotal(t *testing.T) {
 		t.Errorf("total = %d, want absent", *p.Total)
 	}
 }
+
+func TestAttachment(t *testing.T) {
+	cases := map[string]struct{ name, want string }{
+		"plain":     {"report.txt", `attachment; filename="report.txt"`},
+		"quoted":    {`a "b"\c.html`, `attachment; filename="a \"b\"\\c.html"`},
+		"control":   {"a\tb.txt", `attachment; filename="a_b.txt"; filename*=UTF-8''a%09b.txt`},
+		"crlf":      {"a\r\nSet-Cookie: x.txt", `attachment; filename="a__Set-Cookie: x.txt"; filename*=UTF-8''a%0D%0ASet-Cookie%3A%20x.txt`},
+		"del":       {"a\x7fb", `attachment; filename="a_b"; filename*=UTF-8''a%7Fb`},
+		"percent":   {"100%41.txt", `attachment; filename="100_41.txt"; filename*=UTF-8''100%2541.txt`},
+		"encoded":   {"it's*.txt", `attachment; filename="it's*.txt"`},
+		"invalid":   {"\xff.txt", `attachment; filename="_.txt"; filename*=UTF-8''%EF%BF%BD.txt`},
+		"empty":     {"", `attachment; filename=""`},
+		"non-ascii": {"résumé 1.pdf", `attachment; filename="r_sum_ 1.pdf"; filename*=UTF-8''r%C3%A9sum%C3%A9%201.pdf`},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := web.Attachment(c.name); got != c.want {
+				t.Errorf("Attachment(%q) = %s, want %s", c.name, got, c.want)
+			}
+		})
+	}
+}

@@ -6,6 +6,28 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.12.0] - 2026-09-29
+
+The download header builder and the logging of a 5xx's cause, promoted from go-web-service's
+storage layer, where they were staged: `goals.v1.storage.tasks.suite`.
+
+### Added
+
+- `Attachment` returns the `Content-Disposition` value of a download (RFC 6266): the quoted
+  filename, with a quote or a backslash escaped. For a name outside printable ASCII or holding a
+  `%`, which some browsers percent-decode in a plain filename, the quoted filename is a fallback
+  with an underscore for each such character, followed by the name as `filename*` in RFC 8187's
+  encoding, with any invalid UTF-8 carried as U+FFFD. No control character reaches the header.
+  `WriteObject` keeps the header when a handler sets it first.
+
+### Changed
+
+- `ErrorWriter.Write` logs the cause of every 5xx it sends through the writer's logger
+  (`ErrorWriter.Log`, slog's default when unset), with the attributes `Handle`'s failure records
+  carry and the response's status: a 503 at warn level, every other 5xx at error level, and a
+  cause that is the request's own cancellation, the client having gone away, at debug level. The
+  response still withholds the cause from the wire. A 4xx is not logged.
+
 ## [v0.11.0] - 2026-09-24
 
 The read contract's cursor, the raw-body helpers, and the object proxy, for a service that stores
@@ -336,7 +358,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.12.0...HEAD
+[v0.12.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.11.0...v0.12.0
 [v0.11.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.10.0...v0.11.0
 [v0.10.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.9.0...v0.10.0
 [v0.9.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.8.0...v0.9.0
