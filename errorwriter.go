@@ -57,11 +57,12 @@ func (ew *ErrorWriter) Detail(statuses ...int) {
 	}
 }
 
-// Log sets the logger the writer reports to: the cause of every 500 it
-// writes, since the response carries no detail and the cause would
-// otherwise be lost, and an error that cannot be written — a handler
-// adapted by [Handle] that returned an error after committing its
-// response, or a problem whose body the encoder failed to write. Unset, the writer reports through slog's default logger.
+// Log sets the logger the writer reports to. The writer logs the cause of
+// every 500 it writes, since the response carries no detail and the cause
+// would otherwise be lost. It also logs an error it cannot write: one that a
+// handler adapted by [Handle] returned after committing its response, or a
+// problem whose body the encoder failed to write. Unset, the writer reports
+// through slog's default logger.
 // Called at wiring time, like [ErrorWriter.Detail].
 func (ew *ErrorWriter) Log(logger *slog.Logger) {
 	ew.logger = logger
@@ -107,10 +108,10 @@ func (ew *ErrorWriter) Status(err error) int {
 // 411, 413, 415, and 428 built in, plus whatever [ErrorWriter.Detail]
 // added), where it is request-shaped and client-actionable — every other
 // status sends no detail, so an internal error's text never reaches the
-// wire by default. A 500's cause is logged instead, at error level through
-// [ErrorWriter.Log]'s logger, with the attributes [Handle]'s records carry;
-// every other status is the client's or a named condition's, and is not
-// logged.
+// wire by default. Write logs a 500's cause instead, at error level
+// through [ErrorWriter.Log]'s logger, with the attributes [Handle]'s
+// failure records carry. No other status is logged, since each reports the
+// client's error or a named condition.
 // The returned error is the encoder's, as from [Problem.WriteFor].
 func (ew *ErrorWriter) Write(w http.ResponseWriter, r *http.Request, err error) error {
 	p := ew.Problem(err)

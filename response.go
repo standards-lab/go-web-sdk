@@ -39,12 +39,13 @@ type Object struct {
 }
 
 // Attachment returns the Content-Disposition value that makes a response a
-// download named name, never rendered inline (RFC 6266): the quoted
-// filename, a quote or a backslash escaped as a quoted pair, and for a name
-// outside printable ASCII a fallback with each such rune replaced by an
-// underscore, followed by the exact name as filename* in RFC 8187's
-// encoding, which a recipient prefers. A handler sets it before
-// [WriteObject], which keeps it.
+// download named name, never rendered inline (RFC 6266). The value carries
+// the name as a quoted filename, with a quote or a backslash escaped as a
+// quoted pair. For a name outside printable ASCII, the quoted filename is a
+// fallback with each rune outside that range replaced by an underscore, and
+// filename* follows with the exact name in RFC 8187's encoding, which a
+// recipient prefers. A handler sets the header before calling [WriteObject],
+// which keeps it.
 func Attachment(name string) string {
 	var fallback strings.Builder
 	ascii := true

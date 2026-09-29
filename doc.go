@@ -232,9 +232,9 @@
 // error writer to answer. Proxying keeps every read behind the
 // service's own authorization, where a redirect to a presigned URL would
 // hand out a bearer credential the service cannot revoke. [Attachment]
-// builds the Content-Disposition of a download, the RFC 6266 filename with
-// its RFC 8187 form for a name outside ASCII; a handler sets it before
-// WriteObject, which keeps it.
+// builds a download's Content-Disposition header: the RFC 6266 filename,
+// plus its RFC 8187 form for a name outside ASCII. A handler sets the
+// header before calling WriteObject, which keeps it.
 //
 // # Error mapping
 //
@@ -269,7 +269,7 @@
 // then returned an error is reported through the writer's logger
 // ([ErrorWriter.Log], slog's default when unset) and nothing more is
 // written. The same logger records the cause of every 500 the writer sends,
-// since the problem withholds it from the wire.
+// since the response withholds it from the wire.
 //
 // # Problem responses
 //
