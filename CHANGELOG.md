@@ -6,6 +6,22 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+Promoted from go-web-service's storage layer, where they were staged: `goals.v1.storage.tasks.suite`.
+
+### Added
+
+- `Attachment`: the `Content-Disposition` value of a download (RFC 6266), the quoted filename with
+  a quote or a backslash escaped, and for a name outside printable ASCII an underscored fallback
+  followed by the exact name as `filename*` in RFC 8187's encoding. `WriteObject` keeps it when a
+  handler sets it first.
+
+### Changed
+
+- `ErrorWriter.Write` logs the cause of every 500 it sends, at error level through the writer's
+  logger (`ErrorWriter.Log`, slog's default when unset), with the attributes `Handle`'s failure
+  records carry. The problem still withholds the cause from the wire. Any other status is not
+  logged.
+
 ## [v0.11.0] - 2026-09-24
 
 The read contract's cursor, the raw-body helpers, and the object proxy, for a service that stores

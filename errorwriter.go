@@ -57,10 +57,11 @@ func (ew *ErrorWriter) Detail(statuses ...int) {
 	}
 }
 
-// Log sets the logger the writer reports to when an error cannot be
-// written: a handler adapted by [Handle] that returned an error after
-// committing its response, or a problem whose body the encoder failed to
-// write. Unset, the writer reports through slog's default logger.
+// Log sets the logger the writer reports to: the cause of every 500 it
+// writes, since the response carries no detail and the cause would
+// otherwise be lost, and an error that cannot be written — a handler
+// adapted by [Handle] that returned an error after committing its
+// response, or a problem whose body the encoder failed to write. Unset, the writer reports through slog's default logger.
 // Called at wiring time, like [ErrorWriter.Detail].
 func (ew *ErrorWriter) Log(logger *slog.Logger) {
 	ew.logger = logger
@@ -106,14 +107,31 @@ func (ew *ErrorWriter) Status(err error) int {
 // 411, 413, 415, and 428 built in, plus whatever [ErrorWriter.Detail]
 // added), where it is request-shaped and client-actionable — every other
 // status sends no detail, so an internal error's text never reaches the
-// wire by default.
+// wire by default. A 500's cause is logged instead, at error level through
+// [ErrorWriter.Log]'s logger, with the attributes [Handle]'s records carry;
+// every other status is the client's or a named condition's, and is not
+// logged.
 // The returned error is the encoder's, as from [Problem.WriteFor].
 func (ew *ErrorWriter) Write(w http.ResponseWriter, r *http.Request, err error) error {
 	p := ew.Problem(err)
+	if p.Status == http.StatusInternalServerError {
+		ew.logCause(r, err)
+	}
 	if p.Detail == "" {
 		if _, ok := ew.detail[p.Status]; ok {
 			p.Detail = err.Error()
 		}
 	}
 	return p.WriteFor(w, r)
+}
+
+// logCause reports the error behind a 500, which the response withholds,
+// with the attribute set [Handle]'s failure records carry.
+func (ew *ErrorWriter) logCause(r *http.Request, err error) {
+	ew.log().LogAttrs(
+		r.Context(),
+		slog.LevelError,
+		"internal server error",
+		handleAttrs(r, http.StatusInternalServerError, err)...,
+	)
 }

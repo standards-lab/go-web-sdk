@@ -1,11 +1,14 @@
 package web_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
@@ -307,3 +310,49 @@ func TestErrorWriter_WriteAboveA400SendsNoErrorText(t *testing.T) {
 		})
 	}
 }
+
+// A 500 carries no detail on the wire, so its cause goes to the log with
+// the request and its correlation id; a claimed status is not logged.
+func TestErrorWriter_Write500LogsTheCause(t *testing.T) {
+	var buf bytes.Buffer
+	ew := web.NewErrorWriter(matcherFor(errConflict, http.StatusConflict))
+	ew.Log(slog.New(slog.NewJSONHandler(&buf, nil)))
+
+	req := httptest.NewRequest(http.MethodPost, "/things", nil)
+	req = req.WithContext(web.WithRequestID(req.Context(), "req-1"))
+	rec := httptest.NewRecorder()
+	if err := ew.Write(rec, req, errors.New("driver: connection reset")); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(rec.Body.String(), "connection reset") {
+		t.Errorf("body = %s, want the cause withheld", rec.Body)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("log = %q: %v", buf.String(), err)
+	}
+	want := map[string]any{
+		"level":                     "ERROR",
+		"error":                     "driver: connection reset",
+		"http.request.method":       "POST",
+		"url.path":                  "/things",
+		"http.response.status_code": float64(500),
+		"request_id":                "req-1",
+	}
+	for k, v := range want {
+		if entry[k] != v {
+			t.Errorf("log %s = %v, want %v", k, entry[k], v)
+		}
+	}
+
+	buf.Reset()
+	if err := ew.Write(httptest.NewRecorder(), req, errConflict); err != nil {
+		t.Fatal(err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("a claimed 409 logged %q, want nothing", buf.String())
+	}
+}
+
+var errConflict = errors.New("conflict")

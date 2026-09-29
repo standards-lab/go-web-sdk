@@ -342,3 +342,19 @@ func TestNoTotal_OmitsTheTotal(t *testing.T) {
 		t.Errorf("total = %d, want absent", *p.Total)
 	}
 }
+
+func TestAttachment(t *testing.T) {
+	cases := map[string]struct{ name, want string }{
+		"plain":     {"report.txt", `attachment; filename="report.txt"`},
+		"quoted":    {`a "b"\c.html`, `attachment; filename="a \"b\"\\c.html"`},
+		"control":   {"a\tb.txt", `attachment; filename="a_b.txt"; filename*=UTF-8''a%09b.txt`},
+		"non-ascii": {"résumé 1.pdf", `attachment; filename="r_sum_ 1.pdf"; filename*=UTF-8''r%C3%A9sum%C3%A9%201.pdf`},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := web.Attachment(c.name); got != c.want {
+				t.Errorf("Attachment(%q) = %s, want %s", c.name, got, c.want)
+			}
+		})
+	}
+}

@@ -231,7 +231,10 @@
 // nothing, and an error opening them is returned uncommitted, for the
 // error writer to answer. Proxying keeps every read behind the
 // service's own authorization, where a redirect to a presigned URL would
-// hand out a bearer credential the service cannot revoke.
+// hand out a bearer credential the service cannot revoke. [Attachment]
+// builds the Content-Disposition of a download, the RFC 6266 filename with
+// its RFC 8187 form for a name outside ASCII; a handler sets it before
+// WriteObject, which keeps it.
 //
 // # Error mapping
 //
@@ -265,7 +268,8 @@
 // never writes a second response: a handler that committed a response and
 // then returned an error is reported through the writer's logger
 // ([ErrorWriter.Log], slog's default when unset) and nothing more is
-// written.
+// written. The same logger records the cause of every 500 the writer sends,
+// since the problem withholds it from the wire.
 //
 // # Problem responses
 //
