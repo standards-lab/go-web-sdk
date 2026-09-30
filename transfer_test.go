@@ -50,8 +50,8 @@ func TestConfig_TransferRate(t *testing.T) {
 }
 
 // A Transfer allows grace plus the body's size, capped at the limit, at
-// the rate; a negative size is the limit's, and a transfer too long for a
-// Duration saturates rather than overflow. Config.Transfer takes the
+// the rate; a negative size counts as the limit, and a transfer too long
+// for a Duration saturates rather than overflowing. Config.Transfer takes the
 // longer of the read and write timeouts as its grace.
 func TestTransfer_Duration(t *testing.T) {
 	tr := web.NewTransfer(10<<20, 1<<20, 5*time.Second)
@@ -105,9 +105,8 @@ func TestTransfer_PanicsOnADefect(t *testing.T) {
 	}
 }
 
-// timedServer serves h with tight read and write timeouts, as a Config's
-// defaults would set them, scaled down, through web.Handle, as a service's
-// routes are served.
+// timedServer serves h through web.Handle, as a service serves its routes,
+// with tight read and write timeouts: a Config's defaults, scaled down.
 func timedServer(t *testing.T, h web.HandlerFunc) *httptest.Server {
 	t.Helper()
 	ew := web.NewErrorWriter(slog.New(slog.DiscardHandler))
@@ -119,7 +118,7 @@ func timedServer(t *testing.T, h web.HandlerFunc) *httptest.Server {
 	return srv
 }
 
-// pacedBody sends n bytes in chunks of size, pausing between chunks.
+// pacedBody yields left bytes in chunks of size, pausing before each chunk.
 type pacedBody struct {
 	left, size int
 	pause      time.Duration
@@ -136,7 +135,7 @@ func (p *pacedBody) Read(b []byte) (int, error) {
 }
 
 // WidenUpload lets a client within the rate send a body for longer than
-// the server's read timeout, and fails a client slower than the rate once
+// the server's read timeout. It fails a client slower than the rate when
 // the deadline its declared size earns passes, not at the read timeout.
 func TestTransfer_WidenUpload(t *testing.T) {
 	transfer := web.NewTransfer(1<<20, 2000, 100*time.Millisecond) // 1000 bytes: 600ms

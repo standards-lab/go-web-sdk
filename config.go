@@ -23,8 +23,7 @@ const (
 // Env records the environment-variable names [Config.FinalizeBlock]
 // composed from its prefix and block: <BLOCK>_HOST, <BLOCK>_PORT, the
 // four <BLOCK>_*_TIMEOUT names, and <BLOCK>_TRANSFER_RATE under the
-// prefix. An empty prefix composes
-// none, disabling the overrides.
+// prefix. An empty prefix composes none, disabling the overrides.
 type Env struct {
 	Host              string
 	Port              string
@@ -54,7 +53,8 @@ func newEnv(prefix, block string) Env {
 // default of its own; unset, net/http applies [http.DefaultMaxHeaderBytes].
 //
 // The read and write timeouts default to 30 seconds each, and
-// TransferRate to 64 KiB/s; [Transfer] states how they relate.
+// TransferRate, in bytes per second, to 64 KiB/s. [Transfer] describes how
+// a route combines them.
 type Config struct {
 	Host              string           `json:"host"`
 	Port              *int             `json:"port"`

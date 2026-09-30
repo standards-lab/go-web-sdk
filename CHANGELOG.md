@@ -8,21 +8,22 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ### Added
 
-- `Transfer` sets the connection deadlines of a route that moves a large body, to the grace plus
-  the body's size, capped at the route's limit, at the minimum rate: `WidenUpload(w, r)` the read
-  deadline from the declared `Content-Length` and the write deadline a grace later, and
-  `WidenDownload(w, size)` the write deadline. `Config.Transfer(limit)` builds one from the
-  configuration, leaving a disabled timeout disabled, and `NewTransfer` from explicit values;
-  `Limit` is the limit to hand `ReadUpload`.
+- `Transfer` sets the connection deadlines of a route that moves a large body. Each deadline is
+  the grace plus the time the body's size, capped at the route's limit, takes at the minimum
+  rate. `WidenUpload(w, r)` sets the read deadline from the declared `Content-Length` and the
+  write deadline a grace later; `WidenDownload(w, size)` sets the write deadline.
+  `Config.Transfer(limit)` builds a `Transfer` from the configuration and leaves a disabled
+  timeout disabled; `NewTransfer` builds one from explicit values. `Limit` returns the limit to
+  pass to `ReadUpload`.
 - `Config.TransferRate` (`transfer_rate`, overridden by `<BLOCK>_TRANSFER_RATE`) is the slowest pace
-  a client is allowed, in bytes per second, 64 KiB/s by default.
+  a client is allowed, in bytes per second. It defaults to 64 KiB/s.
 
 ### Changed
 
 - **Breaking:** the read and write timeouts default to 30 seconds each, down from 1 minute and 15
   minutes. They are sized for a request that moves no large body; a route that moves one widens
-  its own deadlines through `Transfer`. A route that moves a body must not sit under a
-  `middleware.Timeout` shorter than its transfer.
+  its own deadlines through `Transfer`, and must not sit under a `middleware.Timeout` shorter
+  than its transfer.
 
 ## [v0.13.0] - 2026-09-30
 

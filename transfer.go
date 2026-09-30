@@ -10,10 +10,11 @@ import (
 // Transfer sets the connection deadlines of a route that moves a large
 // body. A server's read and write timeouts are sized for a request that
 // moves no large body, so an upload or a download sets its own deadlines
-// through http.ResponseController before it moves the body: the grace,
-// plus the body's size at the rate, the slowest pace a client is allowed.
-// The size is the body's own, capped at the route's limit, so a small body
-// on a route with a large limit gets a small deadline.
+// through http.ResponseController before it moves the body. Each deadline
+// allows the grace plus the time the body takes at the rate, the slowest
+// pace a client is allowed ([Transfer.Duration]). The body's own size
+// counts, capped at the route's limit, so a small body on a route with a
+// large limit gets a short deadline.
 //
 // A Transfer sets only the connection's deadlines, never the request's
 // context: a route that moves a body must not sit under a
@@ -30,9 +31,9 @@ type Transfer struct {
 }
 
 // NewTransfer returns the Transfer for a route whose body is at most limit
-// bytes, at no less than rate bytes per second, with grace for the rest of
-// the request; it sets both deadlines. A negative limit or grace, or a
-// rate that is not positive, is a wiring defect and panics.
+// bytes, moved at no less than rate bytes per second, with grace for the
+// rest of the request. The Transfer sets both deadlines. A negative limit
+// or grace, or a rate that is not positive, is a wiring defect and panics.
 func NewTransfer(limit, rate int64, grace time.Duration) Transfer {
 	if limit < 0 || rate <= 0 || grace < 0 {
 		panic(fmt.Sprintf("web: NewTransfer(%d, %d, %s): limit and grace must not be negative, and rate must be positive", limit, rate, grace))
@@ -44,7 +45,7 @@ func NewTransfer(limit, rate int64, grace time.Duration) Transfer {
 // bytes, at the configured TransferRate, with the longer of the read and
 // write timeouts as its grace. A timeout the Config disables (an explicit
 // zero) stays disabled: the Transfer leaves that deadline alone. It panics
-// on an unfinalized Config, as [NewTransfer] does on a negative limit.
+// on an unfinalized Config and, as [NewTransfer] does, on a negative limit.
 func (c *Config) Transfer(limit int64) Transfer {
 	if !c.finalized() {
 		panic("web: Config not finalized: call Finalize or FinalizeBlock before Transfer")
@@ -55,15 +56,16 @@ func (c *Config) Transfer(limit int64) Transfer {
 	return t
 }
 
-// Limit is the route's body limit, the one [ReadUpload] takes.
+// Limit returns the route's body limit, the value to pass to [ReadUpload].
 func (t Transfer) Limit() int64 {
 	t.check()
 	return t.limit
 }
 
-// Duration is how long the transfer allows a body of size bytes: the
-// grace plus size, capped at the limit, at the rate. A negative size is
-// the limit's. It saturates rather than overflow.
+// Duration returns how long the transfer allows a body of size bytes: the
+// grace plus the time size bytes, capped at the limit, take at the rate. A
+// negative size counts as the limit. The result saturates at the maximum
+// Duration rather than overflowing.
 func (t Transfer) Duration(size int64) time.Duration {
 	t.check()
 	if size < 0 || size > t.limit {
@@ -77,12 +79,12 @@ func (t Transfer) Duration(size int64) time.Duration {
 }
 
 // WidenUpload sets the connection's deadlines before the handler reads r's
-// body: the read deadline to Duration of the declared Content-Length from
-// now, and the write deadline a grace later, for the response that
-// follows the body. A client slower than the rate fails the body's read
-// with a deadline error (os.ErrDeadlineExceeded), and the response to it
-// can still be written. It returns the http.ResponseController error for a
-// writer that cannot set deadlines.
+// body. It sets the read deadline to [Transfer.Duration] of the declared
+// Content-Length from now, and the write deadline a grace later, for the
+// response that follows the body. A client slower than the rate fails the
+// body's read with os.ErrDeadlineExceeded, and the handler can still write
+// the response. It returns the http.ResponseController error for a writer
+// that cannot set deadlines.
 func (t Transfer) WidenUpload(w http.ResponseWriter, r *http.Request) error {
 	read := deadline(t.Duration(r.ContentLength))
 	rc := http.NewResponseController(w)
@@ -103,10 +105,10 @@ func (t Transfer) WidenUpload(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// WidenDownload sets the connection's write deadline to Duration of size
-// from now, before the handler writes a response body of size bytes. As
-// WidenUpload, it returns the http.ResponseController error for a writer
-// that cannot set deadlines.
+// WidenDownload sets the connection's write deadline to [Transfer.Duration]
+// of size from now, before the handler writes a response body of size
+// bytes. Like WidenUpload, it returns the http.ResponseController error for
+// a writer that cannot set deadlines.
 func (t Transfer) WidenDownload(w http.ResponseWriter, size int64) error {
 	d := t.Duration(size)
 	if !t.write {
@@ -118,7 +120,8 @@ func (t Transfer) WidenDownload(w http.ResponseWriter, size int64) error {
 	return nil
 }
 
-// deadline is d from now, or no deadline when d saturated.
+// deadline returns the time d from now, or the zero time (no deadline) when
+// d is saturated.
 func deadline(d time.Duration) time.Time {
 	if d == math.MaxInt64 {
 		return time.Time{}
