@@ -6,6 +6,8 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.14.0] - 2026-09-30
+
 ### Added
 
 - `Transfer` sets the connection deadlines of a route that moves a large body. Each deadline is
@@ -446,7 +448,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.14.0...HEAD
+[v0.14.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.13.0...v0.14.0
 [v0.13.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.12.0...v0.13.0
 [v0.12.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.11.0...v0.12.0
 [v0.11.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.10.0...v0.11.0
