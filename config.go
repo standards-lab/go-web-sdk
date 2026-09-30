@@ -21,8 +21,9 @@ const (
 )
 
 // Env records the environment-variable names [Config.FinalizeBlock]
-// composed from its prefix and block: <BLOCK>_HOST, <BLOCK>_PORT, the four
-// <BLOCK>_*_TIMEOUT names, and <BLOCK>_TRANSFER_RATE under the prefix. An empty prefix composes
+// composed from its prefix and block: <BLOCK>_HOST, <BLOCK>_PORT, the
+// four <BLOCK>_*_TIMEOUT names, and <BLOCK>_TRANSFER_RATE under the
+// prefix. An empty prefix composes
 // none, disabling the overrides.
 type Env struct {
 	Host              string
@@ -52,11 +53,8 @@ func newEnv(prefix, block string) Env {
 // survives: a disabled timeout, or an ephemeral port. MaxHeaderBytes has no
 // default of its own; unset, net/http applies [http.DefaultMaxHeaderBytes].
 //
-// The read and write timeouts are tight by default, 30 seconds each,
-// sized for a request that moves no large body. A route that moves one,
-// an upload or a download, widens its own deadlines through the
-// [Transfer] that [Config.Transfer] sizes from TransferRate, the slowest
-// pace a client is allowed, in bytes per second (64 KiB/s by default).
+// The read and write timeouts default to 30 seconds each, and
+// TransferRate to 64 KiB/s; [Transfer] states how they relate.
 type Config struct {
 	Host              string           `json:"host"`
 	Port              *int             `json:"port"`
@@ -203,5 +201,6 @@ func (c *Config) finalized() bool {
 		c.ReadTimeout != nil &&
 		c.ReadHeaderTimeout != nil &&
 		c.WriteTimeout != nil &&
-		c.IdleTimeout != nil
+		c.IdleTimeout != nil &&
+		c.TransferRate != nil
 }

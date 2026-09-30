@@ -140,8 +140,7 @@
 //     [PathError].
 //   - [WriteObject] proxies an [Object]'s bytes with its validators, and
 //     [Attachment] builds the Content-Disposition of a download.
-//   - [Transfer], from [Config.Transfer] or [NewTransfer], widens an upload's
-//     or a download's connection deadlines past the server's tight timeouts,
-//     sized from the route's body limit and the slowest pace a client is
-//     allowed.
+//   - [Transfer], from [Config.Transfer] or [NewTransfer], sets an
+//     upload's or a download's connection deadlines from the body's size and
+//     the slowest pace a client is allowed.
 package web
