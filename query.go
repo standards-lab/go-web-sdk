@@ -27,10 +27,10 @@ type Sort struct {
 
 // Filter is one filter parameter: a field name, the operator the request
 // named in brackets after it ("created[gte]"), empty for the plain form
-// ("status"), and every value the parameter carried. What an operator and
-// several values mean is the consumer's translation; the SDK enumerates no
-// operators. A key with no name, unbalanced or repeated brackets, or an empty
-// operator is rejected, as is an operator on a reserved parameter.
+// ("status"), and every value the parameter carried. The consumer decides
+// what an operator and several values mean; the SDK enumerates no operators.
+// A key with no name, unbalanced or repeated brackets, or an empty operator
+// is rejected, as is an operator on a reserved parameter.
 type Filter struct {
 	Field  string
 	Op     string
@@ -39,14 +39,14 @@ type Filter struct {
 
 // Query is one read request's parsed query string. A read addressed by
 // number has a 1-based Page, 1 when absent and bounded so the offset fits an
-// int; one addressed by Cursor, the token a previous page's [Page.Next]
+// int. A read addressed by Cursor, the token a previous page's [Page.Next]
 // carried, has Page 0 and continues after that page's last item, so it
-// neither skips nor repeats a row when the collection changes; a request
-// naming both is rejected. Size is
-// defaulted and capped by [Limits]. Sort holds the keys of every sort
-// parameter in request order, nil when there are none. Filters is never nil
-// and is ordered by field, then operator, so a consumer composes a
-// deterministic predicate. An empty parameter value reads as omitted.
+// neither skips nor repeats a row when the collection changes. A request
+// naming both is rejected. [Limits] defaults and caps Size. Sort holds the
+// keys of every sort parameter in request order, nil when there are none.
+// Filters is never nil and is ordered by field, then operator, so a consumer
+// composes a deterministic predicate. An empty parameter value reads as
+// omitted.
 type Query struct {
 	Page    int
 	Size    int
@@ -56,9 +56,9 @@ type Query struct {
 }
 
 // Limits is a read's paging policy: the size when a request names none, the
-// largest it may name, and whether the read continues by cursor; a read that
-// does not refuses a cursor rather than serve the wrong page. [ParseQuery]
-// panics unless 1 <= DefaultSize <= MaxSize.
+// largest it may name, and whether the read continues by cursor. A read that
+// does not continue by cursor refuses one rather than serve the wrong page.
+// [ParseQuery] panics unless 1 <= DefaultSize <= MaxSize.
 type Limits struct {
 	DefaultSize int
 	MaxSize     int

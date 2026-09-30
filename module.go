@@ -9,10 +9,10 @@ type Module struct {
 	handler http.Handler
 }
 
-// NewModule compiles the group tree into a Module once, every route under its
-// full pattern and chain, and seals the tree. It panics on a duplicate or
-// malformed pattern. A miss under the prefix is answered by the root group's
-// [Group.SetNotFound] and [Group.SetMethodNotAllowed] handlers.
+// NewModule compiles the group tree into a Module once, registering every
+// route under its full pattern and chain, and seals the tree. It panics on a
+// duplicate or malformed pattern. The root group's [Group.SetNotFound] and
+// [Group.SetMethodNotAllowed] handlers answer a miss under the prefix.
 func NewModule(g *Group) *Module {
 	mux := http.NewServeMux()
 	compile(mux, "", nil, g)
@@ -26,9 +26,10 @@ func NewModule(g *Group) *Module {
 	}
 }
 
-// NewHandlerModule mounts a raw handler under prefix, an embedded client
-// application or a file server, with mw around it and the prefix stripped
-// from the request: the one module that rewrites a request path.
+// NewHandlerModule mounts a raw handler, such as an embedded client
+// application or a file server, under prefix, with mw around it and the
+// prefix stripped from the request. It is the one module that rewrites a
+// request path.
 func NewHandlerModule(
 	prefix string,
 	handler http.Handler,

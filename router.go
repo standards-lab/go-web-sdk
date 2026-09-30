@@ -7,8 +7,8 @@ import (
 )
 
 // Router dispatches to mounted [Module] values by longest-prefix match on
-// segment boundaries, falling back to a native http.ServeMux, where
-// [Router.Handle] registers outside every module's middleware.
+// segment boundaries and falls back to a native http.ServeMux.
+// [Router.Handle] registers on that mux, outside every module's middleware.
 type Router struct {
 	mux              *http.ServeMux
 	modules          []*Module

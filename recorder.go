@@ -9,8 +9,8 @@ import (
 // committed and with what status. The first final WriteHeader commits (a 1xx
 // other than 101 is informational, as in net/http), and a Write, ReadFrom,
 // or Flush before it commits an implicit 200. It implements Unwrap, so
-// http.ResponseController reaches the writer beneath, and delegates
-// io.ReaderFrom. It does not expose http.Pusher, and a Hijack through the
+// http.ResponseController reaches the writer beneath, and it delegates
+// io.ReaderFrom. It does not expose http.Pusher. A Hijack through the
 // controller bypasses it, as it bypasses net/http's own bookkeeping. [Handle]
 // and the middleware package's RequestLogger and Recoverer share one per
 // request through [WrapWriter].
@@ -72,8 +72,9 @@ func (rec *Recorder) Unwrap() http.ResponseWriter {
 	return rec.ResponseWriter
 }
 
-// FlushError flushes the writer beneath through http.ResponseController,
-// which checks for this method before it unwraps, so the flush commits here.
+// FlushError flushes the writer beneath through http.ResponseController.
+// The controller looks for this method before it unwraps a writer, so a
+// flush through the controller passes through the Recorder and commits here.
 func (rec *Recorder) FlushError() error {
 	err := http.NewResponseController(rec.ResponseWriter).Flush()
 	if err == nil && !rec.committed {

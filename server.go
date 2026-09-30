@@ -11,8 +11,8 @@ import (
 )
 
 // Server wraps an http.Server whose bind and serve phases are split, so a
-// composition root registers [Server.Start] and [Server.Shutdown] as
-// lifecycle hooks and monitors [Server.Err].
+// composition root declares [Server.Start] and [Server.Shutdown] as a
+// lifecycle service's members and monitors [Server.Err].
 type Server struct {
 	http *http.Server
 	errs chan error
@@ -101,11 +101,11 @@ func (s *Server) Err() <-chan error {
 	return s.errs
 }
 
-// Shutdown drains the server gracefully via http.Server.Shutdown, and when
-// ctx ends first, closes the connections net/http still tracks and returns
-// ctx's error; hijacked connections and handlers still running are the
-// caller's. Before a successful Start it is a no-op that leaves the server
-// startable; once it has served, a Server is single-use.
+// Shutdown drains the server gracefully through http.Server.Shutdown. When
+// ctx ends first, it closes the connections net/http still tracks and
+// returns ctx's error; hijacked connections and handlers still running are
+// left to the caller. Before a successful Start it is a no-op that leaves the
+// server startable; once it has served, a Server is single-use.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	started := s.listener != nil

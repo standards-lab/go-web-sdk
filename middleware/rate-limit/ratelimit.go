@@ -63,8 +63,8 @@ func (c *Config) Finalize(envPrefix string) error {
 }
 
 // FinalizeBlock composes [Env] from envPrefix and block, applies the
-// defaults, then the environment overrides, and validates. A second limit, a
-// tighter one on a login route say, finalizes under its own block.
+// defaults, then the environment overrides, and validates. A second limit,
+// such as a tighter one on a login route, finalizes under its own block.
 func (c *Config) FinalizeBlock(envPrefix, block string) error {
 	c.Env = newEnv(envPrefix, block)
 	c.applyDefaults()
@@ -112,11 +112,11 @@ func (c *Config) finalized() bool {
 	return c.Requests != nil && c.Window != nil
 }
 
-// New limits each client, keyed by its remote address with IPv6 reduced to
-// its /64, to cfg.Requests per cfg.Window, answering a request over it with a
-// 429 problem and Retry-After, the window in whole seconds. Every response it
-// judges carries X-RateLimit-Limit, X-RateLimit-Remaining, and
-// X-RateLimit-Reset. It panics on a Config Finalize did not pass.
+// New limits each client to cfg.Requests per cfg.Window, keying a client by
+// its remote address with IPv6 reduced to its /64. It answers a request over
+// the limit with a 429 problem and Retry-After, the window in whole seconds.
+// Every response it judges carries X-RateLimit-Limit, X-RateLimit-Remaining,
+// and X-RateLimit-Reset. It panics on a Config that has not passed Finalize.
 func New(cfg Config) web.Middleware {
 	if !cfg.finalized() {
 		panic("ratelimit: New requires a finalized Config; call Finalize first")

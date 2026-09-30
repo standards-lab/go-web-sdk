@@ -9,14 +9,15 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// RequestLogger emits one info record per request, "request", with
-// http.request.method, url.path, http.route (the matched pattern without its
-// method, when one matched), http.response.status_code (500 for a panic
-// unwinding with nothing committed), duration, client.address, and
-// request_id (when [RequestID] set one). A successful probe of
-// [web.HealthPath] or [web.ReadyPath] logs at debug. Chain it after RequestID
-// and any other middleware that derives a request, so the request it reads
-// is the one carrying the id and the route. It panics on a nil logger.
+// RequestLogger emits one info record per request, with the message
+// "request" and the attributes http.request.method, url.path, http.route
+// (the matched pattern without its method, when one matched),
+// http.response.status_code (500 for a panic unwinding with nothing
+// committed), duration, client.address, and request_id (when [RequestID] set
+// one). A successful probe of [web.HealthPath] or [web.ReadyPath] logs at
+// debug. Chain it after RequestID and any other middleware that derives a
+// request, so the request it reads is the one carrying the id and the route.
+// It panics on a nil logger.
 func RequestLogger(logger *slog.Logger) web.Middleware {
 	if logger == nil {
 		panic("middleware: RequestLogger requires a *slog.Logger")

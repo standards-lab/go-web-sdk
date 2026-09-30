@@ -14,7 +14,8 @@ type HandlerFunc func(w http.ResponseWriter, r *http.Request) error
 
 // Handle adapts fn into an http.Handler that writes a returned error through
 // ew, never as a second response: an error after commit, or a problem the
-// encoder fails to write, is logged through ew's logger. It panics on a nil ew.
+// encoder fails to write, is logged through ew's logger. It panics on a nil
+// ew.
 func Handle(fn HandlerFunc, ew *ErrorWriter) http.Handler {
 	if ew == nil {
 		panic("web: Handle requires an ErrorWriter; wire one with NewErrorWriter")

@@ -41,13 +41,13 @@ type Object struct {
 // Attachment returns the Content-Disposition value that makes a response a
 // download named name, never rendered inline (RFC 6266). The value carries
 // the name as a quoted filename, with a quote or a backslash escaped as a
-// quoted pair. For a name outside printable ASCII, or one holding a %,
-// which some browsers percent-decode in a plain filename, the quoted
-// filename is a fallback with each such character replaced by an
+// quoted pair. A name may hold characters outside printable ASCII, or a %,
+// which some browsers percent-decode in a plain filename. For such a name
+// the quoted filename is a fallback with each such character replaced by an
 // underscore, and filename* follows with the name in RFC 8187's encoding,
-// which a recipient prefers; a byte that is not valid UTF-8 is carried
-// there as U+FFFD. A handler sets the header before calling [WriteObject],
-// which keeps it on success.
+// which a recipient prefers; a byte that is not valid UTF-8 is carried there
+// as U+FFFD. A handler sets the header before calling [WriteObject], which
+// keeps it on success.
 func Attachment(name string) string {
 	var fallback strings.Builder
 	plain := true
@@ -90,15 +90,15 @@ func attrChar(b byte) bool {
 }
 
 // WriteObject proxies a stored object's bytes as the response to a GET or
-// HEAD, with its validators and X-Content-Type-Options: nosniff, answering a
+// HEAD, with its validators and X-Content-Type-Options: nosniff. It answers a
 // matching If-None-Match or If-Modified-Since with 304 before open is called.
-// If-None-Match compares entity tags weakly, * matching any object, and when
+// If-None-Match compares entity tags weakly, with * matching any object; when
 // present it outranks If-Modified-Since, which is then ignored (RFC 9110
-// §13.2.2). A HEAD sends the headers alone without calling open, and
-// WriteObject closes what open returns; the caller does not. An error
-// from open is returned uncommitted, with every representation header
-// cleared, the caller's included, and Cache-Control set to no-store, for the
-// error writer to answer.
+// §13.2.2). A HEAD sends the headers alone without calling open. WriteObject
+// closes what open returns; the caller does not. An error from open is
+// returned uncommitted for the error writer to answer, with every
+// representation header cleared, the caller's included, and Cache-Control
+// set to no-store.
 func WriteObject(w http.ResponseWriter, r *http.Request, o Object, open func() (io.ReadCloser, error)) error {
 	h := w.Header()
 	if o.ETag != "" {
@@ -214,9 +214,9 @@ func noneMatch(header, etag string) bool {
 
 // Page is the success envelope of a paginated read, the whole response
 // body. Page is the 1-based number of a read addressed by number, omitted
-// under a cursor; Total is omitted when the read did not count; Next, when
-// present, is the cursor that continues from this page, and a read that
-// cannot continue by cursor reports More with no Next.
+// under a cursor. Total is omitted when the read did not count. Next, when
+// present, is the cursor that continues from this page; a read that cannot
+// continue by cursor reports More with no Next.
 type Page[T any] struct {
 	Items []T    `json:"items"`
 	Page  int    `json:"page,omitempty"`

@@ -9,9 +9,11 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// Recoverer recovers a handler panic, logs it and its stack at error level,
-// and writes a 500 problem, or after a commit re-raises http.ErrAbortHandler,
-// which it passes through unlogged. It panics on a nil logger.
+// Recoverer recovers a handler panic and logs it and its stack at error
+// level. It then writes a 500 problem or, when the response is already
+// committed, re-raises http.ErrAbortHandler. A panic with
+// http.ErrAbortHandler itself passes through unlogged. It panics on a nil
+// logger.
 func Recoverer(logger *slog.Logger) web.Middleware {
 	if logger == nil {
 		panic("middleware: Recoverer requires a *slog.Logger")

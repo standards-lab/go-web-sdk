@@ -38,12 +38,12 @@ func Liveness() http.Handler {
 	})
 }
 
-// Readiness answers 200 with each check's state when every check is ready,
-// and otherwise notReady as a 503 problem whose "checks" member carries the
-// states; a Check with a nil Checker is not ready. A zero member of notReady
-// takes its default (Type about:blank, Title the status phrase, Detail "one
-// or more readiness checks failed"), and its Status and any "checks" in its
-// Extras are replaced. Zero checks report ready.
+// Readiness answers 200 with each check's state when every check is ready.
+// Otherwise it answers notReady as a 503 problem whose "checks" member
+// carries the states. A Check with a nil Checker is not ready, and zero
+// checks report ready. A zero member of notReady takes its default (Type
+// about:blank, Title the status phrase, Detail "one or more readiness checks
+// failed"), and its Status and any "checks" in its Extras are replaced.
 func Readiness(notReady Problem, checks ...lifecycle.Check) http.Handler {
 	return readiness(notReady, func() []lifecycle.Check { return checks })
 }
@@ -78,9 +78,9 @@ func readiness(notReady Problem, checks func() []lifecycle.Check) http.Handler {
 }
 
 // RegisterHealth mounts [Liveness] at GET /healthz and [Readiness] at GET
-// /readyz over lc: the coordinator itself, as "lifecycle", then its Checks
-// in start order, read on every request, so a service added after this call
-// still appears.
+// /readyz. The readiness probe checks lc itself, as "lifecycle", then lc's
+// Checks in start order. It reads them on every request, so a service added
+// after this call still appears.
 func RegisterHealth(m Mounter, lc *lifecycle.Coordinator, notReady Problem) {
 	m.Handle("GET "+HealthPath, Liveness())
 	m.Handle("GET "+ReadyPath, readiness(notReady, func() []lifecycle.Check {

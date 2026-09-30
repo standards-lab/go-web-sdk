@@ -7,8 +7,8 @@ import (
 )
 
 // BodyLimit bounds every request body at n bytes with [http.MaxBytesReader]
-// and writes no response: [web.DecodeJSON] answers the overflow as a 413
-// naming the tighter of its limit and n, and another reader maps the
+// and writes no response itself. [web.DecodeJSON] answers the overflow as a
+// 413 naming the tighter of its limit and n; any other reader maps the
 // *[http.MaxBytesError] itself. It panics on a limit of zero or less.
 func BodyLimit(n int64) web.Middleware {
 	if n <= 0 {

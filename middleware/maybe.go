@@ -28,8 +28,8 @@ func Maybe(mw web.Middleware, pred func(*http.Request) bool) web.Middleware {
 }
 
 // NotProbe is [Maybe]'s predicate excluding [web.HealthPath] and
-// [web.ReadyPath], so a middleware that judges a request, a rate limit say,
-// never answers an orchestrator's probe in the handler's place.
+// [web.ReadyPath], so a middleware that judges a request, such as a rate
+// limit, never answers an orchestrator's probe in the handler's place.
 func NotProbe(r *http.Request) bool {
 	return r.URL.Path != web.HealthPath && r.URL.Path != web.ReadyPath
 }

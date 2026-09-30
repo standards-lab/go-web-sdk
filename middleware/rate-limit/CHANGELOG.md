@@ -12,7 +12,7 @@ only; the base module keeps its own.
 
 ### Changed
 
-- The godoc states each contract once, on its symbol, and the package comment places every
+- The godoc states each contract once, on its symbol, and the package comment lists every
   exported name.
 
 ### Removed

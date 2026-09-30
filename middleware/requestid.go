@@ -21,9 +21,9 @@ type requestIDConfig struct {
 	header string
 }
 
-// WithIDSource supplies the function [RequestID] asks first, the seam a
-// tracing layer fills with the request's trace id; "" declines. It panics
-// on a nil fn.
+// WithIDSource supplies the function [RequestID] asks first for an id, such
+// as a tracing layer's function returning the request's trace id. A function
+// that returns "" declines. It panics on a nil fn.
 func WithIDSource(fn func(*http.Request) string) RequestIDOption {
 	if fn == nil {
 		panic("middleware: WithIDSource requires a non-nil source")

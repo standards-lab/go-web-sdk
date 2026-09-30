@@ -12,15 +12,16 @@ This context records only working knowledge the code and the README do not expre
 ## Capability map
 
 Each package's comment in its `doc.go` is the authoritative description of its API; this map
-only points at it. An unbuilt capability gains written detail when a session is about to build it.
+only points to it. An unbuilt capability gains written detail when a session is about to build it.
 
 - **web** (`doc.go`) is the HTTP layer: the server (`NewServer`, `Config`), routing (`Group`,
   `NewModule`, `Router`), the problem model (`Problem`, `ErrorWriter`, `Handle`), the read
   contract (`ParseQuery`, `NewPage`), the request helpers (`IfMatch`, `DecodeJSON`,
   `ReadUpload`, `PathUUID`), the object proxy (`WriteObject`, `Attachment`), the probes
   (`RegisterHealth`), `Recorder`, and the `Middleware` type with `Chain`. Built.
-- **middleware** (`middleware/doc.go`) holds the hand-rolled middleware and their chain order;
-  `middleware/rate-limit` is the first sourced sub-module. Built.
+- **middleware** (`middleware/doc.go`) holds the hand-rolled middleware, written in this
+  repository, and their chain order. `middleware/rate-limit`, built over a third-party library,
+  is the first sourced sub-module. Built.
 - **webtest** (`webtest/doc.go`) is the integration toolkit: the black-box client and the
   liveness observation. Built.
 - **Candidate direction**: `error-handling.md` records the error handler's two deferred

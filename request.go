@@ -14,12 +14,13 @@ import (
 
 // IfMatch reads the request's version precondition (RFC 9110 §13.1.1):
 // exactly one strong entity-tag whose opaque value is a base-10 integer,
-// If-Match: "3". Anything else is a *[PreconditionError]: a missing header
-// a 428, and a list, a non-integer tag, a weak tag, or the * form a 400. The
-// last two are a deliberate departure from RFC 9110, where * matches any
-// current representation: a guarded command names the version it read. The
-// parse is syntax only; whether the version matches is the data layer's
-// check, and a mismatch is the consumer's 412.
+// If-Match: "3". Anything else is a *[PreconditionError]: a 428 for a
+// missing header, and a 400 for a list, a non-integer tag, a weak tag, or
+// the * form. Refusing a weak tag and the * form departs deliberately from
+// RFC 9110, where * matches any current representation: a guarded command
+// names the version it read. IfMatch checks syntax only. The data layer
+// checks whether the version matches, and the consumer answers a mismatch
+// with a 412.
 func IfMatch(r *http.Request) (int64, error) {
 	if lines := r.Header.Values("If-Match"); len(lines) > 1 {
 		return 0, &PreconditionError{Value: strings.Join(lines, ", ")}
@@ -67,9 +68,9 @@ func PathUUID(r *http.Request, name string) (string, error) {
 
 // DecodeJSON reads the request body as exactly one JSON value of type T,
 // bounded at limit bytes and with unknown fields rejected, so a misspelled
-// field cannot silently change a command's meaning. A body that fails, or is
-// empty, is a *[BodyError]; a caller whose body is optional checks
-// r.ContentLength first.
+// field cannot silently change a command's meaning. A body that fails these
+// checks, or is empty, is a *[BodyError]; a caller whose body is optional
+// checks r.ContentLength first.
 func DecodeJSON[T any](w http.ResponseWriter, r *http.Request, limit int64) (T, error) {
 	var v T
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))

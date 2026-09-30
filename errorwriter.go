@@ -24,10 +24,10 @@ type ErrorWriter struct {
 	logger   *slog.Logger
 }
 
-// NewErrorWriter composes the matchers, consulted in argument order after
-// the built-in mappings, first match wins. logger receives the cause of
-// every 5xx the writer sends and every error it cannot write. It panics on
-// a nil logger.
+// NewErrorWriter returns a writer that consults matchers in argument order
+// after the built-in mappings; the first match wins. logger receives the
+// cause of every 5xx the writer sends and every error it cannot write. It
+// panics on a nil logger.
 func NewErrorWriter(logger *slog.Logger, matchers ...ProblemMatcher) *ErrorWriter {
 	if logger == nil {
 		panic("web: NewErrorWriter requires a *slog.Logger")
@@ -101,7 +101,7 @@ func withStatus(p Problem) Problem {
 // returned Problem's included. The error text becomes the detail where
 // [ErrorWriter.Detail] allows, except for a returned Problem, which is sent
 // with its own members. Write logs a 5xx's cause: a 503 at warn, the
-// client's own cancellation at debug, else error.
+// client's own cancellation at debug, and any other 5xx at error.
 func (ew *ErrorWriter) Write(w http.ResponseWriter, r *http.Request, err error) error {
 	p, whole := ew.problem(err)
 	if p.Status >= http.StatusInternalServerError {

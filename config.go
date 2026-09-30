@@ -33,11 +33,6 @@ type Env struct {
 }
 
 func newEnv(prefix, block string) Env {
-	// go-core v0.5.0's EnvName returns "" for an empty prefix, which makes
-	// this guard redundant once the pin moves.
-	if prefix == "" {
-		return Env{}
-	}
 	return Env{
 		Host:              config.EnvName(prefix, block, "host"),
 		Port:              config.EnvName(prefix, block, "port"),
@@ -106,8 +101,8 @@ func (c *Config) Finalize(envPrefix string) error {
 
 // FinalizeBlock composes [Env] from envPrefix and block, applies the
 // defaults, then the environment overrides, and validates. A second Config,
-// a management listener say, finalizes under its own block so its override
-// names do not collide with the primary server's.
+// such as a management listener's, finalizes under its own block so its
+// override names do not collide with the primary server's.
 func (c *Config) FinalizeBlock(envPrefix, block string) error {
 	c.Env = newEnv(envPrefix, block)
 	c.applyDefaults()
@@ -142,12 +137,8 @@ func (c *Config) applyEnv() error {
 	if v := os.Getenv(c.Env.Host); v != "" {
 		c.Host = v
 	}
-	if v := os.Getenv(c.Env.Port); v != "" {
-		port, err := strconv.Atoi(v)
-		if err != nil {
-			return fmt.Errorf("%s: %w", c.Env.Port, err)
-		}
-		c.Port = &port
+	if err := config.SetFromEnv(&c.Port, c.Env.Port, strconv.Atoi); err != nil {
+		return err
 	}
 	if err := config.SetDurationFromEnv(&c.ReadTimeout, c.Env.ReadTimeout); err != nil {
 		return err
