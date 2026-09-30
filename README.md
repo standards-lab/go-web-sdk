@@ -41,7 +41,9 @@ Its repository-level principles:
 
 - `web` is the HTTP layer. It provides:
   - a `net/http` server wired for go-core's lifecycle, with its configuration block, route
-    groups, modules, and the router
+    groups, modules, and the router; its read and write timeouts are tight, and a route that
+    moves a large body widens its own deadlines through `Transfer`, sized from its body limit
+    and the slowest pace a client is allowed
   - RFC 9457 problem responses and a JSON writer
   - the read contract: a request's paging, sort, cursor, and filters parsed as one `Query`, and
     the `Page` envelope with its total, `more`, and `next`

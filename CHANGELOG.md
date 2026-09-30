@@ -6,6 +6,22 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+### Added
+
+- `Transfer` widens the connection deadlines of a route that moves a large body:
+  `Transfer.Upload` the read and write deadlines before a request body is read, and
+  `Transfer.Download` the write deadline before a response body is written, each to the grace plus
+  the route's body limit at the minimum rate. `Config.Transfer(limit)` builds one from the
+  configuration, and `NewTransfer` from explicit values.
+- `Config.TransferRate` (`transfer_rate`, overridden by `<BLOCK>_TRANSFER_RATE`) is the slowest pace
+  a client is allowed, in bytes per second, 64 KiB/s by default.
+
+### Changed
+
+- **Breaking:** the read and write timeouts default to 30 seconds each, down from 1 minute and 15
+  minutes. They are sized for a request that moves no large body; a route that moves one widens
+  its own deadlines through `Transfer`.
+
 ## [v0.13.0] - 2026-09-30
 
 A review of the whole repository closes `goals.v1.storage.tasks.suite`: the loggers move into the

@@ -40,7 +40,8 @@
 // its checks live: no request reaches the probe before every check it reads
 // exists.
 //
-//   - [Config] is the server's address, timeouts, and header limit. Its
+//   - [Config] is the server's address, timeouts, header limit, and
+//     transfer rate. Its
 //     pointer fields are tri-state: nil takes the default at Finalize, and an
 //     explicit zero survives. [Env] records the override names
 //     [Config.Finalize] composed.
@@ -139,4 +140,8 @@
 //     [PathError].
 //   - [WriteObject] proxies an [Object]'s bytes with its validators, and
 //     [Attachment] builds the Content-Disposition of a download.
+//   - [Transfer], from [Config.Transfer] or [NewTransfer], widens an upload's
+//     or a download's connection deadlines past the server's tight timeouts,
+//     sized from the route's body limit and the slowest pace a client is
+//     allowed.
 package web

@@ -26,6 +26,7 @@ const (
 	envReadHeaderTimeout = "TEST_SERVER_READ_HEADER_TIMEOUT"
 	envWriteTimeout      = "TEST_SERVER_WRITE_TIMEOUT"
 	envIdleTimeout       = "TEST_SERVER_IDLE_TIMEOUT"
+	envTransferRate      = "TEST_SERVER_TRANSFER_RATE"
 )
 
 // testBlock is the non-default block FinalizeBlock tests finalize with; the
@@ -38,6 +39,7 @@ const (
 	envMgmtReadHeaderTimeout = "TEST_MANAGEMENT_READ_HEADER_TIMEOUT"
 	envMgmtWriteTimeout      = "TEST_MANAGEMENT_WRITE_TIMEOUT"
 	envMgmtIdleTimeout       = "TEST_MANAGEMENT_IDLE_TIMEOUT"
+	envMgmtTransferRate      = "TEST_MANAGEMENT_TRANSFER_RATE"
 )
 
 func dur(v time.Duration) *config.Duration {
@@ -124,9 +126,9 @@ func TestConfig_FinalizeAppliesDefaults(t *testing.T) {
 		got   *config.Duration
 		value time.Duration
 	}{
-		{"ReadTimeout", cfg.ReadTimeout, time.Minute},
+		{"ReadTimeout", cfg.ReadTimeout, 30 * time.Second},
 		{"ReadHeaderTimeout", cfg.ReadHeaderTimeout, 5 * time.Second},
-		{"WriteTimeout", cfg.WriteTimeout, 15 * time.Minute},
+		{"WriteTimeout", cfg.WriteTimeout, 30 * time.Second},
 		{"IdleTimeout", cfg.IdleTimeout, 2 * time.Minute},
 	} {
 		if want.got == nil {
@@ -158,7 +160,7 @@ func TestConfig_FinalizeEnvOverridesFiles(t *testing.T) {
 	if time.Duration(*cfg.ReadTimeout) != 45*time.Second {
 		t.Errorf("ReadTimeout = %s, want 45s", cfg.ReadTimeout)
 	}
-	if time.Duration(*cfg.WriteTimeout) != 15*time.Minute {
+	if time.Duration(*cfg.WriteTimeout) != 30*time.Second {
 		t.Errorf("WriteTimeout = %s, want the default (no override set)", cfg.WriteTimeout)
 	}
 }
@@ -167,12 +169,12 @@ func TestConfig_FinalizeEmptyEnvValueLeavesConfigured(t *testing.T) {
 	// An empty variable reads as unset, not as a request to clear the value.
 	t.Setenv(envReadTimeout, "")
 
-	cfg := web.Config{ReadTimeout: dur(30 * time.Second)}
+	cfg := web.Config{ReadTimeout: dur(45 * time.Second)}
 	if err := cfg.Finalize(testPrefix); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
-	if time.Duration(*cfg.ReadTimeout) != 30*time.Second {
-		t.Errorf("ReadTimeout = %s, want 30s", cfg.ReadTimeout)
+	if time.Duration(*cfg.ReadTimeout) != 45*time.Second {
+		t.Errorf("ReadTimeout = %s, want 45s", cfg.ReadTimeout)
 	}
 }
 
@@ -279,7 +281,7 @@ func TestConfig_ZeroTimeoutFromFileSurvivesFinalize(t *testing.T) {
 	if cfg.ReadTimeout == nil || time.Duration(*cfg.ReadTimeout) != 0 {
 		t.Errorf("ReadTimeout = %v, want an explicit 0 (disabled), not the default", cfg.ReadTimeout)
 	}
-	if cfg.WriteTimeout == nil || time.Duration(*cfg.WriteTimeout) != 15*time.Minute {
+	if cfg.WriteTimeout == nil || time.Duration(*cfg.WriteTimeout) != 30*time.Second {
 		t.Errorf("WriteTimeout = %v, want the default (unset in the file)", cfg.WriteTimeout)
 	}
 }
@@ -359,6 +361,7 @@ func TestConfig_FinalizeUsesServerBlock(t *testing.T) {
 		ReadHeaderTimeout: envReadHeaderTimeout,
 		WriteTimeout:      envWriteTimeout,
 		IdleTimeout:       envIdleTimeout,
+		TransferRate:      envTransferRate,
 	}
 	if cfg.Env != want {
 		t.Errorf("Env = %+v, want the \"server\" block names %+v", cfg.Env, want)
@@ -378,6 +381,7 @@ func TestConfig_FinalizeBlockComposesNamesFromBlock(t *testing.T) {
 		ReadHeaderTimeout: envMgmtReadHeaderTimeout,
 		WriteTimeout:      envMgmtWriteTimeout,
 		IdleTimeout:       envMgmtIdleTimeout,
+		TransferRate:      envMgmtTransferRate,
 	}
 	if cfg.Env != want {
 		t.Errorf("Env = %+v, want %+v", cfg.Env, want)
@@ -433,7 +437,7 @@ func TestConfig_FinalizeBlockEnvOverridesOnlyItsOwnBlock(t *testing.T) {
 	if time.Duration(*mgmt.ReadTimeout) != 45*time.Second {
 		t.Errorf("ReadTimeout = %s, want 45s", mgmt.ReadTimeout)
 	}
-	if time.Duration(*mgmt.WriteTimeout) != 15*time.Minute {
+	if time.Duration(*mgmt.WriteTimeout) != 30*time.Second {
 		t.Errorf("WriteTimeout = %s, want the default (no override set)", mgmt.WriteTimeout)
 	}
 
@@ -447,7 +451,7 @@ func TestConfig_FinalizeBlockEnvOverridesOnlyItsOwnBlock(t *testing.T) {
 	if *primary.Port != 9443 {
 		t.Errorf("primary Port = %d, want 9443", *primary.Port)
 	}
-	if time.Duration(*primary.ReadTimeout) != time.Minute {
+	if time.Duration(*primary.ReadTimeout) != 30*time.Second {
 		t.Errorf("primary ReadTimeout = %s, want the default (the override is the management block's)", primary.ReadTimeout)
 	}
 }
