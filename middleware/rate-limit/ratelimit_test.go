@@ -75,14 +75,21 @@ func get(handler http.Handler, remoteAddr string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// Requests within the limit reach the handler; the one past it is answered
-// with a 429 problem document carrying httprate's Retry-After.
+// Requests within the limit reach the handler with the X-RateLimit headers;
+// the one past it is answered with a 429 problem document carrying
+// httprate's Retry-After.
 func TestNew_RequestOverTheLimitIsA429(t *testing.T) {
 	handler := limited(t)
 
 	for i := 1; i <= 2; i++ {
-		if rec := get(handler, "192.0.2.1:1234"); rec.Code != http.StatusNoContent {
+		rec := get(handler, "192.0.2.1:1234")
+		if rec.Code != http.StatusNoContent {
 			t.Fatalf("request %d: status = %d, want 204", i, rec.Code)
+		}
+		for _, h := range []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"} {
+			if rec.Header().Get(h) == "" {
+				t.Errorf("request %d: %s missing on a judged response", i, h)
+			}
 		}
 	}
 	rec := get(handler, "192.0.2.1:1234")
@@ -371,31 +378,25 @@ func TestConfig_FinalizeAcceptsOneSecondWindow(t *testing.T) {
 	}
 }
 
-func TestNewEnv_ComposesNamesFromPrefixAndBlock(t *testing.T) {
-	for _, tc := range []struct {
-		block string
-		want  ratelimit.Env
-	}{
-		{"rate_limit", ratelimit.Env{
-			Requests: "HERALD_RATE_LIMIT_REQUESTS",
-			Window:   "HERALD_RATE_LIMIT_WINDOW",
-		}},
-		{"login", ratelimit.Env{
-			Requests: "HERALD_LOGIN_REQUESTS",
-			Window:   "HERALD_LOGIN_WINDOW",
-		}},
-	} {
-		t.Run(tc.block, func(t *testing.T) {
-			if got := ratelimit.NewEnv("herald", tc.block); got != tc.want {
-				t.Errorf("NewEnv(\"herald\", %q) = %+v, want %+v", tc.block, got, tc.want)
-			}
-		})
+func TestConfig_FinalizeBlockComposesNamesFromBlock(t *testing.T) {
+	var cfg ratelimit.Config
+	if err := cfg.FinalizeBlock("herald", "login"); err != nil {
+		t.Fatalf("FinalizeBlock: %v", err)
+	}
+	want := ratelimit.Env{Requests: "HERALD_LOGIN_REQUESTS", Window: "HERALD_LOGIN_WINDOW"}
+	if cfg.Env != want {
+		t.Errorf("Env = %+v, want %+v", cfg.Env, want)
 	}
 }
 
-func TestNewEnv_EmptyPrefixReturnsZeroEnv(t *testing.T) {
-	if env := ratelimit.NewEnv("", "rate_limit"); env != (ratelimit.Env{}) {
-		t.Errorf("NewEnv(\"\", \"rate_limit\") = %+v, want the zero Env (overrides disabled)", env)
+// An empty prefix composes no names, so no override is read.
+func TestConfig_FinalizeEmptyPrefixComposesNoNames(t *testing.T) {
+	var cfg ratelimit.Config
+	if err := cfg.Finalize(""); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if cfg.Env != (ratelimit.Env{}) {
+		t.Errorf("Env = %+v, want the zero Env (overrides disabled)", cfg.Env)
 	}
 }
 

@@ -36,7 +36,7 @@ func TestWriteJSON_SetsMediaTypeAndStatus(t *testing.T) {
 func TestNewPage_CarriesTheQuery(t *testing.T) {
 	d := web.Query{Page: 2, Size: 25}
 
-	p := web.NewPage([]string{"a", "b"}, d, web.Paging{Total: 51, More: true, Next: "c2"})
+	p := web.NewPage([]string{"a", "b"}, d, web.Paging{Total: new(51), More: true, Next: "c2"})
 
 	total := 51
 	want := web.Page[string]{Items: []string{"a", "b"}, Page: 2, Size: 25, Total: &total, More: true, Next: "c2"}
@@ -46,7 +46,7 @@ func TestNewPage_CarriesTheQuery(t *testing.T) {
 }
 
 func TestNewPage_NilItemsMarshalAsEmptyArray(t *testing.T) {
-	p := web.NewPage[string](nil, web.Query{Page: 1, Size: 25}, web.Paging{})
+	p := web.NewPage[string](nil, web.Query{Page: 1, Size: 25}, web.Paging{Total: new(0)})
 
 	body, err := json.Marshal(p)
 	if err != nil {
@@ -64,7 +64,7 @@ func TestPage_WireShape(t *testing.T) {
 		Name string `json:"name"`
 	}
 
-	body, err := json.Marshal(web.NewPage([]row{{Name: "ops"}}, web.Query{Page: 3, Size: 10}, web.Paging{Total: 21, More: true}))
+	body, err := json.Marshal(web.NewPage([]row{{Name: "ops"}}, web.Query{Page: 3, Size: 10}, web.Paging{Total: new(21), More: true}))
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestPage_WireShape(t *testing.T) {
 func TestPage_CursorPageOmitsTheNumberAndAnUncountedTotal(t *testing.T) {
 	q := web.Query{Size: 10, Cursor: "c1"}
 
-	body, err := json.Marshal(web.NewPage([]string{"x"}, q, web.Paging{Total: -1, More: true, Next: "c2"}))
+	body, err := json.Marshal(web.NewPage([]string{"x"}, q, web.Paging{More: true, Next: "c2"}))
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestPage_CursorPageOmitsTheNumberAndAnUncountedTotal(t *testing.T) {
 }
 
 func TestPage_ZeroTotalIsCountedNotAbsent(t *testing.T) {
-	p := web.NewPage[string](nil, web.Query{Page: 1, Size: 10}, web.Paging{Total: 0})
+	p := web.NewPage[string](nil, web.Query{Page: 1, Size: 10}, web.Paging{Total: new(0)})
 
 	if p.Total == nil || *p.Total != 0 {
 		t.Errorf("total = %v, want a counted 0", p.Total)
@@ -272,23 +272,44 @@ func TestWriteObject_OpenErrorIsReturnedUncommitted(t *testing.T) {
 	missing := errors.New("object not found")
 	rec := httptest.NewRecorder()
 	o := &opener{err: missing}
+	// The representation headers a handler sets for the object before the
+	// call describe bytes the problem is not: a browser would save a JSON
+	// 404 under the object's name and cache it for the object's lifetime.
+	rec.Header().Set("Content-Disposition", web.Attachment("logo.png"))
+	rec.Header().Set("Cache-Control", "private, max-age=3600")
+	rec.Header().Set("Content-Encoding", "gzip")
+	rec.Header().Set("Content-Length", "9")
+	rec.Header().Set("Content-Range", "bytes 0-8/9")
+	rec.Header().Set("Expires", "Thu, 01 Oct 2026 00:00:00 GMT")
 
 	err := web.WriteObject(rec, objectRequest(http.MethodGet), logo, o.open)
 
 	if !errors.Is(err, missing) {
 		t.Fatalf("error = %v, want the opener's", err)
 	}
-	for _, h := range []string{"ETag", "Last-Modified", "Content-Type", "Content-Length"} {
+	representation := []string{"ETag", "Last-Modified", "Content-Type", "Content-Length", "Content-Disposition", "Content-Encoding", "Content-Range", "Expires"}
+	for _, h := range representation {
 		if got := rec.Header().Get(h); got != "" {
 			t.Errorf("%s = %q, want none on an uncommitted error", h, got)
 		}
 	}
-	ew := web.NewErrorWriter(matcherFor(missing, http.StatusNotFound))
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store on an uncommitted error", got)
+	}
+	ew := web.NewErrorWriter(discard, matcherFor(missing, http.StatusNotFound))
 	if werr := ew.Write(rec, objectRequest(http.MethodGet), err); werr != nil {
 		t.Fatalf("Write: %v", werr)
 	}
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want the problem's 404", rec.Code)
+	}
+	for _, h := range representation[3:] {
+		if got := rec.Result().Header.Get(h); got != "" {
+			t.Errorf("problem response %s = %q, want none", h, got)
+		}
+	}
+	if got := rec.Result().Header.Get("Cache-Control"); got != "no-store" {
+		t.Errorf("problem response Cache-Control = %q, want no-store", got)
 	}
 }
 
@@ -335,11 +356,25 @@ func TestWriteObject_Defaults(t *testing.T) {
 	}
 }
 
-func TestNoTotal_OmitsTheTotal(t *testing.T) {
-	p := web.NewPage([]string{"a"}, web.Query{Size: 1, Cursor: "c"}, web.Paging{Total: web.NoTotal})
+// A read that did not set Total emits no total: the zero Paging is an
+// uncounted read, never a counted, empty one.
+func TestPaging_ZeroValueIsUncounted(t *testing.T) {
+	p := web.NewPage([]string{"a"}, web.Query{Page: 1, Size: 1}, web.Paging{})
 
 	if p.Total != nil {
 		t.Errorf("total = %d, want absent", *p.Total)
+	}
+}
+
+// The envelope's total is its own: a later change to the read's count does
+// not reach a page already assembled.
+func TestNewPage_CopiesTheTotal(t *testing.T) {
+	total := 3
+	p := web.NewPage([]string{"a"}, web.Query{Page: 1, Size: 1}, web.Paging{Total: &total})
+	total = 4
+
+	if *p.Total != 3 {
+		t.Errorf("total = %d, want the 3 the read reported", *p.Total)
 	}
 }
 

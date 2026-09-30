@@ -15,6 +15,10 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
+// discard is the logger a test that does not read the writer's records
+// wires it with.
+var discard = slog.New(slog.DiscardHandler)
+
 // matcherFor is the consumer-matcher shape: claim errors matching a sentinel
 // with a status-only Problem, pass on everything else.
 func matcherFor(sentinel error, status int) web.ProblemMatcher {
@@ -26,33 +30,118 @@ func matcherFor(sentinel error, status int) web.ProblemMatcher {
 	}
 }
 
+func TestNewErrorWriter_NilLoggerPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r != "web: NewErrorWriter requires a *slog.Logger" {
+			t.Fatalf("panic = %v, want the wiring message", r)
+		}
+	}()
+	web.NewErrorWriter(nil)
+}
+
 func TestErrorWriter_QueryErrorIsBuiltIn(t *testing.T) {
-	ew := web.NewErrorWriter()
+	ew := web.NewErrorWriter(discard)
 
 	err := fmt.Errorf("listing: %w", &web.QueryError{
 		Param: "page", Value: "0", Reason: "must be an integer of at least 1",
 	})
-	if got := ew.Status(err); got != http.StatusBadRequest {
+	if got := ew.Problem(err).Status; got != http.StatusBadRequest {
 		t.Errorf("Status = %d, want %d", got, http.StatusBadRequest)
 	}
 }
 
 func TestErrorWriter_PreconditionErrorIsBuiltIn(t *testing.T) {
-	ew := web.NewErrorWriter()
+	ew := web.NewErrorWriter(discard)
 
 	missing := fmt.Errorf("edit: %w", &web.PreconditionError{Missing: true})
-	if got := ew.Status(missing); got != http.StatusPreconditionRequired {
+	if got := ew.Problem(missing).Status; got != http.StatusPreconditionRequired {
 		t.Errorf("Status(missing) = %d, want %d", got, http.StatusPreconditionRequired)
 	}
 	malformed := fmt.Errorf("edit: %w", &web.PreconditionError{Value: `W/"3"`})
-	if got := ew.Status(malformed); got != http.StatusBadRequest {
+	if got := ew.Problem(malformed).Status; got != http.StatusBadRequest {
 		t.Errorf("Status(malformed) = %d, want %d", got, http.StatusBadRequest)
+	}
+}
+
+// A handler that returns a Problem has decided the response itself: it is
+// sent as is, members and all, rather than as an unclaimed 500, and no
+// error text is added to it. A matcher that claims every error is not
+// consulted.
+func TestErrorWriter_ReturnedProblemIsSentAsIs(t *testing.T) {
+	claimAll := func(error) (web.Problem, bool) { return web.Problem{Status: http.StatusTeapot}, true }
+	ew := web.NewErrorWriter(discard, claimAll)
+	returned := web.Problem{
+		Type:   "https://example.test/problems/quota",
+		Status: http.StatusConflict,
+		Title:  "Quota exhausted",
+		Extras: map[string]any{"quota": "files"},
+	}
+	rec := httptest.NewRecorder()
+
+	if err := ew.Write(rec, httptest.NewRequest(http.MethodPost, "/files", nil), returned); err != nil {
+		t.Fatal(err)
+	}
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("status = %d, want the Problem's 409", rec.Code)
+	}
+	var got web.Problem
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != returned.Type || got.Title != returned.Title || got.Detail != "" || got.Extras["quota"] != "files" || got.Instance != "/files" {
+		t.Errorf("problem = %+v, want the returned one with the request path as instance", got)
+	}
+	if p := ew.Problem(web.Problem{}); p.Status != http.StatusInternalServerError {
+		t.Errorf("a returned Problem with no status maps to %d, want 500", p.Status)
+	}
+}
+
+func TestErrorWriter_ReturnedProblemPointerIsSentAsIs(t *testing.T) {
+	claimAll := func(error) (web.Problem, bool) { return web.Problem{Status: http.StatusTeapot}, true }
+	ew := web.NewErrorWriter(discard, claimAll)
+
+	p := ew.Problem(&web.Problem{Status: http.StatusConflict, Title: "Quota exhausted"})
+
+	if p.Status != http.StatusConflict || p.Title != "Quota exhausted" {
+		t.Errorf("problem = %+v, want the returned *Problem's 409", p)
+	}
+}
+
+// Only a Problem that is the returned error maps itself; one wrapped inside
+// another error is an error like any other, for the matchers to claim.
+func TestErrorWriter_WrappedProblemGoesToTheMatchers(t *testing.T) {
+	claimAll := func(error) (web.Problem, bool) { return web.Problem{Status: http.StatusTeapot}, true }
+	wrapped := fmt.Errorf("upload: %w", web.Problem{Status: http.StatusConflict})
+
+	if got := web.NewErrorWriter(discard, claimAll).Problem(wrapped).Status; got != http.StatusTeapot {
+		t.Errorf("status = %d, want the matcher's 418", got)
+	}
+	if got := web.NewErrorWriter(discard).Problem(wrapped).Status; got != http.StatusInternalServerError {
+		t.Errorf("unclaimed status = %d, want 500", got)
+	}
+}
+
+func TestErrorWriter_PathErrorIsBuiltIn(t *testing.T) {
+	ew := web.NewErrorWriter(discard)
+	err := &web.PathError{Name: "id", Value: "42"}
+	rec := httptest.NewRecorder()
+
+	if werr := ew.Write(rec, httptest.NewRequest(http.MethodGet, "/things/42", nil), err); werr != nil {
+		t.Fatal(werr)
+	}
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `must be a UUID`) {
+		t.Errorf("body = %s, want the error text as detail", rec.Body)
 	}
 }
 
 func TestErrorWriter_BuiltInWinsOverMatchers(t *testing.T) {
 	claimAll := func(error) (web.Problem, bool) { return web.Problem{Status: http.StatusTeapot}, true }
-	ew := web.NewErrorWriter(claimAll)
+	ew := web.NewErrorWriter(discard, claimAll)
 
 	builtIn := map[string]struct {
 		err  error
@@ -65,14 +154,14 @@ func TestErrorWriter_BuiltInWinsOverMatchers(t *testing.T) {
 		"body rejected":        {&web.BodyError{Reason: "unknown field"}, http.StatusBadRequest},
 	}
 	for name, tt := range builtIn {
-		if got := ew.Status(tt.err); got != tt.want {
+		if got := ew.Problem(tt.err).Status; got != tt.want {
 			t.Errorf("Status(%s) = %d, want %d", name, got, tt.want)
 		}
 	}
 }
 
 func TestErrorWriter_Write428CarriesTheErrorText(t *testing.T) {
-	ew := web.NewErrorWriter()
+	ew := web.NewErrorWriter(discard)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPatch, "/things/1", nil)
 
@@ -95,26 +184,27 @@ func TestErrorWriter_Write428CarriesTheErrorText(t *testing.T) {
 func TestErrorWriter_FirstMatchWins(t *testing.T) {
 	sentinel := errors.New("version mismatch")
 	ew := web.NewErrorWriter(
+		discard,
 		matcherFor(sentinel, http.StatusPreconditionFailed),
 		matcherFor(sentinel, http.StatusConflict),
 	)
 
 	err := fmt.Errorf("update: %w", sentinel)
-	if got := ew.Status(err); got != http.StatusPreconditionFailed {
+	if got := ew.Problem(err).Status; got != http.StatusPreconditionFailed {
 		t.Errorf("Status = %d, want %d", got, http.StatusPreconditionFailed)
 	}
 }
 
 func TestErrorWriter_UnclaimedErrorIs500(t *testing.T) {
-	ew := web.NewErrorWriter(matcherFor(errors.New("unrelated"), http.StatusConflict))
+	ew := web.NewErrorWriter(discard, matcherFor(errors.New("unrelated"), http.StatusConflict))
 
-	if got := ew.Status(errors.New("driver: connection reset")); got != http.StatusInternalServerError {
+	if got := ew.Problem(errors.New("driver: connection reset")).Status; got != http.StatusInternalServerError {
 		t.Errorf("Status = %d, want %d", got, http.StatusInternalServerError)
 	}
 }
 
 func TestErrorWriter_Write400CarriesTheErrorText(t *testing.T) {
-	ew := web.NewErrorWriter()
+	ew := web.NewErrorWriter(discard)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/things?page=0", nil)
 
@@ -147,6 +237,7 @@ func TestErrorWriter_DetailAddsStatusesThatCarryTheErrorText(t *testing.T) {
 	forbidden := errors.New("seeding is disabled in this environment")
 	internal := errors.New("driver: connection reset")
 	ew := web.NewErrorWriter(
+		discard,
 		matcherFor(conflict, http.StatusConflict),
 		matcherFor(forbidden, http.StatusForbidden),
 	)
@@ -194,7 +285,7 @@ func TestErrorWriter_DetailAddsStatusesThatCarryTheErrorText(t *testing.T) {
 func TestErrorWriter_Write_MatcherSuppliedProblemReachesTheWire(t *testing.T) {
 	const problemType = "https://example.test/probs/out-of-credit"
 	sentinel := errors.New("insufficient balance")
-	ew := web.NewErrorWriter(func(err error) (web.Problem, bool) {
+	ew := web.NewErrorWriter(discard, func(err error) (web.Problem, bool) {
 		if errors.Is(err, sentinel) {
 			return web.Problem{
 				Type:   problemType,
@@ -235,7 +326,7 @@ func TestErrorWriter_Write_MatcherSuppliedProblemReachesTheWire(t *testing.T) {
 // purpose, and Detail's set only governs the fallback to the error's text.
 func TestErrorWriter_Write_MatcherDetailShipsOutsideTheDetailSet(t *testing.T) {
 	sentinel := errors.New("dirty at version 7")
-	ew := web.NewErrorWriter(func(err error) (web.Problem, bool) {
+	ew := web.NewErrorWriter(discard, func(err error) (web.Problem, bool) {
 		if errors.Is(err, sentinel) {
 			return web.Problem{Status: http.StatusConflict, Detail: "schema is dirty at version 7"}, true
 		}
@@ -261,21 +352,21 @@ func TestErrorWriter_Write_MatcherDetailShipsOutsideTheDetailSet(t *testing.T) {
 // the same as an error no matcher claims at all.
 func TestErrorWriter_Problem_MatcherWithZeroStatusIs500(t *testing.T) {
 	sentinel := errors.New("unnamed")
-	ew := web.NewErrorWriter(func(err error) (web.Problem, bool) {
+	ew := web.NewErrorWriter(discard, func(err error) (web.Problem, bool) {
 		if errors.Is(err, sentinel) {
 			return web.Problem{Detail: "no status set"}, true
 		}
 		return web.Problem{}, false
 	})
 
-	if got := ew.Status(sentinel); got != http.StatusInternalServerError {
+	if got := ew.Problem(sentinel).Status; got != http.StatusInternalServerError {
 		t.Errorf("Status = %d, want %d", got, http.StatusInternalServerError)
 	}
 }
 
 func TestErrorWriter_WriteAboveA400SendsNoErrorText(t *testing.T) {
 	sentinel := errors.New("unique constraint violation")
-	ew := web.NewErrorWriter(matcherFor(sentinel, http.StatusConflict))
+	ew := web.NewErrorWriter(discard, matcherFor(sentinel, http.StatusConflict))
 
 	tests := []struct {
 		name   string
@@ -334,11 +425,11 @@ func TestErrorWriter_Write5xxLogsTheCause(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
 			ew := web.NewErrorWriter(
+				slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 				matcherFor(errDown, http.StatusServiceUnavailable),
 				matcherFor(errBroken, http.StatusInternalServerError),
 				matcherFor(errNoStatus, 0),
 			)
-			ew.Log(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 			req := httptest.NewRequest(http.MethodPost, "/things", nil)
 			ctx := web.WithRequestID(req.Context(), "req-1")
 			if c.cancel {
@@ -362,6 +453,7 @@ func TestErrorWriter_Write5xxLogsTheCause(t *testing.T) {
 				"error":                     c.err.Error(),
 				"http.request.method":       "POST",
 				"url.path":                  "/things",
+				"client.address":            "192.0.2.1:1234",
 				"http.response.status_code": c.status,
 				"request_id":                "req-1",
 			}
@@ -374,8 +466,7 @@ func TestErrorWriter_Write5xxLogsTheCause(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	ew := web.NewErrorWriter(matcherFor(errConflict, http.StatusConflict))
-	ew.Log(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	ew := web.NewErrorWriter(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})), matcherFor(errConflict, http.StatusConflict))
 	if err := ew.Write(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil), errConflict); err != nil {
 		t.Fatal(err)
 	}
@@ -388,8 +479,7 @@ func TestErrorWriter_Write5xxLogsTheCause(t *testing.T) {
 // what it could not write.
 func TestHandle_500IsLoggedOnce(t *testing.T) {
 	var buf bytes.Buffer
-	ew := web.NewErrorWriter()
-	ew.Log(slog.New(slog.NewJSONHandler(&buf, nil)))
+	ew := web.NewErrorWriter(slog.New(slog.NewJSONHandler(&buf, nil)))
 	h := web.Handle(func(http.ResponseWriter, *http.Request) error { return errors.New("boom") }, ew)
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	if n := strings.Count(buf.String(), "\n"); n != 1 {

@@ -16,7 +16,7 @@ import (
 
 func TestHandle_WritesAReturnedErrorAsAProblem(t *testing.T) {
 	sentinel := errors.New("row is gone")
-	ew := web.NewErrorWriter(matcherFor(sentinel, http.StatusNotFound))
+	ew := web.NewErrorWriter(discard, matcherFor(sentinel, http.StatusNotFound))
 	h := web.Handle(func(http.ResponseWriter, *http.Request) error {
 		return fmt.Errorf("find: %w", sentinel)
 	}, ew)
@@ -42,7 +42,7 @@ func TestHandle_WritesAReturnedErrorAsAProblem(t *testing.T) {
 func TestHandle_LeavesASuccessfulResponseAlone(t *testing.T) {
 	h := web.Handle(func(w http.ResponseWriter, _ *http.Request) error {
 		return web.WriteJSON(w, http.StatusCreated, map[string]string{"id": "7"})
-	}, web.NewErrorWriter())
+	}, web.NewErrorWriter(discard))
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/things", nil))
@@ -70,8 +70,7 @@ func TestHandle_NeverWritesASecondResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var log bytes.Buffer
-			ew := web.NewErrorWriter()
-			ew.Log(slog.New(slog.NewJSONHandler(&log, nil)))
+			ew := web.NewErrorWriter(slog.New(slog.NewJSONHandler(&log, nil)))
 			h := web.Handle(func(w http.ResponseWriter, _ *http.Request) error {
 				tt.commit(w)
 				return errors.New("stream broke")
@@ -117,8 +116,7 @@ func TestHandle_LogsAProblemWriteFailure(t *testing.T) {
 	sentinel := errors.New("row is gone")
 	broken := errors.New("write tcp: connection reset by peer")
 	var log bytes.Buffer
-	ew := web.NewErrorWriter(matcherFor(sentinel, http.StatusNotFound))
-	ew.Log(slog.New(slog.NewJSONHandler(&log, nil)))
+	ew := web.NewErrorWriter(slog.New(slog.NewJSONHandler(&log, nil)), matcherFor(sentinel, http.StatusNotFound))
 	h := web.Handle(func(http.ResponseWriter, *http.Request) error {
 		return sentinel
 	}, ew)
@@ -167,9 +165,8 @@ func TestHandleErr_EndToEnd(t *testing.T) {
 		Name string `json:"name"`
 	}
 
-	ew := web.NewErrorWriter(matcherFor(errConflict, http.StatusConflict))
+	ew := web.NewErrorWriter(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)), matcherFor(errConflict, http.StatusConflict))
 	ew.Detail(http.StatusConflict)
-	ew.Log(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)))
 
 	things := web.NewGroup("/things")
 	things.SetErrorWriter(ew)
@@ -178,7 +175,7 @@ func TestHandleErr_EndToEnd(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return web.WriteJSON(w, http.StatusOK, web.NewPage([]string{"a"}, q, web.Paging{Total: 1}))
+		return web.WriteJSON(w, http.StatusOK, web.NewPage([]string{"a"}, q, web.Paging{Total: new(1)}))
 	})
 	things.HandleErr(http.MethodPatch, "/{id}", func(w http.ResponseWriter, r *http.Request) error {
 		version, err := web.IfMatch(r)
@@ -302,8 +299,7 @@ func TestHandle_RequestIDOnFailureRecords(t *testing.T) {
 		for _, tt := range requests {
 			t.Run(site.name+" "+tt.name, func(t *testing.T) {
 				var log bytes.Buffer
-				ew := web.NewErrorWriter(matcherFor(sentinel, http.StatusNotFound))
-				ew.Log(slog.New(slog.NewJSONHandler(&log, nil)))
+				ew := web.NewErrorWriter(slog.New(slog.NewJSONHandler(&log, nil)), matcherFor(sentinel, http.StatusNotFound))
 
 				web.Handle(site.fn, ew).ServeHTTP(site.w(httptest.NewRecorder()), tt.req)
 
@@ -313,6 +309,9 @@ func TestHandle_RequestIDOnFailureRecords(t *testing.T) {
 				}
 				if record["msg"] != site.msg {
 					t.Fatalf("msg = %v, want %q", record["msg"], site.msg)
+				}
+				if record["client.address"] != tt.req.RemoteAddr {
+					t.Errorf("client.address = %v, want %q", record["client.address"], tt.req.RemoteAddr)
 				}
 				got, present := record["request_id"]
 				if tt.id == nil && present {

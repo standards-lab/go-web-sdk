@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
-	"github.com/standards-lab/go-web-sdk/webtest"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
 // tag returns middleware that appends its name to order as the request passes
@@ -29,7 +29,7 @@ func TestChain_RunsInArgumentOrder(t *testing.T) {
 		tag(&order, "second"),
 	)
 
-	webtest.Probe(handler, "/")
+	handlertest.Get(handler, "/")
 
 	want := []string{"first", "second", "handler"}
 	if len(order) != len(want) {
@@ -48,7 +48,7 @@ func TestChain_NoMiddlewareReturnsTheHandler(t *testing.T) {
 		served = true
 	}))
 
-	webtest.Probe(handler, "/")
+	handlertest.Get(handler, "/")
 
 	if !served {
 		t.Error("the handler did not run through an empty chain")
@@ -66,7 +66,7 @@ func TestChain_SkipsNilMiddleware(t *testing.T) {
 		nil,
 	)
 
-	webtest.Probe(handler, "/")
+	handlertest.Get(handler, "/")
 
 	if len(order) != 2 || order[0] != "only" || order[1] != "handler" {
 		t.Errorf("order = %v, want [only handler]", order)

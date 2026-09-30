@@ -12,29 +12,10 @@ type header struct {
 	name, value string
 }
 
-// Headers sets each entry of headers on the response before the next
-// handler runs. It knows nothing about what it is setting: security headers
-// and Cache-Control: no-store for an API's responses are the usual cargo,
-// but the map is applied as given. Names are canonicalized the way
-// [http.Header.Set] canonicalizes them, so "cache-control" and
-// "Cache-Control" name the same header.
-//
-// The headers go on before the handler runs for the same reason [RequestID]
-// sets its header first: response headers go to the wire with the first
-// write, so setting them before the handler keeps them on the response
-// whoever ends up writing it, including a [Recoverer] answering a panic. A
-// handler that sets the same header afterwards overrides the fixed value,
-// and one that deletes it removes it; the middleware sets, it does not
-// enforce.
-//
-// Each entry is set independently, so the order of application does not
-// matter and none is imposed. Headers copies the map at construction; a
-// later change to the caller's map has no effect on the middleware.
-//
-// A nil or empty map is harmless wiring and applies nothing. Headers panics
-// on an empty name, which names no header, and on two names that
-// canonicalize to the same header ("cache-control" beside "Cache-Control"):
-// map iteration order would then pick the winner at random per request.
+// Headers sets headers on the response before the next handler, which may
+// override them. It copies the map at construction, so a later change to the
+// caller's map has no effect. It panics on an empty name or two that
+// canonicalize alike.
 func Headers(headers map[string]string) web.Middleware {
 	fixed := make([]header, 0, len(headers))
 	seen := make(map[string]bool, len(headers))

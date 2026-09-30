@@ -11,8 +11,8 @@ import (
 )
 
 // Server wraps an http.Server whose bind and serve phases are split, so a
-// composition root registers [Server.Start] and [Server.Shutdown] as
-// lifecycle hooks and monitors [Server.Err].
+// composition root declares [Server.Start] and [Server.Shutdown] as a
+// lifecycle service's members and monitors [Server.Err].
 type Server struct {
 	http *http.Server
 	errs chan error
@@ -22,10 +22,15 @@ type Server struct {
 }
 
 // NewServer builds a Server from a finalized [Config] and the handler it
-// serves. It panics if cfg has not been finalized.
-func NewServer(cfg Config, handler http.Handler) *Server {
+// serves, with net/http's own diagnostics (a TLS handshake failure, a
+// header-parse error) logged through logger at warn level. It panics on an
+// unfinalized cfg or a nil logger.
+func NewServer(cfg Config, handler http.Handler, logger *slog.Logger) *Server {
 	if !cfg.finalized() {
 		panic("web: Config not finalized: call Finalize before NewServer")
+	}
+	if logger == nil {
+		panic("web: NewServer requires a *slog.Logger")
 	}
 
 	srv := &http.Server{
@@ -35,10 +40,10 @@ func NewServer(cfg Config, handler http.Handler) *Server {
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout.Duration(),
 		WriteTimeout:      cfg.WriteTimeout.Duration(),
 		IdleTimeout:       cfg.IdleTimeout.Duration(),
+		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
 	}
-	// An unset MaxHeaderBytes stays zero on the http.Server, which is
-	// net/http's own signal to apply http.DefaultMaxHeaderBytes; the SDK does
-	// not restate that number.
+	// An unset MaxHeaderBytes stays zero, net/http's signal to apply its own
+	// default.
 	if cfg.MaxHeaderBytes != nil {
 		srv.MaxHeaderBytes = *cfg.MaxHeaderBytes
 	}
@@ -47,27 +52,6 @@ func NewServer(cfg Config, handler http.Handler) *Server {
 		http: srv,
 		errs: make(chan error, 1),
 	}
-}
-
-// Log routes net/http's own diagnostics (TLS handshake failures, header
-// parse errors, the superfluous WriteHeader warning) through logger at warn
-// level, by bridging http.Server.ErrorLog with [slog.NewLogLogger]. Unset,
-// net/http writes them through the global log package to stderr, outside
-// the slog pipeline. Called at wiring time, like [ErrorWriter.Log]; a nil
-// logger panics, and Log after Start panics because Serve reads ErrorLog
-// concurrently.
-func (s *Server) Log(logger *slog.Logger) {
-	if logger == nil {
-		panic("web: Server.Log requires a *slog.Logger")
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.listener != nil {
-		panic("web: Server.Log after Start")
-	}
-	s.http.ErrorLog = slog.NewLogLogger(logger.Handler(), slog.LevelWarn)
 }
 
 // Start binds the listener on the calling goroutine: a bind failure is the
@@ -117,10 +101,11 @@ func (s *Server) Err() <-chan error {
 	return s.errs
 }
 
-// Shutdown drains the server gracefully via http.Server.Shutdown. Before a
-// successful Start it is a no-op that leaves the server startable, so a
-// lifecycle drain after a failed startup passes through cleanly; once it has
-// served, a Server is single-use.
+// Shutdown drains the server gracefully through http.Server.Shutdown. When
+// ctx ends first, it closes the connections net/http still tracks and
+// returns ctx's error; hijacked connections and handlers still running are
+// left to the caller. Before a successful Start it is a no-op that leaves the
+// server startable; once it has served, a Server is single-use.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	started := s.listener != nil
@@ -129,5 +114,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if !started {
 		return nil
 	}
-	return s.http.Shutdown(ctx)
+	err := s.http.Shutdown(ctx)
+	if err != nil && errors.Is(err, ctx.Err()) {
+		// Close reaches only the connections net/http tracks; it neither
+		// waits for a running handler nor touches a hijacked connection.
+		_ = s.http.Close()
+	}
+	return err
 }

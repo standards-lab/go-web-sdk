@@ -16,13 +16,9 @@ const (
 	ProblemTypeBlank = "about:blank"
 )
 
-// Problem is an RFC 9457 problem document. Type identifies the problem's
-// semantics and is the member a client branches on; this package mints no
-// type URIs of its own, so a consumer supplies one here or through Extras.
-// Extras carries extension members beyond the five standard ones, merged at
-// the top level of the marshaled document: an extras key named "type",
-// "title", "detail", or "instance" overrides the field of the same name,
-// and a "status" key never desyncs from Status.
+// Problem is an RFC 9457 problem document. Extras carries extension members,
+// merged at the top level of the marshaled document, where a key may
+// override any standard member except status, which always matches Status.
 type Problem struct {
 	Type     string
 	Title    string
@@ -99,11 +95,8 @@ func (p *Problem) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Error renders the problem as a status line: the status code and title,
-// followed by ": " and the detail when one is set, with an empty title
-// falling back to the status phrase. It lets a Problem serve directly as
-// the error a caller receives, with no wrapper type needed to bridge it to
-// the error interface.
+// Error renders the problem as a status line, "404 Not Found: detail", so a
+// Problem serves directly as an error.
 func (p Problem) Error() string {
 	title := p.Title
 	if title == "" {
@@ -130,7 +123,7 @@ func (p *Problem) applyDefaults() {
 
 // Write sends the problem, applying defaults: a zero Status becomes 500, an
 // empty Type becomes about:blank, and an empty Title takes the status
-// phrase.
+// phrase, so it is omitted for a status outside net/http's table.
 func (p Problem) Write(w http.ResponseWriter) error {
 	p.applyDefaults()
 
@@ -139,13 +132,9 @@ func (p Problem) Write(w http.ResponseWriter) error {
 	return json.NewEncoder(w).Encode(p)
 }
 
-// WriteFor is [Problem.Write], with Instance set to the request path first
-// when p.Instance is empty, and the request's correlation id surfaced as the
-// "request_id" extension member when the request's context carries a
-// non-empty one (see [WithRequestID]). The id is the SDK's own assertion of
-// which request the document answers, so it overrides a "request_id" key the
-// caller put in Extras. Extras is copied before the id is merged in; the
-// caller's map is never written.
+// WriteFor is [Problem.Write] with Instance defaulted to the request path
+// and the request's correlation id ([WithRequestID]) as the "request_id"
+// member, overriding one in Extras without writing the caller's map.
 func (p Problem) WriteFor(w http.ResponseWriter, r *http.Request) error {
 	if p.Instance == "" {
 		p.Instance = r.URL.Path

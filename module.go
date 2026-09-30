@@ -9,16 +9,10 @@ type Module struct {
 	handler http.Handler
 }
 
-// NewModule compiles the group tree into a Module in one pass: every route
-// registers on an internal mux under its full pattern with its full chain:
-// group middleware outermost, ordered root to leaf, then per-route
-// middleware. The tree is then sealed against further mutation. Composition
-// happens once, here; nothing recomposes per request. A duplicate or malformed
-// pattern panics at registration, from the mux itself. A request under the
-// prefix that matches no route is answered by the root group's not-found and
-// method-not-allowed handlers ([Group.SetNotFound],
-// [Group.SetMethodNotAllowed]), problem documents by default, in place of
-// the mux's plain-text answers.
+// NewModule compiles the group tree into a Module once, registering every
+// route under its full pattern and chain, and seals the tree. It panics on a
+// duplicate or malformed pattern. The root group's [Group.SetNotFound] and
+// [Group.SetMethodNotAllowed] handlers answer a miss under the prefix.
 func NewModule(g *Group) *Module {
 	mux := http.NewServeMux()
 	compile(mux, "", nil, g)
@@ -32,10 +26,10 @@ func NewModule(g *Group) *Module {
 	}
 }
 
-// NewHandlerModule mounts a raw handler under prefix (an embedded client
-// application, a file server), with mw wrapped around it. The handler
-// receives the request with the prefix stripped, via http.StripPrefix; this
-// is the one place a module rewrites a request path.
+// NewHandlerModule mounts a raw handler, such as an embedded client
+// application or a file server, under prefix, with mw around it and the
+// prefix stripped from the request. It is the one module that rewrites a
+// request path.
 func NewHandlerModule(
 	prefix string,
 	handler http.Handler,
@@ -46,11 +40,6 @@ func NewHandlerModule(
 		prefix:  prefix,
 		handler: http.StripPrefix(prefix, Chain(handler, mw...)),
 	}
-}
-
-// Prefix reports the path prefix the module mounts at.
-func (m *Module) Prefix() string {
-	return m.prefix
 }
 
 // ServeHTTP implements http.Handler.

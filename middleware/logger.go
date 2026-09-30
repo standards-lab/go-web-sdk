@@ -9,55 +9,15 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// RequestLogger emits one record per request, at info level, with the
-// message "request" and these attributes, named by OpenTelemetry's semantic
-// conventions where one exists:
-//
-//   - http.request.method: the request method.
-//   - url.path: the request path.
-//   - http.route: the matched route template, present only when the
-//     request matched a ServeMux pattern (see below).
-//   - http.response.status_code: the status the client got.
-//   - duration: the time from entry to the handler's return, as a
-//     [slog.Duration]. The conventions name no log attribute for it
-//     (http.server.request.duration is a metric), so the name is the
-//     SDK's own.
-//   - client.address: the request's RemoteAddr.
-//   - request_id: the correlation id from the request's context, present
-//     only when one is set ([web.WithRequestID], as [RequestID] does).
-//
-// A successful request to [web.HealthPath] or [web.ReadyPath] logs at
-// debug, keeping orchestrator heartbeat out of production logs while a
-// failing probe stays visible.
-//
-// http.route is [http.Request.Pattern] with its method token removed
-// ("GET /orders/{id}" logs as "/orders/{id}"; a pattern with no method is
-// logged whole). ServeMux sets Pattern on the request it dispatches, and
-// RequestLogger reads it back after the handler returns from the request
-// it passed down, unchanged, so the two are the same request only when no
-// middleware between RequestLogger and the mux forwards a derived request.
-// [RequestID] forwards one (through [http.Request.WithContext]), so in
-// Chain(mux, RequestLogger(l), RequestID()) the mux sets Pattern on
-// RequestID's copy and RequestLogger's own request stays empty. Put
-// RequestID, and any other middleware that derives a request, outside
-// RequestLogger — Chain(mux, RequestID(), RequestLogger(l)) — which is
-// also the order that puts the id in RequestLogger's context. Inside a
-// route's own chain (group or per-route middleware) the pattern is already
-// set when RequestLogger runs, and the order does not matter. A request
-// that matched nothing, answered by a router's or module's miss handler,
-// has no pattern; http.route is then omitted, never logged empty.
-//
-// The logger does not recover panics; that is [Recoverer]'s job, in either
-// chain order. When a panic unwinds through the logger with no response
-// committed, the record's status is 500: that is what a Recoverer outside
-// the logger goes on to write, and without one net/http drops the
-// connection, which a client experiences as a server failure. The panic
-// value itself is logged by the Recoverer, or by net/http's own recovery
-// when none is wired.
-//
-// The wrapped ResponseWriter records the first status written, implements
-// Unwrap so http.ResponseController reaches through it, and delegates
-// io.ReaderFrom.
+// RequestLogger emits one info record per request, with the message
+// "request" and the attributes http.request.method, url.path, http.route
+// (the matched pattern without its method, when one matched),
+// http.response.status_code (500 for a panic unwinding with nothing
+// committed), duration, client.address, and request_id (when [RequestID] set
+// one). A successful probe of [web.HealthPath] or [web.ReadyPath] logs at
+// debug. Chain it after RequestID and any other middleware that derives a
+// request, so the request it reads is the one carrying the id and the route.
+// It panics on a nil logger.
 func RequestLogger(logger *slog.Logger) web.Middleware {
 	if logger == nil {
 		panic("middleware: RequestLogger requires a *slog.Logger")

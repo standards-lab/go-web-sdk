@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
-	"github.com/standards-lab/go-web-sdk/webtest"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
 // mustPanic runs fn and fails the test unless it panics.
@@ -31,7 +31,7 @@ func TestNewGroup_AcceptsMultiSegmentPrefix(t *testing.T) {
 	g := web.NewGroup("/api/v1")
 	g.Handle(http.MethodGet, "/orders", ok())
 
-	rec := webtest.Probe(web.NewModule(g), "/api/v1/orders")
+	rec := handlertest.Get(web.NewModule(g), "/api/v1/orders")
 	if rec.Code != http.StatusOK {
 		t.Errorf("GET /api/v1/orders = %d, want 200", rec.Code)
 	}
@@ -51,7 +51,7 @@ func TestGroup_EmptyPatternBindsThePrefix(t *testing.T) {
 	g := web.NewGroup("/api/v1")
 	g.Handle(http.MethodGet, "", ok())
 
-	rec := webtest.Probe(web.NewModule(g), "/api/v1")
+	rec := handlertest.Get(web.NewModule(g), "/api/v1")
 	if rec.Code != http.StatusOK {
 		t.Errorf("GET /api/v1 = %d, want 200", rec.Code)
 	}
@@ -102,7 +102,7 @@ func TestGroup_HandleErrWithoutAWriterPanics(t *testing.T) {
 
 func TestGroup_ErrorWriterIsNotInherited(t *testing.T) {
 	parent := web.NewGroup("/api")
-	parent.SetErrorWriter(web.NewErrorWriter())
+	parent.SetErrorWriter(web.NewErrorWriter(discard))
 	child := web.NewGroup("/things")
 	parent.Mount(child)
 
@@ -116,7 +116,7 @@ func TestGroup_SetErrorWriterAfterNewModulePanics(t *testing.T) {
 	web.NewModule(g)
 
 	mustPanic(t, "SetErrorWriter after NewModule", func() {
-		g.SetErrorWriter(web.NewErrorWriter())
+		g.SetErrorWriter(web.NewErrorWriter(discard))
 	})
 	mustPanic(t, "HandleErr after NewModule", func() {
 		g.HandleErr(http.MethodGet, "", func(http.ResponseWriter, *http.Request) error { return nil })

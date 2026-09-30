@@ -1,25 +1,19 @@
-// Package ratelimit is go-web-sdk's per-key HTTP rate-limiting middleware,
-// over github.com/go-chi/httprate. It is a separate module from the base
-// go-web-sdk module because httprate and its indirect dependencies (an xxh3
-// hash and a CPU-feature probe beneath it) are weight most consumers of web
-// should not compile to get the server and the router: an application that
-// does not rate-limit never pulls them.
+// Package ratelimit is go-web-sdk's per-client HTTP rate-limiting
+// middleware, over github.com/go-chi/httprate. It is a module of its own so
+// an application that does not rate-limit never compiles httprate and its
+// dependencies. This comment lists every exported name; each symbol's own
+// documentation states its contract.
 //
-// [New] returns a [web.Middleware] that counts requests per client in a
-// sliding window held in memory, keyed by the host part of the request's
-// remote address with an IPv6 address reduced to its /64, and refuses a
-// request over the limit with a 429 RFC 9457 problem document and a
-// Retry-After header. The count is per process: two replicas each hold
-// their own.
+// [New] counts each client's requests in a sliding window held in each
+// process's memory, so two replicas each hold their own count. Its [Config]
+// loads as part of an application's configuration under the block
+// "rate_limit", with the RATE_LIMIT_REQUESTS and RATE_LIMIT_WINDOW overrides
+// under the application's prefix.
 //
-// [Config] holds the limit, Requests per Window, and implements the Merge
-// and Finalize contract of go-core's config package, so it loads as part of
-// an application's configuration under the block "rate_limit", with the
-// RATE_LIMIT_REQUESTS and RATE_LIMIT_WINDOW environment overrides under the
-// application's prefix. Both fields are pointers: nil is unset and takes
-// the default, 300 requests per minute. [Config.FinalizeBlock] finalizes
-// under a caller-named block instead, so a second limit (a tighter one on a
-// login route, say) loads under the same prefix without its override names
-// colliding with the primary limit's. New panics on a Config that was not
-// finalized, or that would not validate, as a wiring mistake.
+//   - [New] returns the [web.Middleware] that limits each client and
+//     answers a request over the limit with a 429 problem.
+//   - [Config] is the limit, Requests per Window, with nil fields taking the
+//     default at [Config.Finalize]; [Config.FinalizeBlock] loads a second
+//     limit under a block of its own.
+//   - [Env] records the override names Finalize composed.
 package ratelimit

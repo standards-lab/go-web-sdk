@@ -12,10 +12,10 @@ type route struct {
 	middleware []Middleware
 }
 
-// Group is a declarative route group: a path prefix, a middleware stack,
-// atomic routes, and nested child groups. [NewModule] compiles a group tree
-// into a servable [Module] and seals it; mutating a sealed group panics, so a
-// route added after compilation cannot be silently dead.
+// Group declares routes under a path prefix, with a middleware stack and
+// nested child groups. [NewModule] compiles and seals it; any mutation of a
+// sealed group panics, so a route added after compilation is never silently
+// dead.
 type Group struct {
 	prefix           string
 	middleware       []Middleware
@@ -27,25 +27,24 @@ type Group struct {
 	sealed           bool
 }
 
-// NewGroup returns an open group rooted at prefix. The prefix may span
-// multiple segments ("/api/v1"); it must begin with '/' and not end with one,
-// and a malformed prefix panics — a wiring error caught at registration.
+// NewGroup returns an open group rooted at prefix, which may span segments
+// ("/api/v1"). It panics on a prefix that does not begin with '/' or ends
+// with one.
 func NewGroup(prefix string) *Group {
 	validatePrefix(prefix)
 	return &Group{prefix: prefix}
 }
 
-// Use appends middleware to the group's stack, wrapping every route in this
-// group and its children. Use after NewModule panics.
+// Use appends middleware wrapping every route in the group and its
+// children.
 func (g *Group) Use(mw ...Middleware) {
 	g.checkSeal()
 	g.middleware = append(g.middleware, mw...)
 }
 
-// Handle registers handler for method and pattern relative to the group's
-// prefix. An empty pattern binds the prefix itself; an empty method registers
-// the pattern for every method. Per-route middleware wraps innermost. Handle
-// after NewModule panics.
+// Handle registers handler for method and pattern under the group's
+// prefix, with mw innermost. An empty pattern binds the prefix itself, and
+// an empty method matches every method.
 func (g *Group) Handle(
 	method, pattern string,
 	handler http.Handler,
@@ -63,55 +62,30 @@ func (g *Group) Handle(
 	)
 }
 
-// HandleFunc is [Group.Handle] for a handler function.
-func (g *Group) HandleFunc(
-	method, pattern string,
-	handler http.HandlerFunc,
-	mw ...Middleware,
-) {
-	g.Handle(method, pattern, handler, mw...)
-}
-
-// SetErrorWriter sets the writer the group's [Group.HandleErr] routes are
-// adapted with. The writer is group-scoped, not per route: a layer builds
-// one writer carrying its error vocabulary and every handler in the group
-// returns errors through it. A child group does not inherit its parent's
-// writer; each group that registers error-returning handlers sets its own.
-// SetErrorWriter after NewModule panics.
+// SetErrorWriter sets the writer [Group.HandleErr] adapts the group's
+// handlers with. A child group does not inherit it.
 func (g *Group) SetErrorWriter(ew *ErrorWriter) {
 	g.checkSeal()
 	g.errors = ew
 }
 
-// SetNotFound sets the handler the compiled module answers with when a
-// request under its prefix matches no route. Unset, or set to nil, the
-// module writes a 404 problem document (about:blank, "Not Found"). The
-// handler is the module's, so it is set on the group passed to [NewModule]:
-// a miss is not attributable to any child group, and a nested group carrying
-// one panics at NewModule rather than being silently ignored. No group
-// middleware runs on a miss; only [Router.Use] middleware sees it.
-// SetNotFound after NewModule panics.
+// SetNotFound replaces the module's 404 problem for a request under its
+// prefix that matches no route; nil restores it. It belongs on the group
+// passed to [NewModule], which panics on a nested group carrying one.
 func (g *Group) SetNotFound(h http.Handler) {
 	g.checkSeal()
 	g.notFound = h
 }
 
-// SetMethodNotAllowed is [Group.SetNotFound] for a request whose path
-// matches a route but whose method does not. The Allow header ServeMux
-// computes is already on the response when the handler runs, so a custom
-// handler can read it back from w.Header(). Unset, or set to nil, the module
-// writes a 405 problem document (about:blank, "Method Not Allowed") with
-// Allow preserved. SetMethodNotAllowed after NewModule panics.
+// SetMethodNotAllowed is [Group.SetNotFound] for a matching path with the
+// wrong method; the Allow header is already set when h runs.
 func (g *Group) SetMethodNotAllowed(h http.Handler) {
 	g.checkSeal()
 	g.methodNotAllowed = h
 }
 
-// HandleErr registers an error-returning handler for method and pattern,
-// adapted through the group's error writer by [Handle]; the pattern, method,
-// and middleware rules are [Group.Handle]'s. A group with no writer panics
-// with the fix named — a registration-time failure, like every other wiring
-// mistake here. HandleErr after NewModule panics.
+// HandleErr is [Group.Handle] for an error-returning handler, adapted by
+// [Handle] with the group's writer. It panics on a group with no writer.
 func (g *Group) HandleErr(
 	method, pattern string,
 	fn HandlerFunc,
@@ -123,9 +97,8 @@ func (g *Group) HandleErr(
 	g.Handle(method, pattern, Handle(fn, g.errors), mw...)
 }
 
-// Mount nests child under the group: the child's prefix appends to the
-// parent's, and the parent's middleware wraps the child's. Mount after
-// NewModule panics.
+// Mount nests child under the group: its prefix appends to the group's, and
+// the group's middleware wraps its own.
 func (g *Group) Mount(child *Group) {
 	g.checkSeal()
 	g.groups = append(g.groups, child)

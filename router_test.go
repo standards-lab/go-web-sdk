@@ -8,7 +8,7 @@ import (
 
 	"github.com/standards-lab/go-core/lifecycle"
 	"github.com/standards-lab/go-web-sdk"
-	"github.com/standards-lab/go-web-sdk/webtest"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
 // module compiles a one-route group answering GET <prefix><pattern>.
@@ -16,13 +16,6 @@ func module(prefix, pattern string) *web.Module {
 	g := web.NewGroup(prefix)
 	g.Handle(http.MethodGet, pattern, ok())
 	return web.NewModule(g)
-}
-
-// probe serves one request of any method through h and returns the recorder.
-func probe(h http.Handler, method, path string) *httptest.ResponseRecorder {
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
-	return rec
 }
 
 // expectProblem fails the test unless rec holds a problem document with the
@@ -69,7 +62,7 @@ func TestRouter_LongestPrefixMatchOnSegmentBoundaries(t *testing.T) {
 		"/api/v1":        http.StatusNotFound, // owned by the longer mount, no route binds it
 		"/api/v10/x":     http.StatusNotFound, // string prefix, different segment
 	} {
-		if got := webtest.Probe(r, path).Code; got != want {
+		if got := handlertest.Get(r, path).Code; got != want {
 			t.Errorf("GET %s = %d, want %d", path, got, want)
 		}
 	}
@@ -80,10 +73,10 @@ func TestRouter_FallsBackToNativeMux(t *testing.T) {
 	r.Mount(module("/api", "/things"))
 	r.Handle("GET /status", ok())
 
-	if got := webtest.Probe(r, "/status").Code; got != http.StatusOK {
+	if got := handlertest.Get(r, "/status").Code; got != http.StatusOK {
 		t.Errorf("GET /status = %d, want 200 from the native mux", got)
 	}
-	if got := webtest.Probe(r, "/nowhere").Code; got != http.StatusNotFound {
+	if got := handlertest.Get(r, "/nowhere").Code; got != http.StatusNotFound {
 		t.Errorf("GET /nowhere = %d, want 404", got)
 	}
 }
@@ -102,13 +95,13 @@ func TestRouter_ProbesMountOutsideModuleMiddleware(t *testing.T) {
 	r.Mount(web.NewModule(g))
 	web.RegisterHealth(r, lifecycle.New(), web.Problem{})
 
-	if got := webtest.Probe(r, web.HealthPath).Code; got != http.StatusOK {
+	if got := handlertest.Get(r, web.HealthPath).Code; got != http.StatusOK {
 		t.Fatalf("GET %s = %d, want 200", web.HealthPath, got)
 	}
 	// The coordinator never ran, so 503 rather than 200; what this test
 	// checks is that the path is mounted and reaches the probe, not the
 	// coordinator's readiness state.
-	if got := webtest.Probe(r, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
+	if got := handlertest.Get(r, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
 		t.Fatalf("GET %s = %d, want 503 before the coordinator runs", web.ReadyPath, got)
 	}
 	if len(order) != 0 {
@@ -130,14 +123,14 @@ func TestRouter_UseWrapsWholeDispatch(t *testing.T) {
 	r.Mount(web.NewModule(g))
 	r.Handle("GET /status", ok())
 
-	webtest.Probe(r, "/api/things")
+	handlertest.Get(r, "/api/things")
 	want := []string{"router", "group"}
 	if len(order) != len(want) || order[0] != want[0] || order[1] != want[1] {
 		t.Fatalf("order = %v, want %v", order, want)
 	}
 
 	order = nil
-	webtest.Probe(r, "/status")
+	handlertest.Get(r, "/status")
 	if len(order) != 1 || order[0] != "router" {
 		t.Errorf("order = %v, want the router middleware on the fallback path", order)
 	}
@@ -154,7 +147,7 @@ func TestRouter_SecondModuleAtSamePrefixPanics(t *testing.T) {
 
 func TestRouter_UnmatchedPathIs404(t *testing.T) {
 	r := web.NewRouter()
-	if got := webtest.Probe(r, "/anything").Code; got != http.StatusNotFound {
+	if got := handlertest.Get(r, "/anything").Code; got != http.StatusNotFound {
 		t.Errorf("GET /anything = %d, want 404 from an empty router", got)
 	}
 }
@@ -164,10 +157,10 @@ func TestRouter_MissIsAProblem(t *testing.T) {
 	r := web.NewRouter()
 	r.Handle("GET /status", ok())
 
-	expectProblem(t, probe(r, http.MethodGet, "/nowhere"), http.StatusNotFound, "Not Found", "/nowhere")
-	expectProblem(t, probe(r, http.MethodPost, "/nowhere"), http.StatusNotFound, "Not Found", "/nowhere")
+	expectProblem(t, handlertest.Serve(r, http.MethodGet, "/nowhere"), http.StatusNotFound, "Not Found", "/nowhere")
+	expectProblem(t, handlertest.Serve(r, http.MethodPost, "/nowhere"), http.StatusNotFound, "Not Found", "/nowhere")
 
-	rec := probe(r, http.MethodPost, "/status")
+	rec := handlertest.Serve(r, http.MethodPost, "/status")
 	expectProblem(t, rec, http.StatusMethodNotAllowed, "Method Not Allowed", "/status")
 	if allow := rec.Header().Get("Allow"); allow != "GET, HEAD" {
 		t.Errorf("Allow = %q, want the mux's computed set preserved", allow)
@@ -185,7 +178,7 @@ func TestRouter_RedirectsStillRedirect(t *testing.T) {
 		"/things":     "/things/", // trailing-slash redirect to a registered pattern
 		"/things/../": "/",        // cleaned; still nothing there
 	} {
-		rec := webtest.Probe(r, path)
+		rec := handlertest.Get(r, path)
 		if rec.Code != http.StatusTemporaryRedirect {
 			t.Errorf("GET %s = %d, want 307; body %q", path, rec.Code, rec.Body.String())
 		}
@@ -198,7 +191,7 @@ func TestRouter_RedirectsStillRedirect(t *testing.T) {
 // The mux's guard against a "*" request-URI survives the change of dispatch.
 func TestRouter_AsteriskRequestURIIs400(t *testing.T) {
 	r := web.NewRouter()
-	if got := probe(r, http.MethodOptions, "*").Code; got != http.StatusBadRequest {
+	if got := handlertest.Serve(r, http.MethodOptions, "*").Code; got != http.StatusBadRequest {
 		t.Errorf("OPTIONS * = %d, want 400", got)
 	}
 }
@@ -213,18 +206,18 @@ func TestRouter_SetNotFoundAndSetMethodNotAllowedOverrideTheDefaults(t *testing.
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}))
 
-	rec := probe(r, http.MethodGet, "/nowhere")
+	rec := handlertest.Serve(r, http.MethodGet, "/nowhere")
 	if rec.Code != http.StatusNotFound || rec.Header().Get("X-Custom") != "yes" {
 		t.Errorf("GET /nowhere = %d, X-Custom %q; want the custom 404", rec.Code, rec.Header().Get("X-Custom"))
 	}
-	rec = probe(r, http.MethodPost, "/status")
+	rec = handlertest.Serve(r, http.MethodPost, "/status")
 	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("X-Allow-Seen") != "GET, HEAD" {
 		t.Errorf("POST /status = %d, X-Allow-Seen %q; want the custom 405 with Allow visible", rec.Code, rec.Header().Get("X-Allow-Seen"))
 	}
 
 	// nil restores the default.
 	r.SetNotFound(nil)
-	expectProblem(t, probe(r, http.MethodGet, "/nowhere"), http.StatusNotFound, "Not Found", "/nowhere")
+	expectProblem(t, handlertest.Serve(r, http.MethodGet, "/nowhere"), http.StatusNotFound, "Not Found", "/nowhere")
 }
 
 // A miss inside a module is the module's, answered by its group's handlers,
@@ -237,10 +230,10 @@ func TestRouter_ModuleMissUsesTheModuleHandlers(t *testing.T) {
 	r := web.NewRouter()
 	r.Mount(web.NewModule(g))
 
-	if rec := webtest.Probe(r, "/api/nowhere"); rec.Header().Get("X-Custom") != "yes" {
+	if rec := handlertest.Get(r, "/api/nowhere"); rec.Header().Get("X-Custom") != "yes" {
 		t.Errorf("GET /api/nowhere did not reach the module's not-found handler: %d", rec.Code)
 	}
-	if rec := webtest.Probe(r, "/nowhere"); rec.Header().Get("X-Custom") != "" {
+	if rec := handlertest.Get(r, "/nowhere"); rec.Header().Get("X-Custom") != "" {
 		t.Errorf("GET /nowhere reached the module's not-found handler")
 	}
 }
@@ -261,13 +254,13 @@ func TestRouter_MatchSetsPatternAndPathValues(t *testing.T) {
 	r.Mount(web.NewModule(g))
 	r.Handle("GET /native/{id}", capture)
 
-	webtest.Probe(r, "/api/things/42")
+	handlertest.Get(r, "/api/things/42")
 	if pattern != "GET /api/things/{id}" || id != "42" {
 		t.Errorf("module route: Pattern = %q, PathValue(id) = %q; want the matched pattern and 42", pattern, id)
 	}
 
 	pattern, id = "", ""
-	webtest.Probe(r, "/native/7")
+	handlertest.Get(r, "/native/7")
 	if pattern != "GET /native/{id}" || id != "7" {
 		t.Errorf("native route: Pattern = %q, PathValue(id) = %q; want the matched pattern and 7", pattern, id)
 	}

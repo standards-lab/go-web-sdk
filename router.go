@@ -7,12 +7,8 @@ import (
 )
 
 // Router dispatches to mounted [Module] values by longest-prefix match on
-// segment boundaries, falling back to a native http.ServeMux for every path
-// no module owns. Handlers registered through [Router.Handle] live on the
-// native mux, structurally outside every module's middleware, which is what
-// keeps probes clear of auth and the like. Middleware registered through
-// [Router.Use] wraps the whole dispatch. Wire the router before
-// serving; registration is not synchronized with request handling.
+// segment boundaries and falls back to a native http.ServeMux.
+// [Router.Handle] registers on that mux, outside every module's middleware.
 type Router struct {
 	mux              *http.ServeMux
 	modules          []*Module
@@ -33,20 +29,14 @@ func NewRouter() *Router {
 	return r
 }
 
-// SetNotFound sets the handler for a request no module owns and no
-// [Router.Handle] pattern matches. Unset, or set to nil, the router writes
-// a 404 problem document (about:blank, "Not Found"). A miss inside a module
-// is that module's own ([Group.SetNotFound]). Wire it before serving, like
-// every other registration here.
+// SetNotFound replaces the 404 problem for a request no module owns and no
+// [Router.Handle] pattern matches; nil restores it.
 func (r *Router) SetNotFound(h http.Handler) {
 	r.notFound = orDefault(h, defaultNotFound)
 }
 
-// SetMethodNotAllowed is [Router.SetNotFound] for a request whose path
-// matches a [Router.Handle] pattern but whose method does not. The Allow
-// header ServeMux computes is already on the response when the handler
-// runs. Unset, or set to nil, the router writes a 405 problem document
-// (about:blank, "Method Not Allowed") with Allow preserved.
+// SetMethodNotAllowed is [Router.SetNotFound] for a matching path with the
+// wrong method; the Allow header is already set when h runs.
 func (r *Router) SetMethodNotAllowed(h http.Handler) {
 	r.methodNotAllowed = orDefault(h, defaultMethodNotAllowed)
 }
@@ -57,16 +47,15 @@ func (r *Router) Handle(pattern string, handler http.Handler) {
 	r.mux.Handle(pattern, handler)
 }
 
-// Use appends middleware around the router's entire dispatch (modules and
-// native mux alike), recomposing the chain at registration, never per
-// request.
+// Use appends middleware around the whole dispatch, modules and native mux
+// alike.
 func (r *Router) Use(mw ...Middleware) {
 	r.middleware = append(r.middleware, mw...)
 	r.handler = Chain(http.HandlerFunc(r.dispatch), r.middleware...)
 }
 
-// Mount adds m to the dispatch set. Mounting a second module at the same
-// prefix panics — a wiring error caught at registration.
+// Mount adds m to the dispatch set. It panics on a second module at the same
+// prefix.
 func (r *Router) Mount(m *Module) {
 	for _, mounted := range r.modules {
 		if mounted.prefix == m.prefix {

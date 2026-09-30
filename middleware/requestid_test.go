@@ -8,11 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 	"github.com/standards-lab/go-web-sdk/middleware"
-	"github.com/standards-lab/go-web-sdk/webtest"
 )
 
 // generatedID matches the shape RequestID generates: 16 bytes as 32
@@ -95,6 +96,34 @@ func TestRequestID_EchoesATrustedHeader(t *testing.T) {
 	}
 	if got := rec.Header().Get(middleware.RequestIDHeader); got != "proxy-42" {
 		t.Errorf("%s = %q, want proxy-42", middleware.RequestIDHeader, got)
+	}
+}
+
+// A trusted header's value is echoed only when it reads as an id: 1 to 128
+// visible ASCII characters. Anything else, a proxy's misconfiguration or a
+// client's forgery passing through it, is replaced by a generated id rather
+// than written into every log record and response.
+func TestRequestID_TrustedHeaderOutOfShapeIsReplaced(t *testing.T) {
+	longest := strings.Repeat("a", 128)
+	if _, seen := identified(t, http.Header{"X-Proxy-Id": {longest}}, middleware.WithTrustedHeader("X-Proxy-Id")); seen != longest {
+		t.Errorf("a 128-character id was replaced by %q", seen)
+	}
+	for name, value := range map[string]string{
+		"too long":  strings.Repeat("a", 129),
+		"space":     "proxy 42",
+		"control":   "proxy\x0142",
+		"non-ASCII": "proxy-\u00e9",
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec, seen := identified(t, http.Header{"X-Proxy-Id": {value}}, middleware.WithTrustedHeader("X-Proxy-Id"))
+
+			if !generatedID.MatchString(seen) {
+				t.Errorf("context id = %q, want a generated one", seen)
+			}
+			if got := rec.Header().Get(middleware.RequestIDHeader); got != seen {
+				t.Errorf("%s = %q, want the context's %q", middleware.RequestIDHeader, got, seen)
+			}
+		})
 	}
 }
 
@@ -218,7 +247,7 @@ func TestRequestID_ProblemDocumentCarriesTheID(t *testing.T) {
 		_ = web.Problem{Status: http.StatusNotFound}.WriteFor(w, r)
 	}), middleware.RequestID())
 
-	rec := webtest.Probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	var problem map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
@@ -262,7 +291,7 @@ func TestRequestID_HeaderSurvivesARecoveredPanic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := webtest.Probe(tt.handler, "/orders/7")
+			rec := handlertest.Get(tt.handler, "/orders/7")
 
 			if rec.Code != http.StatusInternalServerError {
 				t.Fatalf("status = %d, want 500", rec.Code)
@@ -293,7 +322,7 @@ func TestRequestID_PassesTheResponseThrough(t *testing.T) {
 		_ = web.WriteJSON(w, http.StatusCreated, map[string]string{"id": "7"})
 	}), middleware.RequestID())
 
-	rec := webtest.Probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	if rec.Code != http.StatusCreated {
 		t.Errorf("status = %d, want 201", rec.Code)

@@ -8,6 +8,18 @@ only; the base module keeps its own.
 
 ## [Unreleased]
 
+## [v0.2.0] - 2026-09-30
+
+### Changed
+
+- The godoc states each contract once, on its symbol, and the package comment lists every
+  exported name.
+
+### Removed
+
+- **Breaking:** `ratelimit.NewEnv`. `Config.Env` carries the names `Finalize` composed; no
+  workspace repository called it.
+
 ## [v0.1.1] - 2026-09-24
 
 ### Changed
@@ -28,6 +40,7 @@ The first release of the rate-limiting middleware, against
   `Retry-After` header. `Config` loads through go-core's config contract under the block
   `rate_limit`, defaulting to 300 requests per minute.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.1...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.2.0...HEAD
+[v0.2.0]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.1...middleware/rate-limit/v0.2.0
 [v0.1.1]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.0...middleware/rate-limit/v0.1.1
 [v0.1.0]: https://github.com/standards-lab/go-web-sdk/releases/tag/middleware/rate-limit/v0.1.0

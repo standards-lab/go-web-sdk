@@ -2,8 +2,10 @@ package web_test
 
 import (
 	"errors"
+	"math"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -224,6 +226,7 @@ func TestParseQuery_RejectsMalformedFilterKeys(t *testing.T) {
 		key   string
 		param string
 	}{
+		{"no name", "", ""},
 		{"unclosed", "name[gt", "name[gt"},
 		{"unopened", "name]", "name]"},
 		{"stray close", "name]gt[", "name]gt["},
@@ -262,6 +265,7 @@ func TestParseQuery_Rejections(t *testing.T) {
 		{"page not a number", url.Values{"page": {"two"}}, "page"},
 		{"page zero", url.Values{"page": {"0"}}, "page"},
 		{"page negative", url.Values{"page": {"-1"}}, "page"},
+		{"page past the last addressable offset", url.Values{"page": {strconv.Itoa(math.MaxInt/limits.MaxSize + 1)}}, "page"},
 		{"size not a number", url.Values{"size": {"many"}}, "size"},
 		{"size zero", url.Values{"size": {"0"}}, "size"},
 		{"size over the cap", url.Values{"size": {"101"}}, "size"},
@@ -285,6 +289,16 @@ func TestParseQuery_Rejections(t *testing.T) {
 				t.Errorf("error carries value %q, reason %q; want both set", qerr.Value, qerr.Reason)
 			}
 		})
+	}
+}
+
+// The largest page whose offset, (page-1) times the largest size, still
+// fits an int is accepted; the next is the rejection above.
+func TestParseQuery_LastAddressablePage(t *testing.T) {
+	last := math.MaxInt / limits.MaxSize
+	q, err := web.ParseQuery(url.Values{"page": {strconv.Itoa(last)}}, limits)
+	if err != nil || q.Page != last {
+		t.Errorf("ParseQuery(page=%d) = %d, %v; want the page", last, q.Page, err)
 	}
 }
 

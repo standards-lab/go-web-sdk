@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 	"github.com/standards-lab/go-web-sdk/middleware"
-	"github.com/standards-lab/go-web-sdk/webtest"
 )
 
 // marking is a middleware whose one side effect is the X-Marked response
@@ -27,7 +27,7 @@ func isWrite(r *http.Request) bool {
 func TestMaybe_AppliesWhenThePredicateHolds(t *testing.T) {
 	handler := web.Chain(noContent, middleware.Maybe(marking, func(*http.Request) bool { return true }))
 
-	rec := webtest.Probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	if got := rec.Header().Get("X-Marked"); got != "yes" {
 		t.Errorf("X-Marked = %q, want yes: the middleware did not run", got)
@@ -40,7 +40,7 @@ func TestMaybe_AppliesWhenThePredicateHolds(t *testing.T) {
 func TestMaybe_SkipsWhenThePredicateFails(t *testing.T) {
 	handler := web.Chain(noContent, middleware.Maybe(marking, func(*http.Request) bool { return false }))
 
-	rec := webtest.Probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	if _, present := rec.Header()["X-Marked"]; present {
 		t.Errorf("X-Marked = %q, want it absent: the middleware ran", rec.Header().Get("X-Marked"))

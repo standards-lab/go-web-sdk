@@ -6,6 +6,74 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.13.0] - 2026-09-30
+
+A review of the whole repository closes `goals.v1.storage.tasks.suite`: the loggers move into the
+constructors, `PathUUID` is promoted from go-web-service, unused exports are removed, and the
+godoc states each contract once, on its symbol.
+
+### Added
+
+- `PathUUID` reads a `{name}` path value as a UUID in canonical form, promoted from
+  go-web-service's `sdk.PathID`. `PathError` reports a value that does not parse and maps itself
+  to a 400, like the package's other request errors.
+- `Recorder.Flush` lets a handler that asserts `http.Flusher` flush through `Recorder`; the flush
+  commits an implicit 200.
+- `Liveness` and `Readiness` send `Cache-Control: no-store`.
+
+### Changed
+
+- The `go-core` requirement is v0.5.0; the port override uses its `config.SetFromEnv`.
+- **Breaking:** `NewErrorWriter` takes the `*slog.Logger` its records go to as its first
+  argument, and `NewServer` takes one as its third, bridging `http.Server.ErrorLog` at warn
+  level. A nil logger panics in both.
+- **Breaking:** `Paging.Total` is `*int`, nil for a read that did not count, matching
+  `Page.Total`. The zero `Paging` is now an uncounted read, so a read that forgets its total
+  emits none instead of a counted 0.
+- **Breaking:** `ErrorWriter` sends a handler's returned `Problem` (or `*Problem`) as is, after
+  its own errors and before the matchers. A zero status is sent as 500, and an empty `instance`
+  as the request path. Before, the matchers saw the `Problem`, and an unclaimed one was a 500.
+  Only a `Problem` that is itself the returned error is sent this way; one wrapped inside another
+  error still reaches the matchers like any error. A matcher that claimed a returned `Problem` is
+  therefore bypassed only when the `Problem` is returned bare.
+- `Handle`'s and `ErrorWriter`'s log records carry `client.address`, as the middleware's do.
+- `DecodeJSON` rejects anything after the JSON value with the single reason "unexpected data
+  after the JSON value"; before, a second object reported an unknown field. A read that fails
+  after the value is reported as the read's own error.
+- `RegisterHealth` builds its readiness handler once; the checks are still read on every request.
+- The godoc states each contract once, on its symbol. Each package comment keeps the
+  cross-cutting facts (the wiring rule, the server's lifecycle, the routing order, the problem
+  model, the read grammar) and lists every exported name in a short inventory per section.
+
+### Fixed
+
+- `WriteObject` cleared only its own validators when the object failed to open, so the problem
+  answering it kept a `Content-Disposition`, `Cache-Control`, or `Content-Encoding` the handler
+  had set for the object: a browser saved the JSON 404 or 503 under the file's name. It now
+  clears every representation header (`Content-Range` and `Expires` included) before returning
+  the error, and sets `Cache-Control: no-store`, so the problem is not cached in the object's
+  place.
+- `ParseQuery` accepted a filter with an empty name (`?=x`), and a `page` large enough to
+  overflow the data layer's offset. Both are now a `*QueryError`.
+- `IfMatch` accepted a `+`-signed version and read only the first of several `If-Match` lines.
+  Both are now a `*PreconditionError`.
+- `ReadUpload` accepted a `Content-Type` with no subtype (`image`). It is now a 415.
+- `Server.Shutdown` left connections open when its context ended before the drain did. It now
+  closes the connections net/http still tracks and returns the context's error; hijacked
+  connections and handlers still running are left to the caller.
+- `middleware.RequestID` echoed a trusted header's value whatever its length or bytes. It now
+  echoes 1 to 128 visible ASCII characters and generates an id otherwise.
+- `middleware.BodyLimit`'s documentation claimed the 413's detail named `DecodeJSON`'s limit; it
+  names the limit the body hit.
+
+### Removed
+
+- **Breaking:** `ErrorWriter.Log` and `Server.Log`, replaced by the constructors' logger.
+- **Breaking:** `NoTotal`, replaced by a nil `Paging.Total`.
+- **Breaking:** `ErrorWriter.Status` (use `ErrorWriter.Problem(err).Status`), `NewEnv`
+  (`Config.Env` carries the names `Finalize` composed), `Module.Prefix`, `Group.HandleFunc`, and
+  `webtest.Probe`. No workspace repository called them.
+
 ## [v0.12.0] - 2026-09-29
 
 The download header builder and the logging of a 5xx's cause, promoted from go-web-service's
@@ -358,7 +426,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.13.0...HEAD
+[v0.13.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.12.0...v0.13.0
 [v0.12.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.11.0...v0.12.0
 [v0.11.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.10.0...v0.11.0
 [v0.10.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.9.0...v0.10.0
