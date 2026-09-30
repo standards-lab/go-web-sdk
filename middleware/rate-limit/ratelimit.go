@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
@@ -27,11 +26,6 @@ type Env struct {
 }
 
 func newEnv(prefix, block string) Env {
-	// go-core v0.5.0's EnvName returns "" for an empty prefix, which makes
-	// this guard redundant once the pin moves.
-	if prefix == "" {
-		return Env{}
-	}
 	return Env{
 		Requests: config.EnvName(prefix, block, "requests"),
 		Window:   config.EnvName(prefix, block, "window"),
@@ -84,12 +78,8 @@ func (c *Config) applyDefaults() {
 }
 
 func (c *Config) applyEnv() error {
-	if v := os.Getenv(c.Env.Requests); v != "" {
-		requests, err := strconv.Atoi(v)
-		if err != nil {
-			return fmt.Errorf("%s: %w", c.Env.Requests, err)
-		}
-		c.Requests = &requests
+	if err := config.SetFromEnv(&c.Requests, c.Env.Requests, strconv.Atoi); err != nil {
+		return err
 	}
 	return config.SetDurationFromEnv(&c.Window, c.Env.Window)
 }
