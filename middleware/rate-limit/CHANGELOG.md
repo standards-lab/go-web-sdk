@@ -12,9 +12,8 @@ only; the base module keeps its own.
 
 ### Changed
 
-- Built against `github.com/standards-lab/go-web-sdk v0.13.0` and `github.com/standards-lab/go-core
-  v0.5.0`. The middleware's behavior is unchanged.
-- The godoc states each contract once, on its symbol.
+- The godoc states each contract once, on its symbol, and the package comment places every
+  exported name.
 
 ### Removed
 

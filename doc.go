@@ -1,7 +1,8 @@
 // Package web provides the HTTP layer: a net/http server bound to a
 // caller-supplied handler, routing, RFC 9457 problem responses, the read and
 // request helpers, and the liveness and readiness endpoints an orchestrator
-// probes.
+// probes. This comment places every exported name; each symbol's own
+// documentation states its contract.
 //
 // # Wiring
 //
@@ -38,6 +39,17 @@
 // That root stage is also what makes [RegisterHealth]'s live readiness safe:
 // no request reaches the probe before every check it reads exists.
 //
+//   - [Config] is the server's address, timeouts, and header limit; its
+//     pointer fields are tri-state, nil taking the default at Finalize and
+//     an explicit zero surviving, and [Env] records the override names
+//     [Config.Finalize] composed.
+//   - [NewServer] builds the [Server] from a finalized Config, a handler, and
+//     the logger net/http's own diagnostics go to.
+//   - [Liveness] and [Readiness] are the probe handlers, [RegisterHealth]
+//     mounts them at [HealthPath] and [ReadyPath] over a lifecycle
+//     coordinator, and a [Mounter] is anything they mount on, an
+//     http.ServeMux or a [Router].
+//
 // # Routing
 //
 // A [Group] declares routes under a path prefix, with a middleware stack
@@ -53,6 +65,17 @@
 // method does not match with a 405 problem carrying Allow, in place of
 // ServeMux's plain text; its redirects are served unchanged. A miss reaches
 // no route, so only Router.Use middleware sees it.
+//
+//   - [NewGroup] opens a [Group]; [Group.Handle] and [Group.HandleErr]
+//     declare its routes.
+//   - [NewModule] compiles a group tree, and [NewHandlerModule] mounts a raw
+//     handler, such as an embedded client, as a [Module].
+//   - [NewRouter] returns the [Router] that dispatches to modules.
+//   - [Middleware] is the wrapper type every layer takes, and [Chain]
+//     composes it outermost first; the middleware package holds the
+//     implementations.
+//   - [Recorder] records whether and with what status a response committed,
+//     and [WrapWriter] shares one per request among the layers that need it.
 //
 // # Problems
 //
@@ -70,6 +93,17 @@
 // ([WithRequestID]), every problem written for it carries the id as its
 // "request_id" member.
 //
+//   - [Problem] is the document, served as [ProblemMediaType];
+//     [Problem.WriteFor] and [WriteProblem] send one for a request.
+//   - [NewErrorWriter] builds the [ErrorWriter] from its logger and
+//     matchers; it logs the cause of every 5xx it sends, a 503 at warn, the
+//     client's own cancellation at debug, and every other 5xx at error.
+//   - [HandlerFunc] is the error-returning handler, and [Handle] adapts one
+//     over an ErrorWriter.
+//   - [WithRequestID] and [RequestIDFrom] carry the correlation id in a
+//     request's context.
+//   - [WriteJSON] sends a success body as [JSONMediaType].
+//
 // # Reads
 //
 // [ParseQuery] parses a read request's query string in full into a [Query]:
@@ -84,6 +118,12 @@
 // both, and only a read whose [Limits] opt in takes a cursor. [NewPage]
 // assembles the [Page] envelope from the items and the read's [Paging].
 //
+//   - [Limits] is a read's paging policy, and [ParseQuery] parses under it
+//     into a [Query] of [Sort] keys and [Filter] parameters, refusing with a
+//     [QueryError].
+//   - [Paging] is what the data layer reports beyond the items, and
+//     [NewPage] assembles the [Page] envelope from both.
+//
 // # Requests and objects
 //
 // [IfMatch], [DecodeJSON], [ReadUpload], and [PathUUID] read a request's
@@ -92,4 +132,14 @@
 // as the response rather than redirecting to a presigned URL, which would
 // hand out a bearer credential the service cannot revoke and bypass its
 // authorization; [Attachment] makes it a download.
+//
+//   - [IfMatch] reads the version a guarded command names, refusing with a
+//     [PreconditionError].
+//   - [DecodeJSON] reads a strict JSON body, refusing with a [BodyError].
+//   - [ReadUpload] accepts a raw body by its headers as an [Upload],
+//     refusing with an [UploadError].
+//   - [PathUUID] reads a path value as a canonical UUID, refusing with a
+//     [PathError].
+//   - [WriteObject] proxies an [Object]'s bytes with its validators, and
+//     [Attachment] builds the Content-Disposition of a download.
 package web

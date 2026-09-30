@@ -279,17 +279,22 @@ func TestWriteObject_OpenErrorIsReturnedUncommitted(t *testing.T) {
 	rec.Header().Set("Cache-Control", "private, max-age=3600")
 	rec.Header().Set("Content-Encoding", "gzip")
 	rec.Header().Set("Content-Length", "9")
+	rec.Header().Set("Content-Range", "bytes 0-8/9")
+	rec.Header().Set("Expires", "Thu, 01 Oct 2026 00:00:00 GMT")
 
 	err := web.WriteObject(rec, objectRequest(http.MethodGet), logo, o.open)
 
 	if !errors.Is(err, missing) {
 		t.Fatalf("error = %v, want the opener's", err)
 	}
-	representation := []string{"ETag", "Last-Modified", "Content-Type", "Content-Length", "Content-Disposition", "Cache-Control", "Content-Encoding"}
+	representation := []string{"ETag", "Last-Modified", "Content-Type", "Content-Length", "Content-Disposition", "Content-Encoding", "Content-Range", "Expires"}
 	for _, h := range representation {
 		if got := rec.Header().Get(h); got != "" {
 			t.Errorf("%s = %q, want none on an uncommitted error", h, got)
 		}
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store on an uncommitted error", got)
 	}
 	ew := web.NewErrorWriter(discard, matcherFor(missing, http.StatusNotFound))
 	if werr := ew.Write(rec, objectRequest(http.MethodGet), err); werr != nil {
@@ -302,6 +307,9 @@ func TestWriteObject_OpenErrorIsReturnedUncommitted(t *testing.T) {
 		if got := rec.Result().Header.Get(h); got != "" {
 			t.Errorf("problem response %s = %q, want none", h, got)
 		}
+	}
+	if got := rec.Result().Header.Get("Cache-Control"); got != "no-store" {
+		t.Errorf("problem response Cache-Control = %q, want no-store", got)
 	}
 }
 

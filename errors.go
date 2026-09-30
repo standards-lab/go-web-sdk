@@ -94,9 +94,9 @@ func (e *UploadError) status() int {
 	}
 }
 
-// PathError reports a path value [PathUUID] rejected: Name is the path
-// wildcard and Value the text the request carried. [ErrorWriter] maps it to
-// a 400.
+// PathError reports a path value [PathUUID] rejected as a malformed UUID:
+// Name is the path wildcard and Value the text the request carried.
+// [ErrorWriter] maps it to a 400.
 type PathError struct {
 	Name  string
 	Value string

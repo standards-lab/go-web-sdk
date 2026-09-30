@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/standards-lab/go-web-sdk"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
@@ -21,7 +22,7 @@ func TestTimeout_HandlerObservesTheDeadline(t *testing.T) {
 		w.WriteHeader(http.StatusGatewayTimeout)
 	}), middleware.Timeout(10*time.Millisecond))
 
-	rec := probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("context error = %v, want context.DeadlineExceeded", err)
@@ -44,7 +45,7 @@ func TestTimeout_HandlerWithinTheDeadlineIsUnaffected(t *testing.T) {
 		_ = web.WriteJSON(w, http.StatusCreated, map[string]string{"id": "7"})
 	}), middleware.Timeout(time.Minute))
 
-	rec := probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	if !hasDeadline {
 		t.Error("the handler's context has no deadline")
@@ -65,7 +66,7 @@ func TestTimeout_CancelsAfterTheHandlerReturns(t *testing.T) {
 		ctx = r.Context()
 	}), middleware.Timeout(time.Minute))
 
-	probe(handler, "/orders/7")
+	handlertest.Get(handler, "/orders/7")
 
 	if !errors.Is(ctx.Err(), context.Canceled) {
 		t.Errorf("context error after return = %v, want context.Canceled", ctx.Err())
@@ -81,7 +82,7 @@ func TestTimeout_DoesNotWriteAResponse(t *testing.T) {
 		_ = web.WriteJSON(w, http.StatusOK, map[string]string{"late": "yes"})
 	}), middleware.Timeout(10*time.Millisecond))
 
-	rec := probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want the handler's own 200", rec.Code)

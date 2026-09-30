@@ -114,7 +114,9 @@ func (c *Config) finalized() bool {
 
 // New limits each client, keyed by its remote address with IPv6 reduced to
 // its /64, to cfg.Requests per cfg.Window, answering a request over it with a
-// 429 problem and Retry-After. It panics on a Config Finalize did not pass.
+// 429 problem and Retry-After, the window in whole seconds. Every response it
+// judges carries X-RateLimit-Limit, X-RateLimit-Remaining, and
+// X-RateLimit-Reset. It panics on a Config Finalize did not pass.
 func New(cfg Config) web.Middleware {
 	if !cfg.finalized() {
 		panic("ratelimit: New requires a finalized Config; call Finalize first")

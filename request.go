@@ -14,8 +14,12 @@ import (
 
 // IfMatch reads the request's version precondition (RFC 9110 §13.1.1):
 // exactly one strong entity-tag whose opaque value is a base-10 integer,
-// If-Match: "3". Anything else is a *[PreconditionError]. The parse is
-// syntax only; whether the version matches is the data layer's check.
+// If-Match: "3". Anything else is a *[PreconditionError]: a missing header
+// a 428, and a list, a non-integer tag, a weak tag, or the * form a 400. The
+// last two are a deliberate departure from RFC 9110, where * matches any
+// current representation: a guarded command names the version it read. The
+// parse is syntax only; whether the version matches is the data layer's
+// check, and a mismatch is the consumer's 412.
 func IfMatch(r *http.Request) (int64, error) {
 	if lines := r.Header.Values("If-Match"); len(lines) > 1 {
 		return 0, &PreconditionError{Value: strings.Join(lines, ", ")}
@@ -73,13 +77,16 @@ func DecodeJSON[T any](w http.ResponseWriter, r *http.Request, limit int64) (T, 
 	if err := dec.Decode(&v); err != nil {
 		return v, bodyError(err)
 	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return v, bodyError(err)
-		}
-		return v, &BodyError{Reason: "unexpected data after the JSON value"}
+	_, err := dec.Token()
+	if errors.Is(err, io.EOF) {
+		return v, nil
 	}
-	return v, nil
+	// A token, or bytes that are not one, is trailing data; any other error
+	// is the read failing, an overflow included, and is reported as itself.
+	if _, syntax := errors.AsType[*json.SyntaxError](err); err != nil && !syntax {
+		return v, bodyError(err)
+	}
+	return v, &BodyError{Reason: "unexpected data after the JSON value"}
 }
 
 // Upload is a raw request body declared by its own headers: the

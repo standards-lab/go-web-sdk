@@ -1,8 +1,22 @@
-// Package middleware holds the SDK's middleware implementations: [RequestID],
-// [RequestLogger], [Recoverer], [Timeout], [Headers], [Maybe], [ContentType],
-// and [BodyLimit]. Each constructor returns a [web.Middleware], composed with
-// web.Chain or hung on a router, a group, or a route; the type and the
-// composer stay in the web package, which consumes them.
+// Package middleware holds the SDK's middleware implementations. Each
+// constructor returns a [web.Middleware], composed with web.Chain or hung on
+// a router, a group, or a route; the type and the composer stay in the web
+// package, which consumes them. This comment places every exported name;
+// each symbol's own documentation states its contract.
+//
+//   - [RequestID] gives each request a correlation id, echoed as
+//     [RequestIDHeader]; [WithTrustedHeader] and [WithIDSource] are the
+//     [RequestIDOption] values that take it from upstream.
+//   - [RequestLogger] logs one record per request.
+//   - [Recoverer] turns a handler's panic into a logged 500 problem.
+//   - [Timeout] gives the next handler's context a deadline.
+//   - [Headers] sets fixed response headers.
+//   - [Maybe] runs a middleware only for requests a predicate selects, and
+//     [NotProbe] is the predicate that skips the probe endpoints.
+//   - [ContentType] answers a 415 to a request outside the allowed media
+//     types.
+//   - [BodyLimit] bounds every request body, for the reader to refuse the
+//     overflow.
 //
 // A middleware belongs to the transport, not to the capability it
 // collaborates with: the request logger lives here and takes a standard

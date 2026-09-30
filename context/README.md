@@ -11,8 +11,8 @@ This context records only working knowledge the code and the README do not expre
 
 ## Capability map
 
-Each package's `doc.go` and its symbols' godoc are authoritative for what is built; this map only
-points at them. An unbuilt capability gains written detail when a session is about to build it.
+Each package's comment in its `doc.go` is the authoritative description of its API; this map
+only points at it. An unbuilt capability gains written detail when a session is about to build it.
 
 - **web** (`doc.go`) is the HTTP layer: the server (`NewServer`, `Config`), routing (`Group`,
   `NewModule`, `Router`), the problem model (`Problem`, `ErrorWriter`, `Handle`), the read

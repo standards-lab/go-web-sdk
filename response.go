@@ -92,8 +92,13 @@ func attrChar(b byte) bool {
 // WriteObject proxies a stored object's bytes as the response to a GET or
 // HEAD, with its validators and X-Content-Type-Options: nosniff, answering a
 // matching If-None-Match or If-Modified-Since with 304 before open is called.
-// An error from open is returned uncommitted, with every representation
-// header cleared, the caller's included, for the error writer to answer.
+// If-None-Match compares entity tags weakly, * matching any object, and when
+// present it outranks If-Modified-Since, which is then ignored (RFC 9110
+// §13.2.2). A HEAD sends the headers alone without calling open, and
+// WriteObject closes what open returns; the caller does not. An error
+// from open is returned uncommitted, with every representation header
+// cleared, the caller's included, and Cache-Control set to no-store, for the
+// error writer to answer.
 func WriteObject(w http.ResponseWriter, r *http.Request, o Object, open func() (io.ReadCloser, error)) error {
 	h := w.Header()
 	if o.ETag != "" {
@@ -114,6 +119,9 @@ func WriteObject(w http.ResponseWriter, r *http.Request, o Object, open func() (
 			for _, name := range representation {
 				h.Del(name)
 			}
+			// A 404 is heuristically cacheable, so the problem must not be
+			// stored in the object's place.
+			h.Set("Cache-Control", "no-store")
 			return err
 		}
 		defer func() { _ = body.Close() }()
@@ -136,15 +144,17 @@ func WriteObject(w http.ResponseWriter, r *http.Request, o Object, open func() (
 	return err
 }
 
-// representation names the headers that describe the object's bytes, set
-// by WriteObject or by its caller for the object, which a problem answering
-// a failed open must not carry.
+// representation names the headers that describe the object's bytes or
+// how long to keep them, set by WriteObject or by its caller for the object,
+// which a problem answering a failed open must not carry.
 var representation = [...]string{
 	"Cache-Control",
 	"Content-Disposition",
 	"Content-Encoding",
 	"Content-Length",
+	"Content-Range",
 	"ETag",
+	"Expires",
 	"Last-Modified",
 }
 

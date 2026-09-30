@@ -29,29 +29,37 @@ each contract on its symbol once.
 - **Breaking:** `Paging.Total` is `*int`, nil for a read that did not count, matching
   `Page.Total`. The zero `Paging` is now an uncounted read, so a read that forgets its total
   emits none instead of a counted 0.
+- **Breaking:** `ErrorWriter` sends a handler's returned `Problem` (or `*Problem`) as is, after
+  its own errors and before the matchers, a zero status as 500 and an empty `instance` as the
+  request path; before, the matchers saw it and an unclaimed one was a 500. Only a `Problem`
+  that is the returned error is sent this way: one wrapped inside another error still reaches
+  the matchers like any error, so a matcher that claimed a returned `Problem` is now bypassed
+  only when the `Problem` is returned bare.
 - `Handle`'s and `ErrorWriter`'s log records carry `client.address`, as the middleware's do.
 - `DecodeJSON` rejects anything after the JSON value with the one reason "unexpected data after
-  the JSON value", where a second object reported an unknown field.
+  the JSON value", where a second object reported an unknown field. A read that fails after the
+  value is reported as the read's own error.
 - `RegisterHealth` builds its readiness handler once; the checks are still read on every request.
-- The godoc states each contract once, on its symbol; `doc.go` keeps the wiring rule, the
-  server's lifecycle, the routing order, the problem model, and the read grammar.
-- The go-core pin moves to v0.5.0.
+- The godoc states each contract once, on its symbol. Each package comment keeps the
+  cross-cutting facts (the wiring rule, the server's lifecycle, the routing order, the problem
+  model, the read grammar) and places every exported name in a short inventory per section.
 
 ### Fixed
 
-- `ErrorWriter` answered a handler's returned `Problem` as an unclaimed 500. It now sends the
-  `Problem` as is, after its own errors and before the matchers, a zero status as 500.
 - `WriteObject` cleared only its own validators when the object failed to open, so the problem
   answering it kept a `Content-Disposition`, `Cache-Control`, or `Content-Encoding` the handler
   had set for the object: a browser saved the JSON 404 or 503 under the file's name. It now
-  clears every representation header before returning the error.
+  clears every representation header (`Content-Range` and `Expires` included) before returning
+  the error, and sets `Cache-Control: no-store`, so the problem is not cached in the object's
+  place.
 - `ParseQuery` accepted a filter with an empty name (`?=x`), and a `page` large enough to
   overflow the data layer's offset. Both are now a `*QueryError`.
 - `IfMatch` accepted a `+`-signed version and read only the first of several `If-Match` lines.
   Both are now a `*PreconditionError`.
 - `ReadUpload` accepted a `Content-Type` with no subtype (`image`). It is now a 415.
 - `Server.Shutdown` left connections open when its context ended before the drain did. It now
-  closes them and returns the context's error.
+  closes the connections net/http still tracks and returns the context's error; hijacked
+  connections and handlers still running are the caller's.
 - `middleware.RequestID` echoed a trusted header's value whatever its length or bytes. It now
   echoes 1 to 128 visible ASCII characters and generates an id otherwise.
 - `middleware.BodyLimit`'s documentation claimed the 413's detail named `DecodeJSON`'s limit; it

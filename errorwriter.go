@@ -15,7 +15,9 @@ type ProblemMatcher func(error) (Problem, bool)
 // ErrorWriter turns a handler's returned error into an RFC 9457 problem
 // response: this package's own error types and a returned [Problem] map
 // themselves, and the consumer's matchers decide the rest, so problem policy
-// stays with the application.
+// stays with the application. A Problem maps itself only when it is the
+// returned error, a Problem or a *Problem; one wrapped inside another error
+// reaches the matchers like any other error.
 type ErrorWriter struct {
 	matchers []ProblemMatcher
 	detail   map[int]struct{}
@@ -56,10 +58,10 @@ func (ew *ErrorWriter) Detail(statuses ...int) {
 }
 
 // Problem maps err to the problem that reports it, without writing it: this
-// package's own errors first, then a [Problem] in err's chain, as is, then
-// the matchers. An error nothing claims, or a claim with no status, is a
-// 500. Instance and the [ErrorWriter.Detail] rule are left to
-// [ErrorWriter.Write].
+// package's own errors first, anywhere in err's chain, then err itself as
+// is when it is a [Problem] or a non-nil *Problem, then the matchers. An
+// error nothing claims, or a claim with no status, is a 500. Instance and the
+// [ErrorWriter.Detail] rule are left to [ErrorWriter.Write].
 func (ew *ErrorWriter) Problem(err error) Problem {
 	p, _ := ew.problem(err)
 	return p
@@ -71,8 +73,13 @@ func (ew *ErrorWriter) problem(err error) (p Problem, whole bool) {
 	if own, ok := errors.AsType[statusError](err); ok {
 		return Problem{Status: own.status()}, false
 	}
-	if p, ok := errors.AsType[Problem](err); ok {
+	switch p := err.(type) {
+	case Problem:
 		return withStatus(p), true
+	case *Problem:
+		if p != nil {
+			return withStatus(*p), true
+		}
 	}
 	for _, match := range ew.matchers {
 		if p, ok := match(err); ok {
@@ -89,9 +96,12 @@ func withStatus(p Problem) Problem {
 	return p
 }
 
-// Write sends err as the problem [ErrorWriter.Problem] maps it to, with the
-// error text as detail where [ErrorWriter.Detail] allows, and logs a 5xx's
-// cause: a 503 at warn, the client's own cancellation at debug, else error.
+// Write sends err as the problem [ErrorWriter.Problem] maps it to, through
+// [Problem.WriteFor], so an empty Instance becomes the request path, a
+// returned Problem's included. The error text becomes the detail where
+// [ErrorWriter.Detail] allows, except for a returned Problem, which is sent
+// with its own members. Write logs a 5xx's cause: a 503 at warn, the
+// client's own cancellation at debug, else error.
 func (ew *ErrorWriter) Write(w http.ResponseWriter, r *http.Request, err error) error {
 	p, whole := ew.problem(err)
 	if p.Status >= http.StatusInternalServerError {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
 // mustPanic runs fn and fails the test unless it panics.
@@ -30,7 +31,7 @@ func TestNewGroup_AcceptsMultiSegmentPrefix(t *testing.T) {
 	g := web.NewGroup("/api/v1")
 	g.Handle(http.MethodGet, "/orders", ok())
 
-	rec := probe(web.NewModule(g), "/api/v1/orders")
+	rec := handlertest.Get(web.NewModule(g), "/api/v1/orders")
 	if rec.Code != http.StatusOK {
 		t.Errorf("GET /api/v1/orders = %d, want 200", rec.Code)
 	}
@@ -50,7 +51,7 @@ func TestGroup_EmptyPatternBindsThePrefix(t *testing.T) {
 	g := web.NewGroup("/api/v1")
 	g.Handle(http.MethodGet, "", ok())
 
-	rec := probe(web.NewModule(g), "/api/v1")
+	rec := handlertest.Get(web.NewModule(g), "/api/v1")
 	if rec.Code != http.StatusOK {
 		t.Errorf("GET /api/v1 = %d, want 200", rec.Code)
 	}

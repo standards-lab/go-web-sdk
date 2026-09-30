@@ -43,7 +43,7 @@ func Liveness() http.Handler {
 // states; a Check with a nil Checker is not ready. A zero member of notReady
 // takes its default (Type about:blank, Title the status phrase, Detail "one
 // or more readiness checks failed"), and its Status and any "checks" in its
-// Extras are replaced.
+// Extras are replaced. Zero checks report ready.
 func Readiness(notReady Problem, checks ...lifecycle.Check) http.Handler {
 	return readiness(notReady, func() []lifecycle.Check { return checks })
 }
@@ -78,8 +78,9 @@ func readiness(notReady Problem, checks func() []lifecycle.Check) http.Handler {
 }
 
 // RegisterHealth mounts [Liveness] at GET /healthz and [Readiness] at GET
-// /readyz over lc: the coordinator itself, as "lifecycle", then its Checks,
-// read on every request, so a service added after this call still appears.
+// /readyz over lc: the coordinator itself, as "lifecycle", then its Checks
+// in start order, read on every request, so a service added after this call
+// still appears.
 func RegisterHealth(m Mounter, lc *lifecycle.Coordinator, notReady Problem) {
 	m.Handle("GET "+HealthPath, Liveness())
 	m.Handle("GET "+ReadyPath, readiness(notReady, func() []lifecycle.Check {

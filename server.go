@@ -102,9 +102,10 @@ func (s *Server) Err() <-chan error {
 }
 
 // Shutdown drains the server gracefully via http.Server.Shutdown, and when
-// ctx ends first, closes the connections still open and returns ctx's error.
-// Before a successful Start it is a no-op that leaves the server startable;
-// once it has served, a Server is single-use.
+// ctx ends first, closes the connections net/http still tracks and returns
+// ctx's error; hijacked connections and handlers still running are the
+// caller's. Before a successful Start it is a no-op that leaves the server
+// startable; once it has served, a Server is single-use.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	started := s.listener != nil
@@ -115,6 +116,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	err := s.http.Shutdown(ctx)
 	if err != nil && errors.Is(err, ctx.Err()) {
+		// Close reaches only the connections net/http tracks; it neither
+		// waits for a running handler nor touches a hijacked connection.
 		_ = s.http.Close()
 	}
 	return err

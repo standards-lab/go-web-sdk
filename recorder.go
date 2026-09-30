@@ -10,8 +10,10 @@ import (
 // other than 101 is informational, as in net/http), and a Write, ReadFrom,
 // or Flush before it commits an implicit 200. It implements Unwrap, so
 // http.ResponseController reaches the writer beneath, and delegates
-// io.ReaderFrom. [Handle] and the middleware package's RequestLogger and
-// Recoverer share one per request through [WrapWriter].
+// io.ReaderFrom. It does not expose http.Pusher, and a Hijack through the
+// controller bypasses it, as it bypasses net/http's own bookkeeping. [Handle]
+// and the middleware package's RequestLogger and Recoverer share one per
+// request through [WrapWriter].
 type Recorder struct {
 	http.ResponseWriter
 	status    int

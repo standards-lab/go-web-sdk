@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/standards-lab/go-web-sdk"
 )
@@ -161,6 +162,23 @@ func TestDecodeJSON_TrailingDataHasOneReason(t *testing.T) {
 		if berr.Reason != "unexpected data after the JSON value" {
 			t.Errorf("DecodeJSON(%q) reason = %q", body, berr.Reason)
 		}
+	}
+}
+
+// A read that fails after the value is the read's error, not trailing data.
+func TestDecodeJSON_ReadErrorAfterTheValueIsReported(t *testing.T) {
+	broken := errors.New("connection reset")
+	body := io.MultiReader(strings.NewReader(`{"name": "widget"}`), iotest.ErrReader(broken))
+	req := httptest.NewRequest(http.MethodPost, "/things", body)
+
+	_, err := web.DecodeJSON[struct{ Name string }](httptest.NewRecorder(), req, 1<<10)
+
+	berr, ok := errors.AsType[*web.BodyError](err)
+	if !ok {
+		t.Fatalf("error = %v, want *BodyError", err)
+	}
+	if berr.TooLarge || !strings.Contains(berr.Reason, "connection reset") {
+		t.Errorf("BodyError = %+v, want the read's error as the reason", berr)
 	}
 }
 

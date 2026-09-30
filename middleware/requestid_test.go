@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
@@ -246,7 +247,7 @@ func TestRequestID_ProblemDocumentCarriesTheID(t *testing.T) {
 		_ = web.Problem{Status: http.StatusNotFound}.WriteFor(w, r)
 	}), middleware.RequestID())
 
-	rec := probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	var problem map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
@@ -290,7 +291,7 @@ func TestRequestID_HeaderSurvivesARecoveredPanic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := probe(tt.handler, "/orders/7")
+			rec := handlertest.Get(tt.handler, "/orders/7")
 
 			if rec.Code != http.StatusInternalServerError {
 				t.Fatalf("status = %d, want 500", rec.Code)
@@ -321,7 +322,7 @@ func TestRequestID_PassesTheResponseThrough(t *testing.T) {
 		_ = web.WriteJSON(w, http.StatusCreated, map[string]string{"id": "7"})
 	}), middleware.RequestID())
 
-	rec := probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	if rec.Code != http.StatusCreated {
 		t.Errorf("status = %d, want 201", rec.Code)

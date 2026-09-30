@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
@@ -22,7 +23,7 @@ func TestHeaders_SetsEveryEntry(t *testing.T) {
 		"X-Frame-Options":        "DENY",
 	}))
 
-	rec := probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	for name, want := range map[string]string{
 		"Cache-Control":          "no-store",
@@ -46,7 +47,7 @@ func TestHeaders_CanonicalizesNames(t *testing.T) {
 		"cache-control": "no-store",
 	}))
 
-	rec := probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("Cache-Control = %q, want no-store", got)
@@ -65,7 +66,7 @@ func TestHeaders_EmptyMapAppliesNothing(t *testing.T) {
 		"empty": {},
 	} {
 		t.Run(name, func(t *testing.T) {
-			rec := probe(web.Chain(noContent, middleware.Headers(headers)), "/orders/7")
+			rec := handlertest.Get(web.Chain(noContent, middleware.Headers(headers)), "/orders/7")
 
 			if rec.Code != http.StatusNoContent {
 				t.Errorf("status = %d, want 204", rec.Code)
@@ -95,7 +96,7 @@ func TestHeaders_SurviveARecoveredPanic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := probe(tt.handler, "/orders/7")
+			rec := handlertest.Get(tt.handler, "/orders/7")
 
 			if rec.Code != http.StatusInternalServerError {
 				t.Fatalf("status = %d, want 500", rec.Code)
@@ -115,7 +116,7 @@ func TestHeaders_HandlerCanOverride(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}), middleware.Headers(map[string]string{"Cache-Control": "no-store"}))
 
-	rec := probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	if got := rec.Header().Get("Cache-Control"); got != "max-age=60" {
 		t.Errorf("Cache-Control = %q, want the handler's max-age=60", got)
@@ -130,7 +131,7 @@ func TestHeaders_CopiesTheMap(t *testing.T) {
 	headers["Cache-Control"] = "public"
 	headers["X-Added-Later"] = "yes"
 
-	rec := probe(handler, "/orders/7")
+	rec := handlertest.Get(handler, "/orders/7")
 
 	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("Cache-Control = %q, want the value at construction, no-store", got)

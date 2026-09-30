@@ -65,9 +65,11 @@ func TestErrorWriter_PreconditionErrorIsBuiltIn(t *testing.T) {
 
 // A handler that returns a Problem has decided the response itself: it is
 // sent as is, members and all, rather than as an unclaimed 500, and no
-// error text is added to it.
+// error text is added to it. A matcher that claims every error is not
+// consulted.
 func TestErrorWriter_ReturnedProblemIsSentAsIs(t *testing.T) {
-	ew := web.NewErrorWriter(discard)
+	claimAll := func(error) (web.Problem, bool) { return web.Problem{Status: http.StatusTeapot}, true }
+	ew := web.NewErrorWriter(discard, claimAll)
 	returned := web.Problem{
 		Type:   "https://example.test/problems/quota",
 		Status: http.StatusConflict,
@@ -76,7 +78,7 @@ func TestErrorWriter_ReturnedProblemIsSentAsIs(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 
-	if err := ew.Write(rec, httptest.NewRequest(http.MethodPost, "/files", nil), fmt.Errorf("upload: %w", returned)); err != nil {
+	if err := ew.Write(rec, httptest.NewRequest(http.MethodPost, "/files", nil), returned); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,6 +94,31 @@ func TestErrorWriter_ReturnedProblemIsSentAsIs(t *testing.T) {
 	}
 	if p := ew.Problem(web.Problem{}); p.Status != http.StatusInternalServerError {
 		t.Errorf("a returned Problem with no status maps to %d, want 500", p.Status)
+	}
+}
+
+func TestErrorWriter_ReturnedProblemPointerIsSentAsIs(t *testing.T) {
+	claimAll := func(error) (web.Problem, bool) { return web.Problem{Status: http.StatusTeapot}, true }
+	ew := web.NewErrorWriter(discard, claimAll)
+
+	p := ew.Problem(&web.Problem{Status: http.StatusConflict, Title: "Quota exhausted"})
+
+	if p.Status != http.StatusConflict || p.Title != "Quota exhausted" {
+		t.Errorf("problem = %+v, want the returned *Problem's 409", p)
+	}
+}
+
+// Only a Problem that is the returned error maps itself; one wrapped inside
+// another error is an error like any other, for the matchers to claim.
+func TestErrorWriter_WrappedProblemGoesToTheMatchers(t *testing.T) {
+	claimAll := func(error) (web.Problem, bool) { return web.Problem{Status: http.StatusTeapot}, true }
+	wrapped := fmt.Errorf("upload: %w", web.Problem{Status: http.StatusConflict})
+
+	if got := web.NewErrorWriter(discard, claimAll).Problem(wrapped).Status; got != http.StatusTeapot {
+		t.Errorf("status = %d, want the matcher's 418", got)
+	}
+	if got := web.NewErrorWriter(discard).Problem(wrapped).Status; got != http.StatusInternalServerError {
+		t.Errorf("unclaimed status = %d, want 500", got)
 	}
 }
 

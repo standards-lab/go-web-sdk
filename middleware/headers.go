@@ -13,7 +13,9 @@ type header struct {
 }
 
 // Headers sets headers on the response before the next handler, which may
-// override them. It panics on an empty name or two that canonicalize alike.
+// override them. It copies the map at construction, so a later change to the
+// caller's map has no effect. It panics on an empty name or two that
+// canonicalize alike.
 func Headers(headers map[string]string) web.Middleware {
 	fixed := make([]header, 0, len(headers))
 	seen := make(map[string]bool, len(headers))

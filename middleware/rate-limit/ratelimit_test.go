@@ -75,14 +75,21 @@ func get(handler http.Handler, remoteAddr string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// Requests within the limit reach the handler; the one past it is answered
-// with a 429 problem document carrying httprate's Retry-After.
+// Requests within the limit reach the handler with the X-RateLimit headers;
+// the one past it is answered with a 429 problem document carrying
+// httprate's Retry-After.
 func TestNew_RequestOverTheLimitIsA429(t *testing.T) {
 	handler := limited(t)
 
 	for i := 1; i <= 2; i++ {
-		if rec := get(handler, "192.0.2.1:1234"); rec.Code != http.StatusNoContent {
+		rec := get(handler, "192.0.2.1:1234")
+		if rec.Code != http.StatusNoContent {
 			t.Fatalf("request %d: status = %d, want 204", i, rec.Code)
+		}
+		for _, h := range []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"} {
+			if rec.Header().Get(h) == "" {
+				t.Errorf("request %d: %s missing on a judged response", i, h)
+			}
 		}
 	}
 	rec := get(handler, "192.0.2.1:1234")

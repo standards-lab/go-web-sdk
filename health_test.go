@@ -11,6 +11,7 @@ import (
 
 	"github.com/standards-lab/go-core/lifecycle"
 	"github.com/standards-lab/go-web-sdk"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
 // staticChecker reports a fixed readiness, standing in for a subsystem that
@@ -20,7 +21,7 @@ type staticChecker bool
 func (c staticChecker) Ready() bool { return bool(c) }
 
 func TestLiveness_ReportsOK(t *testing.T) {
-	rec := probe(web.Liveness(), web.HealthPath)
+	rec := handlertest.Get(web.Liveness(), web.HealthPath)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rec.Code)
@@ -41,14 +42,14 @@ func TestProbes_SendNoStore(t *testing.T) {
 		"ready":     web.Readiness(web.Problem{}),
 		"not ready": web.Readiness(web.Problem{}, lifecycle.Check{Name: "database", Checker: staticChecker(false)}),
 	} {
-		if got := probe(h, web.ReadyPath).Header().Get("Cache-Control"); got != "no-store" {
+		if got := handlertest.Get(h, web.ReadyPath).Header().Get("Cache-Control"); got != "no-store" {
 			t.Errorf("%s: Cache-Control = %q, want no-store", name, got)
 		}
 	}
 }
 
 func TestReadiness_NoChecksIsReady(t *testing.T) {
-	rec := probe(web.Readiness(web.Problem{}), web.ReadyPath)
+	rec := handlertest.Get(web.Readiness(web.Problem{}), web.ReadyPath)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200 with no checks registered", rec.Code)
@@ -65,7 +66,7 @@ func TestReadiness_AllReady(t *testing.T) {
 		lifecycle.Check{Name: "database", Checker: staticChecker(true)},
 	)
 
-	rec := probe(handler, web.ReadyPath)
+	rec := handlertest.Get(handler, web.ReadyPath)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -89,7 +90,7 @@ func TestReadiness_NotReadyEmitsProblem(t *testing.T) {
 		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
 	)
 
-	rec := probe(handler, web.ReadyPath)
+	rec := handlertest.Get(handler, web.ReadyPath)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rec.Code)
 	}
@@ -131,7 +132,7 @@ func TestReadiness_NotReadyConsumerProblemReachesTheWire(t *testing.T) {
 		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
 	)
 
-	rec := probe(handler, web.ReadyPath)
+	rec := handlertest.Get(handler, web.ReadyPath)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rec.Code)
 	}
@@ -159,7 +160,7 @@ func TestReadiness_NotReadyChecksCannotBeOverriddenByExtras(t *testing.T) {
 		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
 	)
 
-	rec := probe(handler, web.ReadyPath)
+	rec := handlertest.Get(handler, web.ReadyPath)
 	body := decodeBody(t, rec)
 	checks, ok := body["checks"].([]any)
 	if !ok || len(checks) != 1 {
@@ -174,7 +175,7 @@ func TestReadiness_NotReadyStatusIsAlwaysServiceUnavailable(t *testing.T) {
 		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
 	)
 
-	rec := probe(handler, web.ReadyPath)
+	rec := handlertest.Get(handler, web.ReadyPath)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503 despite the consumer's Status", rec.Code)
 	}
@@ -199,7 +200,7 @@ func TestReadiness_ConcurrentRequestsDoNotShareExtras(t *testing.T) {
 	for range n {
 		go func() {
 			defer wg.Done()
-			rec := probe(handler, web.ReadyPath)
+			rec := handlertest.Get(handler, web.ReadyPath)
 			if rec.Code != http.StatusServiceUnavailable {
 				t.Errorf("status = %d, want 503", rec.Code)
 			}
@@ -221,7 +222,7 @@ func TestReadiness_ConcurrentRequestsDoNotShareExtras(t *testing.T) {
 }
 
 func TestReadiness_NilCheckerIsNotReady(t *testing.T) {
-	rec := probe(web.Readiness(web.Problem{}, lifecycle.Check{Name: "database"}), web.ReadyPath)
+	rec := handlertest.Get(web.Readiness(web.Problem{}, lifecycle.Check{Name: "database"}), web.ReadyPath)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503 for a nil checker", rec.Code)
 	}
@@ -252,18 +253,18 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 	go func() { done <- lc.Run(ctx, 2*time.Second) }()
 
 	recvOrFail(t, started, "startup hook to start")
-	if got := probe(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
+	if got := handlertest.Get(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
 		t.Errorf("status = %d during startup, want 503", got)
 	}
 	// Liveness is independent of readiness: the process is serving either way.
-	if got := probe(mux, web.HealthPath).Code; got != http.StatusOK {
+	if got := handlertest.Get(mux, web.HealthPath).Code; got != http.StatusOK {
 		t.Errorf("healthz = %d during startup, want 200", got)
 	}
 
 	close(release)
 	recvOrFail(t, ready, "coordinator to become ready")
 
-	if got := probe(mux, web.ReadyPath).Code; got != http.StatusOK {
+	if got := handlertest.Get(mux, web.ReadyPath).Code; got != http.StatusOK {
 		t.Errorf("status = %d after startup, want 200", got)
 	}
 
@@ -272,7 +273,7 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	if got := probe(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
+	if got := handlertest.Get(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
 		t.Errorf("status = %d after Run returned, want 503", got)
 	}
 }
@@ -281,12 +282,12 @@ func TestRegisterHealth_MountsBothPaths(t *testing.T) {
 	mux := http.NewServeMux()
 	web.RegisterHealth(mux, lifecycle.New(), web.Problem{})
 
-	if got := probe(mux, web.HealthPath).Code; got != http.StatusOK {
+	if got := handlertest.Get(mux, web.HealthPath).Code; got != http.StatusOK {
 		t.Errorf("GET %s = %d, want 200", web.HealthPath, got)
 	}
 	// The coordinator never ran, so it reports not ready; readyz still has to
 	// be mounted and answer, just not with 200.
-	if got := probe(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
+	if got := handlertest.Get(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
 		t.Errorf("GET %s = %d, want 503 before the coordinator runs", web.ReadyPath, got)
 	}
 }
@@ -317,7 +318,7 @@ func TestRegisterHealth_QueriesCoordinatorLive(t *testing.T) {
 		Check: staticChecker(false),
 	})
 
-	rec := probe(mux, web.ReadyPath)
+	rec := handlertest.Get(mux, web.ReadyPath)
 	body := decodeBody(t, rec)
 	checks, ok := body["checks"].([]any)
 	if !ok || len(checks) != 2 {

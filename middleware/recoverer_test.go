@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
+	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
@@ -32,7 +33,7 @@ func recovered(t *testing.T, handler http.Handler) (*httptest.ResponseRecorder, 
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	rec := probe(web.Chain(handler, middleware.Recoverer(logger)), "/orders/7")
+	rec := handlertest.Get(web.Chain(handler, middleware.Recoverer(logger)), "/orders/7")
 	return rec, records(t, buf.String())
 }
 
@@ -151,7 +152,7 @@ func TestRecoverer_PanicAfterCommitReRaisesErrAbortHandler(t *testing.T) {
 			var got any
 			func() {
 				defer func() { got = recover() }()
-				probe(handler, "/orders/7")
+				handlertest.Get(handler, "/orders/7")
 			}()
 
 			if got != http.ErrAbortHandler {
@@ -242,7 +243,7 @@ func TestRecoverer_ErrAbortHandlerPropagates(t *testing.T) {
 	var got any
 	func() {
 		defer func() { got = recover() }()
-		probe(handler, "/")
+		handlertest.Get(handler, "/")
 	}()
 
 	if got != http.ErrAbortHandler {

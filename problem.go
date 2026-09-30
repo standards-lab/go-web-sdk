@@ -123,7 +123,7 @@ func (p *Problem) applyDefaults() {
 
 // Write sends the problem, applying defaults: a zero Status becomes 500, an
 // empty Type becomes about:blank, and an empty Title takes the status
-// phrase.
+// phrase, so it is omitted for a status outside net/http's table.
 func (p Problem) Write(w http.ResponseWriter) error {
 	p.applyDefaults()
 
