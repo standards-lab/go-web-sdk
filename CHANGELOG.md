@@ -11,7 +11,8 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 - `Transfer` sets the connection deadlines of a route that moves a large body. Each deadline is
   the grace plus the time the body's size, capped at the route's limit, takes at the minimum
   rate. `WidenUpload(w, r)` sets the read deadline from the declared `Content-Length` and the
-  write deadline a grace later; `WidenDownload(w, size)` sets the write deadline.
+  write deadline a grace later; `WidenDownload(w, size)` sets the write deadline. A writer with no
+  connection deadlines, such as a test recorder, has none to set, and both return nil.
   `Config.Transfer(limit)` builds a `Transfer` from the configuration and leaves a disabled
   timeout disabled; `NewTransfer` builds one from explicit values. `Limit` returns the limit to
   pass to `ReadUpload`.

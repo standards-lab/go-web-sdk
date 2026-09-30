@@ -244,14 +244,15 @@ func TestTransfer_KeepsADisabledTimeoutDisabled(t *testing.T) {
 	}
 }
 
-// A writer that cannot set deadlines reports the controller's error.
-func TestTransfer_UnsupportedWriter(t *testing.T) {
+// A writer with no connection deadlines has none to set: a handler served
+// to a recorder, as in a unit test, runs as it would on a connection.
+func TestTransfer_AWriterWithNoDeadlines(t *testing.T) {
 	transfer := web.NewTransfer(1, 1, 0)
 	r := httptest.NewRequest("POST", "/", nil)
-	if err := transfer.WidenUpload(httptest.NewRecorder(), r); !errors.Is(err, http.ErrNotSupported) {
-		t.Errorf("WidenUpload on a recorder = %v, want http.ErrNotSupported", err)
+	if err := transfer.WidenUpload(httptest.NewRecorder(), r); err != nil {
+		t.Errorf("WidenUpload on a recorder = %v, want nil", err)
 	}
-	if err := transfer.WidenDownload(httptest.NewRecorder(), 1); !errors.Is(err, http.ErrNotSupported) {
-		t.Errorf("WidenDownload on a recorder = %v, want http.ErrNotSupported", err)
+	if err := transfer.WidenDownload(httptest.NewRecorder(), 1); err != nil {
+		t.Errorf("WidenDownload on a recorder = %v, want nil", err)
 	}
 }

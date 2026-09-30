@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -83,13 +84,14 @@ func (t Transfer) Duration(size int64) time.Duration {
 // Content-Length from now, and the write deadline a grace later, for the
 // response that follows the body. A client slower than the rate fails the
 // body's read with os.ErrDeadlineExceeded, and the handler can still write
-// the response. It returns the http.ResponseController error for a writer
-// that cannot set deadlines.
+// the response. A writer with no connection deadlines, such as an
+// httptest.ResponseRecorder, has none to set, and WidenUpload returns nil;
+// any other http.ResponseController error it returns.
 func (t Transfer) WidenUpload(w http.ResponseWriter, r *http.Request) error {
 	read := deadline(t.Duration(r.ContentLength))
 	rc := http.NewResponseController(w)
 	if t.read {
-		if err := rc.SetReadDeadline(read); err != nil {
+		if err := rc.SetReadDeadline(read); err != nil && !errors.Is(err, http.ErrNotSupported) {
 			return fmt.Errorf("set the read deadline: %w", err)
 		}
 	}
@@ -98,7 +100,7 @@ func (t Transfer) WidenUpload(w http.ResponseWriter, r *http.Request) error {
 		if !read.IsZero() {
 			write = read.Add(t.grace)
 		}
-		if err := rc.SetWriteDeadline(write); err != nil {
+		if err := rc.SetWriteDeadline(write); err != nil && !errors.Is(err, http.ErrNotSupported) {
 			return fmt.Errorf("set the write deadline: %w", err)
 		}
 	}
@@ -107,14 +109,14 @@ func (t Transfer) WidenUpload(w http.ResponseWriter, r *http.Request) error {
 
 // WidenDownload sets the connection's write deadline to [Transfer.Duration]
 // of size from now, before the handler writes a response body of size
-// bytes. Like WidenUpload, it returns the http.ResponseController error for
-// a writer that cannot set deadlines.
+// bytes. Like WidenUpload, it returns nil for a writer with no connection
+// deadlines, and any other http.ResponseController error.
 func (t Transfer) WidenDownload(w http.ResponseWriter, size int64) error {
 	d := t.Duration(size)
 	if !t.write {
 		return nil
 	}
-	if err := http.NewResponseController(w).SetWriteDeadline(deadline(d)); err != nil {
+	if err := http.NewResponseController(w).SetWriteDeadline(deadline(d)); err != nil && !errors.Is(err, http.ErrNotSupported) {
 		return fmt.Errorf("set the write deadline: %w", err)
 	}
 	return nil
