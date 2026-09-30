@@ -21,15 +21,9 @@ type requestIDConfig struct {
 	header string
 }
 
-// WithIDSource supplies the function [RequestID] asks first for a request's
-// id. It is the seam a tracing layer fills: the source returns the request's
-// current trace id, and the correlation id then is the trace id. A source
-// returning "" declines that request, and RequestID falls through to the
-// next step of its precedence.
-//
-// WithIDSource panics on a nil fn: a missing source is a wiring mistake,
-// and a middleware that quietly generated ids in its place would run with
-// ids that correlate to nothing.
+// WithIDSource supplies the function [RequestID] asks first, the seam a
+// tracing layer fills with the request's trace id; "" declines. It panics
+// on a nil fn.
 func WithIDSource(fn func(*http.Request) string) RequestIDOption {
 	if fn == nil {
 		panic("middleware: WithIDSource requires a non-nil source")
@@ -37,16 +31,9 @@ func WithIDSource(fn func(*http.Request) string) RequestIDOption {
 	return func(c *requestIDConfig) { c.source = fn }
 }
 
-// WithTrustedHeader names an inbound request header whose non-empty value
-// [RequestID] echoes as the request's id, after the source function and
-// before generating one. It is an explicit opt-in for a deployment with a
-// trusted reverse proxy in front that assigns ids; without it RequestID
-// trusts no inbound header, since any client can send one. The name is
-// matched the way http.Header does, case-insensitively.
-//
-// WithTrustedHeader panics on an empty name: there is no header to trust,
-// and a middleware that silently ignored the option would report a proxy's
-// ids as its own generated ones.
+// WithTrustedHeader names an inbound header whose value [RequestID] echoes
+// as the id, for a deployment whose reverse proxy assigns one; no header is
+// trusted otherwise. It panics on an empty name.
 func WithTrustedHeader(name string) RequestIDOption {
 	if name == "" {
 		panic("middleware: WithTrustedHeader requires a header name")
@@ -54,30 +41,17 @@ func WithTrustedHeader(name string) RequestIDOption {
 	return func(c *requestIDConfig) { c.header = name }
 }
 
-// RequestID gives every request a correlation id. The id is chosen by the
-// first of these that yields a non-empty string:
+// RequestID gives every request a correlation id, the first of these that
+// yields one:
 //
-//  1. The source function from [WithIDSource], when one is configured.
-//  2. The inbound header named by [WithTrustedHeader], when one is
-//     configured and the request carries a non-empty value for it.
-//  3. A generated id: 16 bytes from crypto/rand, hex-encoded to 32
-//     lowercase characters, the shape of an OpenTelemetry trace id.
+//  1. The source function from [WithIDSource].
+//  2. The inbound header named by [WithTrustedHeader], when its value is 1
+//     to 128 visible ASCII characters.
+//  3. A generated id: 16 bytes from crypto/rand, hex-encoded, the shape of an
+//     OpenTelemetry trace id.
 //
-// With no options, RequestID always generates. It never trusts an inbound
-// header it was not told to trust.
-//
-// The middleware sets the id on the request's context through
-// [web.WithRequestID], so the handler, later middleware, and
-// [web.Problem.WriteFor] all see it, and sets the [RequestIDHeader]
-// response header to the same value. Both happen before the next handler
-// runs: response headers go to the wire with the first write, so setting
-// the header first keeps it on the response whoever ends up writing it,
-// including a [Recoverer] answering a panic. A handler that deletes the
-// header from the response before writing removes it; the context value
-// stays.
-//
-// RequestID does not wrap the ResponseWriter; it has nothing to observe in
-// the response.
+// The id is set on the request's context ([web.WithRequestID]) and the
+// [RequestIDHeader] response header before the next handler runs.
 func RequestID(opts ...RequestIDOption) web.Middleware {
 	var cfg requestIDConfig
 	for _, opt := range opts {
@@ -102,11 +76,25 @@ func (c *requestIDConfig) id(r *http.Request) string {
 		}
 	}
 	if c.header != "" {
-		if id := r.Header.Get(c.header); id != "" {
+		if id := r.Header.Get(c.header); validID(id) {
 			return id
 		}
 	}
 	return generateID()
+}
+
+// validID reports whether an inbound id is 1 to 128 visible ASCII
+// characters, a shape safe to echo into a log record and a response header.
+func validID(id string) bool {
+	if id == "" || len(id) > 128 {
+		return false
+	}
+	for i := range len(id) {
+		if id[i] < '!' || id[i] > '~' {
+			return false
+		}
+	}
+	return true
 }
 
 // generateID returns 32 lowercase hex characters from 16 random bytes.

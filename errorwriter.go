@@ -7,34 +7,32 @@ import (
 	"net/http"
 )
 
-// ProblemMatcher maps an error to the problem response that reports it. It
-// reports false for an error it does not recognize, passing the decision to
-// the next matcher. A matcher that only cares about the status returns a
-// Problem with Status set and every other member zero — Type and Title take
-// [Problem.Write]'s defaults and Instance takes [Problem.WriteFor]'s, the
-// same as an unclaimed error does.
+// ProblemMatcher maps an error to the problem that reports it, or reports
+// false to pass it to the next matcher. A Problem with only Status set takes
+// [Problem.WriteFor]'s defaults for the rest.
 type ProblemMatcher func(error) (Problem, bool)
 
 // ErrorWriter turns a handler's returned error into an RFC 9457 problem
-// response. The mappings it owns are this package's own vocabulary — a
-// *[QueryError] is a 400, a *[PreconditionError] a 428 when the header is
-// missing and a 400 otherwise, a *[BodyError] a 413 when the body is over
-// its limit and a 400 otherwise, an *[UploadError] a 415, 411, or 413;
-// every other problem is decided by the consumer's matchers, so problem
-// policy stays with the application and the SDK depends on no
-// infrastructure library's error types.
+// response: this package's own error types and a returned [Problem] map
+// themselves, and the consumer's matchers decide the rest, so problem policy
+// stays with the application.
 type ErrorWriter struct {
 	matchers []ProblemMatcher
 	detail   map[int]struct{}
 	logger   *slog.Logger
 }
 
-// NewErrorWriter composes the matchers into a writer, wired once at route
-// setup. They are consulted in argument order after the built-in matches,
-// first match wins; an error no matcher claims is a 500.
-func NewErrorWriter(matchers ...ProblemMatcher) *ErrorWriter {
+// NewErrorWriter composes the matchers, consulted in argument order after
+// the built-in mappings, first match wins. logger receives the cause of
+// every 5xx the writer sends and every error it cannot write. It panics on
+// a nil logger.
+func NewErrorWriter(logger *slog.Logger, matchers ...ProblemMatcher) *ErrorWriter {
+	if logger == nil {
+		panic("web: NewErrorWriter requires a *slog.Logger")
+	}
 	return &ErrorWriter{
 		matchers: matchers,
+		logger:   logger,
 		detail: map[int]struct{}{
 			http.StatusBadRequest:            {},
 			http.StatusLengthRequired:        {},
@@ -46,84 +44,60 @@ func NewErrorWriter(matchers ...ProblemMatcher) *ErrorWriter {
 }
 
 // Detail adds statuses whose problems carry the error text as their detail
-// member, for a surface whose clients need the reason: an operator API
-// reporting which schema version is dirty on a 409, or that this
-// environment does not seed on a 403. The built-in set is 400, 411, 413,
-// 415, and 428, the statuses that are request-shaped by construction;
-// Detail only ever adds to it, and the writer does not second-guess a
-// status the consumer names. Called at wiring time, like [Group.Use].
+// member when no matcher supplied one, for a surface whose clients need the
+// reason, such as an operator API's 409. The built-in set is 400, 411, 413,
+// 415, and 428, the statuses that are request-shaped by construction; every
+// other status sends no error text, so an internal error's text never
+// reaches the wire by default.
 func (ew *ErrorWriter) Detail(statuses ...int) {
 	for _, s := range statuses {
 		ew.detail[s] = struct{}{}
 	}
 }
 
-// Log sets the logger the writer reports to. The writer logs the cause of
-// every 5xx it writes, since the response carries no detail and the cause
-// would otherwise be lost. It also logs an error it cannot write: one that a
-// handler adapted by [Handle] returned after committing its response, or a
-// problem whose body the encoder failed to write. Unset, the writer reports
-// through slog's default logger.
-// Called at wiring time, like [ErrorWriter.Detail].
-func (ew *ErrorWriter) Log(logger *slog.Logger) {
-	ew.logger = logger
-}
-
-func (ew *ErrorWriter) log() *slog.Logger {
-	if ew.logger == nil {
-		return slog.Default()
-	}
-	return ew.logger
-}
-
-// Problem maps err to the problem that reports it, without writing a
-// response: this package's own errors first, then the matchers in argument
-// order, first match wins. An error no matcher claims, and a matcher that
-// claims one without naming a status, is a 500. The document is
-// undecorated — Instance is empty and [ErrorWriter.Detail]'s rule has not
-// been applied yet; [ErrorWriter.Write] does both.
+// Problem maps err to the problem that reports it, without writing it: this
+// package's own errors first, then a [Problem] in err's chain, as is, then
+// the matchers. An error nothing claims, or a claim with no status, is a
+// 500. Instance and the [ErrorWriter.Detail] rule are left to
+// [ErrorWriter.Write].
 func (ew *ErrorWriter) Problem(err error) Problem {
+	p, _ := ew.problem(err)
+	return p
+}
+
+// problem is [ErrorWriter.Problem], also reporting whether the problem was
+// returned whole, which Write sends without adding the error text.
+func (ew *ErrorWriter) problem(err error) (p Problem, whole bool) {
 	if own, ok := errors.AsType[statusError](err); ok {
-		return Problem{Status: own.status()}
+		return Problem{Status: own.status()}, false
+	}
+	if p, ok := errors.AsType[Problem](err); ok {
+		return withStatus(p), true
 	}
 	for _, match := range ew.matchers {
 		if p, ok := match(err); ok {
-			if p.Status == 0 {
-				p.Status = http.StatusInternalServerError
-			}
-			return p
+			return withStatus(p), false
 		}
 	}
-	return Problem{Status: http.StatusInternalServerError}
+	return Problem{Status: http.StatusInternalServerError}, false
 }
 
-// Status maps err to its HTTP status without writing a response, for a
-// caller that needs the code alone.
-func (ew *ErrorWriter) Status(err error) int {
-	return ew.Problem(err).Status
+func withStatus(p Problem) Problem {
+	if p.Status == 0 {
+		p.Status = http.StatusInternalServerError
+	}
+	return p
 }
 
-// Write sends err as the problem [ErrorWriter.Problem] maps it to. A
-// matcher that supplied its own Detail keeps it; otherwise the detail
-// carries the error text only on a status in the writer's detail set (400,
-// 411, 413, 415, and 428 built in, plus whatever [ErrorWriter.Detail]
-// added), where it is request-shaped and client-actionable — every other
-// status sends no detail, so an internal error's text never reaches the
-// wire by default. Write logs the cause of every 5xx instead, since the
-// response withholds it, through [ErrorWriter.Log]'s logger with the
-// attributes [Handle]'s failure records carry: a 503 at warn level, as a
-// dependency's outage the service reports rather than a fault of its own,
-// and every other 5xx at error level. A cause that is the request's own
-// cancellation, the client having gone away, is logged at debug level,
-// since it says nothing about the service. A 4xx is the client's and is
-// not logged.
-// The returned error is the encoder's, as from [Problem.WriteFor].
+// Write sends err as the problem [ErrorWriter.Problem] maps it to, with the
+// error text as detail where [ErrorWriter.Detail] allows, and logs a 5xx's
+// cause: a 503 at warn, the client's own cancellation at debug, else error.
 func (ew *ErrorWriter) Write(w http.ResponseWriter, r *http.Request, err error) error {
-	p := ew.Problem(err)
+	p, whole := ew.problem(err)
 	if p.Status >= http.StatusInternalServerError {
 		ew.logCause(r, p.Status, err)
 	}
-	if p.Detail == "" {
+	if !whole && p.Detail == "" {
 		if _, ok := ew.detail[p.Status]; ok {
 			p.Detail = err.Error()
 		}
@@ -131,9 +105,6 @@ func (ew *ErrorWriter) Write(w http.ResponseWriter, r *http.Request, err error) 
 	return p.WriteFor(w, r)
 }
 
-// logCause reports the error behind a 5xx, which the response withholds,
-// with the attribute set [Handle]'s failure records carry, at the level
-// [ErrorWriter.Write] documents.
 func (ew *ErrorWriter) logCause(r *http.Request, status int, err error) {
 	level := slog.LevelError
 	switch {
@@ -142,5 +113,5 @@ func (ew *ErrorWriter) logCause(r *http.Request, status int, err error) {
 	case status == http.StatusServiceUnavailable:
 		level = slog.LevelWarn
 	}
-	ew.log().LogAttrs(r.Context(), level, "server error response", handleAttrs(r, status, err)...)
+	ew.logger.LogAttrs(r.Context(), level, "server error response", handleAttrs(r, status, err)...)
 }

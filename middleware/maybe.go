@@ -6,26 +6,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// Maybe applies mw to a request only when pred(r) holds; otherwise the
-// request goes straight to the next handler, unwrapped. It is the way to
-// hang a middleware on part of a route's traffic (a body limit on writes
-// only, a header on browser-facing responses only) without splitting the
-// route.
-//
-// Maybe composes mw around the next handler once, when the chain it sits in
-// is composed: [web.Chain], and a router, group, or route applying its
-// middleware, call the returned Middleware one time at wiring, and that call
-// builds the wrapped handler. A request then only chooses between the two
-// handlers already built; nothing recomposes per request, matching the rest
-// of the package.
-//
-// pred runs on every request, before either handler, and sees the request
-// as Maybe received it. A middleware outside Maybe that derives a request
-// (as [RequestID] does) is visible to pred; one inside is not.
-//
-// Maybe panics on a nil mw or a nil pred: there is nothing to apply, or no
-// way to decide, and a middleware that silently passed every request
-// through would look wired while doing nothing.
+// Maybe applies mw only to a request pred holds for, choosing per request
+// between two handlers composed once. It panics on a nil mw or pred.
 func Maybe(mw web.Middleware, pred func(*http.Request) bool) web.Middleware {
 	if mw == nil {
 		panic("middleware: Maybe requires a middleware to apply")
@@ -45,12 +27,9 @@ func Maybe(mw web.Middleware, pred func(*http.Request) bool) web.Middleware {
 	}
 }
 
-// NotProbe reports false for a request to [web.HealthPath] or
-// [web.ReadyPath], true otherwise. It is [Maybe]'s predicate for excluding
-// the SDK's own liveness and readiness probes from a middleware that
-// judges a request before the handler runs — a rate limit, for one — since
-// an orchestrator's probe answered by that middleware instead of the
-// handler it protects reads as the process being down.
+// NotProbe is [Maybe]'s predicate excluding [web.HealthPath] and
+// [web.ReadyPath], so a middleware that judges a request, a rate limit say,
+// never answers an orchestrator's probe in the handler's place.
 func NotProbe(r *http.Request) bool {
 	return r.URL.Path != web.HealthPath && r.URL.Path != web.ReadyPath
 }

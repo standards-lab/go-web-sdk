@@ -5,21 +5,16 @@ import (
 	"net/http"
 )
 
-// statusError is the status mapping of this package's own error types: each
-// carries its HTTP status beside its definition, and [ErrorWriter.Problem]
-// asks the error rather than enumerating the types. The method is
-// unexported on purpose. A consumer's status policy is declared through
-// matchers at the composition root, never by teaching an error its status,
-// so the set of errors the SDK maps itself stays exactly the set it defines.
+// statusError is implemented by this package's own errors, each carrying its
+// status. The method is unexported so a consumer's status policy stays in
+// its matchers.
 type statusError interface {
 	error
 	status() int
 }
 
-// QueryError reports one rejected query parameter: which parameter
-// ("page", "size", "sort", "cursor", or a filter's key), the offending
-// input, and why. [ErrorWriter] maps it to a 400; this package mints no
-// problem types.
+// QueryError reports one rejected query parameter: its name, the offending
+// input, and why. [ErrorWriter] maps it to a 400.
 type QueryError struct {
 	Param  string
 	Value  string
@@ -32,10 +27,9 @@ func (e *QueryError) Error() string {
 
 func (e *QueryError) status() int { return http.StatusBadRequest }
 
-// PreconditionError reports a version precondition the request failed to
-// state or stated unreadably: Missing marks an absent If-Match header, and
-// otherwise Value carries the rejected header text. [ErrorWriter] maps it to
-// a 428 when Missing and a 400 otherwise.
+// PreconditionError reports an If-Match header [IfMatch] rejected: Missing
+// marks an absent header, and otherwise Value carries its text.
+// [ErrorWriter] maps it to a 428 when Missing and a 400 otherwise.
 type PreconditionError struct {
 	Missing bool
 	Value   string
@@ -56,10 +50,8 @@ func (e *PreconditionError) status() int {
 }
 
 // BodyError reports a request body [DecodeJSON] rejected: TooLarge marks a
-// body over the caller's limit, and otherwise Reason says what the decoder
-// refused — malformed JSON, an unknown field, a second value after the
-// first, an empty body. [ErrorWriter] maps it to a 413 when TooLarge and a
-// 400 otherwise.
+// body over the limit, and otherwise Reason says what the decoder refused.
+// [ErrorWriter] maps it to a 413 when TooLarge and a 400 otherwise.
 type BodyError struct {
 	TooLarge bool
 	Reason   string
@@ -76,14 +68,11 @@ func (e *BodyError) status() int {
 	return http.StatusBadRequest
 }
 
-// UploadError reports a raw request body [ReadUpload] refused before
-// reading it. Header names the missing or unparsable header, "Content-Type"
-// or "Content-Length"; otherwise TooLarge marks a declared length over the
-// caller's limit. [ErrorWriter] maps a missing or unparsable Content-Type
-// to a 415, since the service cannot tell what it would be storing, a
-// missing Content-Length (a chunked body) to a 411, and TooLarge to a 413.
-// A consumer refusing a media type its allowlist does not hold returns one
-// with Header "Content-Type", answered 415 the same way.
+// UploadError reports a raw request body refused before it was read: Header
+// names a missing or unacceptable "Content-Type" or a missing
+// "Content-Length", and otherwise TooLarge marks a declared length over the
+// limit. [ErrorWriter] maps it to a 415, 411, or 413 respectively. A
+// consumer refusing a media type returns one with Header "Content-Type".
 type UploadError struct {
 	Header   string
 	TooLarge bool
@@ -104,3 +93,17 @@ func (e *UploadError) status() int {
 		return http.StatusUnsupportedMediaType
 	}
 }
+
+// PathError reports a path value [PathUUID] rejected: Name is the path
+// wildcard and Value the text the request carried. [ErrorWriter] maps it to
+// a 400.
+type PathError struct {
+	Name  string
+	Value string
+}
+
+func (e *PathError) Error() string {
+	return fmt.Sprintf("path %s=%q: must be a UUID", e.Name, e.Value)
+}
+
+func (e *PathError) status() int { return http.StatusBadRequest }

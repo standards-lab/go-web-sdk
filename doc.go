@@ -1,41 +1,31 @@
 // Package web provides the HTTP layer: a net/http server bound to a
-// caller-supplied handler, RFC 9457 problem responses, a JSON writer, and the
-// liveness and readiness endpoints an orchestrator probes.
+// caller-supplied handler, routing, RFC 9457 problem responses, the read and
+// request helpers, and the liveness and readiness endpoints an orchestrator
+// probes.
 //
-// # Server
+// # Wiring
 //
-// [NewServer] wraps an http.Server built from a finalized [Config] and a
-// handler the caller composes; an unfinalized Config panics with the fix
-// named. [Server.Start] binds the listener on the calling goroutine, with the
-// context bounding the bind, and only then serves in the background, so a
-// bind failure is returned to the caller instead of being lost in a
-// goroutine. [Server.Addr] reports the bound address once started; a
-// configured port 0 binds an ephemeral port, and Addr reads back the
-// assignment.
+// An application is wired once, before it serves, and a wiring mistake
+// panics then, with the fix named, rather than failing a request later: an
+// unfinalized [Config], a nil logger or writer, a malformed prefix, a
+// duplicate pattern, a mutation of a group [NewModule] sealed. A constructor
+// takes what the value cannot work without, including the *slog.Logger it
+// reports through; optional behavior is set by a method called while the
+// application is wired: [Group.Use], [Group.Mount], [Group.SetErrorWriter],
+// [Group.SetNotFound], [Group.SetMethodNotAllowed], [Router.Use],
+// [Router.SetNotFound], [Router.SetMethodNotAllowed], and
+// [ErrorWriter.Detail]. Configuration accumulated from files and the
+// environment is a struct instead, the way [Config] loads through go-core's
+// config package.
 //
-// [Server.Err] belongs to a successful serve session: after Start returns nil,
-// a serve failure arrives on it, and the channel closes when serving stops.
-// http.ErrServerClosed is the expected end of a shutdown and is not reported.
-// [Server.Shutdown] before a successful Start is a no-op that leaves the
-// server startable, so a lifecycle drain after a failed startup passes
-// through cleanly; once it has served, a Server is single-use — construct a
-// new one to serve again.
+// # Server lifecycle
 //
-// [Server.Log] bridges net/http's own diagnostics — a TLS handshake
-// failure, a header-parse error, the superfluous-WriteHeader warning —
-// onto a caller's *slog.Logger at warn level; unset, they go through the
-// global log package to stderr, outside the slog pipeline. It is called
-// before Start; after it panics, since Serve reads the bridged logger
-// concurrently.
-//
-// # Lifecycle wiring
-//
-// The package registers no lifecycle service of its own and holds no shutdown
-// timeout. [Server.Start] and [Server.Shutdown] match the member signatures of
-// go-core's [lifecycle.Service], and [Server.Err] is a monitorable source, so
-// a composition root declares the server as bare method values, in the root
-// stage, so every numbered stage starts beneath it and the drain empties it
-// first:
+// [Server.Start] binds on the calling goroutine and only then serves in the
+// background, so a bind failure is returned rather than lost, and
+// [Server.Err] reports a serve failure after it. Start and [Server.Shutdown]
+// match go-core's [lifecycle.Service] members, so a composition root declares
+// the server in the root stage, where every numbered stage starts beneath it
+// and the drain empties it first:
 //
 //	lc.Add(lifecycle.Service{
 //		Name:     "server",
@@ -45,249 +35,61 @@
 //	})
 //	lc.Monitor(srv.Err())
 //
-// A bind failure fails the coordinator's startup, a serve failure ends its
-// run, and Shutdown receives the timeout-bounded drain context
-// [Server.Shutdown] consumes directly.
+// That root stage is also what makes [RegisterHealth]'s live readiness safe:
+// no request reaches the probe before every check it reads exists.
 //
 // # Routing
 //
-// [Group], [Module], and [Router] compose an application's route tree. A
-// Group declares routes: a path prefix (multi-segment prefixes such as
-// "/api/v1" are first-class), a middleware stack, atomic routes, and nested
-// child groups. [NewModule] compiles a group tree once into a [Module]: every
-// route under its full pattern, with its middleware baked in (group stacks
-// outermost, ordered root to leaf, then per-route middleware). It then seals
-// the tree, so a route registered after compilation panics instead of going
-// silently dead. [NewHandlerModule] mounts a raw handler under a prefix
-// (an embedded client application, a file server), the one case where a
-// module strips the prefix from the request.
+// A [Group] declares routes under a path prefix, with a middleware stack
+// and nested child groups; [NewModule] compiles a group tree once into a
+// [Module], and a [Router] dispatches to modules by longest prefix on
+// segment boundaries, falling back to a native http.ServeMux, where
+// [Router.Handle] mounts the probes outside every module's middleware. The
+// effective middleware order is [Router.Use], then group middleware root to
+// leaf, then route middleware, then the handler. Nothing recomposes per
+// request.
 //
-// A [Router] dispatches to mounted modules by longest-prefix match on segment
-// boundaries, falling back to a native http.ServeMux for every path no module
-// owns. [Router.Handle] mirrors ServeMux.Handle on the native mux. *Router
-// satisfies [Mounter], so [RegisterHealth] mounts the probes there,
-// structurally outside every module's middleware, and [Router.Use] wraps the
-// whole dispatch. The effective order is router middleware, then group
-// middleware root to leaf, then route middleware, then the handler.
-// Registration mistakes panic at wiring time: a malformed prefix, a
-// duplicate pattern, a second module at a prefix, or a sealed-group
-// mutation. Nothing recomposes or validates per request.
+// A request no route matches is answered with a 404 problem, and one whose
+// method does not match with a 405 problem carrying Allow, in place of
+// ServeMux's plain text; its redirects are served unchanged. A miss reaches
+// no route, so only Router.Use middleware sees it.
 //
-// A miss is a problem document too. A request no route matches is answered
-// with a 404 problem, and one whose path matches but whose method does not
-// with a 405 problem carrying the Allow header, in place of ServeMux's
-// plain-text answers; ServeMux's own path-cleaning and trailing-slash
-// redirects are served unchanged. [Router.SetNotFound] and
-// [Router.SetMethodNotAllowed] replace the handlers for the native mux, and
-// [Group.SetNotFound] and [Group.SetMethodNotAllowed], on the group passed
-// to NewModule, replace them for a module. A miss reaches no route, so no
-// group middleware runs on it; only Router.Use middleware does.
+// # Problems
 //
-// # Wiring-time methods
+// Every error response is an RFC 9457 problem document. The type member is
+// the one a client branches on; this package mints no type URIs, so every
+// problem it emits itself is [ProblemTypeBlank], and a consumer names its
+// own through a [Problem]'s Type. A handler written as a [HandlerFunc]
+// returns its error and [Handle] writes it through an [ErrorWriter]: this
+// package's own errors ([QueryError], [PreconditionError], [BodyError],
+// [UploadError], [PathError]) and a returned Problem map themselves, and
+// the consumer's [ProblemMatcher] list decides the rest, so problem policy
+// stays with the application and the SDK depends on no infrastructure
+// library's errors. An error nothing claims is a 500, whose cause is logged
+// and withheld from the wire. When the request carries a correlation id
+// ([WithRequestID]), every problem written for it carries the id as its
+// "request_id" member.
 //
-// Optional behavior is set by a method called while the application is
-// wired, before it serves: [Group.Use], [Group.SetErrorWriter],
-// [ErrorWriter.Detail], [ErrorWriter.Log], [Server.Log], and
-// [Router.SetNotFound]. A constructor takes only what the value cannot work
-// without. Configuration accumulated from files and the environment is a
-// struct instead, the way [Config] loads through go-core's config package.
-//
-// # Configuration
-//
-// [Config] holds the host, the port, the server's four timeouts, and the
-// header-block limit, and implements the Merge and Finalize contract of
-// go-core's config package, so it loads as part of an application's
-// configuration rather than on its own. The port, the timeouts, and
-// MaxHeaderBytes are pointers: nil is unset and takes the default, while an
-// explicit zero survives the load and means what it says: a disabled
-// timeout, or an ephemeral port. MaxHeaderBytes carries no default of its
-// own; unset, [NewServer] leaves http.Server.MaxHeaderBytes at its zero
-// value, so net/http applies http.DefaultMaxHeaderBytes — the SDK does not
-// restate a number the standard library already owns. A file and the
-// environment express both states identically. Finalize composes its
-// environment override names from the prefix it receives, under the block
-// "server" (via [NewEnv], recorded on [Env] for introspection), applies
-// defaults, reads the overrides, and validates; an empty prefix disables the
-// overrides. [Config.FinalizeBlock] is Finalize under a caller-named block
-// instead of "server", so a second Config — a management listener, say —
-// finalizes under the same prefix without its override names colliding with
-// the primary server's.
-//
-// # Health
-//
-// [Liveness] reports that the process is up and serving HTTP and checks nothing
-// else; an unanswered probe is the liveness signal. [Readiness] aggregates the
-// [lifecycle.Check] values the caller supplies, and answers 503 unless every
-// one of them is ready. A Check with a nil Checker reports not ready, so a
-// subsystem that failed to construct fails the probe. The 503 is notReady,
-// the [Problem] the caller supplies: a zero value takes the package
-// defaults (about:blank, "one or more readiness checks failed"), and any
-// member notReady names is used instead — except Status and a "checks" key
-// in Extras, which are always the probe's own. [RegisterHealth] mounts both
-// endpoints on a [Mounter]: liveness plain, and readiness over a
-// [lifecycle.Coordinator], queried fresh on every request rather than once at
-// registration, so a service the coordinator gains after RegisterHealth is
-// called still appears on the next probe. The coordinator itself is the first
-// participant, under the fixed name "lifecycle", followed by its own Checks,
-// in start order. Exposing an in-progress service's check this way is safe
-// only because the transport registers at [lifecycle.StageRoot]; nothing else
-// guarantees every check exists before a request reaches the probe. The
-// patterns use net/http.ServeMux's method-scoped syntax ("GET /healthz"),
-// which http.ServeMux handles directly; any other Mounter translates them.
-//
-// # Middleware
-//
-// A [Middleware] wraps one http.Handler in another, and [Chain] composes a set
-// of them around a handler in argument order: in Chain(h, a, b), a sees the
-// request first. A nil entry is skipped, so a caller can build a chain with
-// conditional entries without filtering it first.
-//
-// The type and the composer live here because the routing layer consumes
-// them; the middleware implementations (the request logger and the
-// recoverer today) live in the middleware package.
-//
-// # Response recording
-//
-// [Recorder] wraps a ResponseWriter to record whether a response has been
-// committed and with what status: the first WriteHeader commits, and a
-// Write with no WriteHeader before it commits an implicit 200. [WrapWriter]
-// returns its argument as a *Recorder, wrapping it only if it is not one
-// already, so [Handle] and the middleware package's RequestLogger and
-// Recoverer share one instance per request instead of nesting. It
-// implements Unwrap so http.ResponseController reaches the underlying
-// writer, and delegates io.ReaderFrom.
-//
-// # Paginated reads
+// # Reads
 //
 // [ParseQuery] parses a read request's query string in full into a [Query]:
-// the page, size, sort, and cursor parameters, and every remaining
-// parameter as the filter set — one call yields both halves, so a handler
-// cannot parse the paging parameters and forget to strip them from the
-// filters. Sort is comma-separated field names, "-" prefixing a descending
-// key ("sort=name,-code"), honored across every occurrence of the
-// parameter. A filter is a field name with an optional operator in brackets
-// ("status=active", "created[gte]=2026-01-01"), a repeated parameter
-// carrying several values under one [Filter]; the filters come back ordered
-// by field and operator, so a consumer composes a deterministic predicate.
-// Sort and filter names and the operators are lexical here: whether a field
-// is readable or an operator supported is the data layer's check, and the
-// SDK enumerates no operators of its own. Policy belongs to the caller: a [Limits]
-// value supplies the default and maximum size (invalid limits panic as a
-// wiring mistake), and a malformed or out-of-bounds parameter returns a
-// *[QueryError].
+// the page, size, sort, and cursor parameters, and every other parameter as
+// a [Filter], so a handler cannot parse the paging and forget to strip it
+// from the filters. Sort is comma-separated field names, "-" prefixing a
+// descending key ("sort=name,-code"). A filter is a field name with an
+// optional bracketed operator ("status=active", "created[gte]=2026-01-01").
+// Names and operators are lexical here: whether a field is readable or an
+// operator supported is the data layer's check. A read is addressed by
+// number (page=3) or by the cursor a previous page's Next carried, never
+// both, and only a read whose [Limits] opt in takes a cursor. [NewPage]
+// assembles the [Page] envelope from the items and the read's [Paging].
 //
-// A read is addressed by number (page=3) or by cursor (cursor=<token>), never
-// both. A cursor is the opaque token a previous page's Next carried; the
-// read continues after that page's last item, so a collection that changes
-// between requests neither skips nor repeats a row. A read opts in to the
-// cursor through [Limits], and a read that does not refuses one, so a data
-// layer that cannot continue by cursor never serves the wrong page. On
-// success, [NewPage] assembles the [Page] envelope from the items, the
-// query, and the read's [Paging]: the page number (omitted under a cursor),
-// the size, the total (omitted for [NoTotal], so an uncounted read never
-// reads as empty), whether a further page exists, and the cursor to it. Nil
-// items marshal as [], and [WriteJSON] sends the envelope as the response
-// body.
+// # Requests and objects
 //
-// # Request helpers
-//
-// [IfMatch] reads a request's version precondition from the If-Match header
-// (RFC 9110 §13.1.1): exactly one strong entity-tag whose opaque value is an
-// integer version, If-Match: "3". A missing header, a weak tag, the * form, a
-// list, or a non-integer tag is a *[PreconditionError], which the error
-// mapping below answers with a 428 when the header is missing and a 400
-// otherwise. The parse is syntax only; whether the version matches the row
-// is the data layer's check, and a mismatch is the consumer's 412.
-//
-// [DecodeJSON] reads a request body strictly as one JSON value: bounded at
-// the caller's limit, unknown fields rejected so a misspelled field cannot
-// silently change a command's meaning, and nothing after the first value.
-// A body that fails any of these, or is empty, is a *[BodyError], answered
-// with a 413 when the body is over its limit and a 400 otherwise. The decode
-// is syntax and shape only; the values' validity is the command's own check.
-//
-// [ReadUpload] accepts a raw body, such as a file's bytes, by its headers
-// before any byte is read: a parsable Content-Type and a declared
-// Content-Length within the caller's limit, returned as an [Upload] whose
-// body is bounded at that limit. A missing or unparsable type is an
-// *[UploadError] answered with a 415, a chunked body with no declared
-// length a 411, and a declared length over the limit a 413; a request with
-// neither a length nor chunked encoding has no body and is a 0-byte upload.
-// The declared length is what lets a store that needs the size up front
-// take the stream without buffering it. [Upload.MediaType] is the type
-// lower-cased without parameters, for a consumer's allowlist, and a
-// consumer's own refusal is an *[UploadError] on Content-Type, a 415.
-//
-// # Proxied objects
-//
-// [WriteObject] sends a stored object's bytes as the response, described by
-// an [Object]: Content-Type, Content-Length, ETag, and Last-Modified from
-// the object, and X-Content-Type-Options: nosniff, since the bytes are
-// stored content a browser must not reinterpret. Preconditions are
-// answered from the Object alone: an If-None-Match naming its tag, or an
-// If-Modified-Since no earlier than its change when If-None-Match is
-// absent, answers 304, and HEAD answers with the headers alone. The bytes
-// are opened only when they are sent, so a revalidation costs the store
-// nothing, and an error opening them is returned uncommitted, for the
-// error writer to answer. Proxying keeps every read behind the
-// service's own authorization, where a redirect to a presigned URL would
-// hand out a bearer credential the service cannot revoke. [Attachment]
-// builds a download's Content-Disposition header: the RFC 6266 filename,
-// plus its RFC 8187 form for a name outside printable ASCII or holding a %. A handler sets the
-// header before calling WriteObject, which keeps it.
-//
-// # Error mapping
-//
-// An [ErrorWriter] turns a handler's returned error into a problem response
-// through a composed [ProblemMatcher] list: the package's own vocabulary is
-// built in (*[QueryError] is a 400; *[PreconditionError] a 428 or a 400;
-// *[BodyError] a 413 or a 400; *[UploadError] a 415, 411, or 413, each an
-// undecorated Problem with only Status set), the consumer's matchers decide
-// the rest in order, first match wins, and an error no matcher claims — or a
-// matcher that claims one without naming a status — is a 500. A matcher may
-// return a Problem with its own Type, Title, Detail, and Extras, not status
-// alone, so problem policy stays with the application and the SDK depends on
-// no infrastructure library's error types or problem vocabulary. A matcher's
-// own Detail always ships; otherwise the detail member carries the error
-// text only on a status in the writer's detail set (400, 411, 413, 415, and
-// 428 built in, the statuses that are request-shaped by construction), so no
-// internal error's text reaches the wire by default; [ErrorWriter.Detail]
-// adds statuses for a surface whose clients need the reason, such as an
-// operator API's 409.
-//
-// # Error-returning handlers
-//
-// [HandlerFunc] is the handler shape that reports failure by returning an
-// error, and [Handle] adapts one into an http.Handler under an [ErrorWriter]:
-// a returned error is written as a problem, so a handler's body reads as its
-// success path and every rejection is one return statement. The stdlib
-// signature stays the primary contract — [Group.Handle] and [Router.Handle]
-// take http.Handler, and nothing requires the adapter — and
-// [Group.HandleErr] registers an error-returning handler under the writer
-// set by [Group.SetErrorWriter], one per group, not per route. The adapter
-// never writes a second response: a handler that committed a response and
-// then returned an error is reported through the writer's logger
-// ([ErrorWriter.Log], slog's default when unset) and nothing more is
-// written. The same logger records the cause of every 500 the writer sends,
-// since the response withholds it from the wire.
-//
-// # Problem responses
-//
-// Error responses are RFC 9457 problem documents. The type member identifies
-// the problem's semantics and is the member a client branches on, with title
-// advisory and status an advisory copy of the status line. This package defines
-// no type URIs of its own: every problem it emits itself is [ProblemTypeBlank],
-// and a consumer supplies its own URI through a [Problem]'s Type field. [Problem.Extras]
-// carries any further extension members, merged at the top level of the
-// marshaled document; an extras member may add or override any standard
-// member except status, which always matches Status. A zero Status defaults
-// to 500. An empty title defaults to the status phrase, and is omitted for a
-// code outside the standard table. [Problem.Write] applies these defaults and
-// sends the document; [Problem.WriteFor] additionally defaults Instance to
-// the request path, which [WriteProblem] and [ErrorWriter.Write] both use.
-// When the request's context carries a correlation id, set with
-// [WithRequestID] and read with [RequestIDFrom], WriteFor also surfaces it as
-// the "request_id" extension member, overriding any the caller set, without
-// touching the caller's Extras map; a request with no id writes the same
-// document shape as before.
+// [IfMatch], [DecodeJSON], [ReadUpload], and [PathUUID] read a request's
+// precondition, JSON body, raw upload, and UUID path value, each rejecting
+// with an error the ErrorWriter maps. [WriteObject] proxies a stored object
+// as the response rather than redirecting to a presigned URL, which would
+// hand out a bearer credential the service cannot revoke and bypass its
+// authorization; [Attachment] makes it a download.
 package web

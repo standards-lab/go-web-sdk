@@ -12,19 +12,9 @@ import (
 // its success path and every rejection is one return statement.
 type HandlerFunc func(w http.ResponseWriter, r *http.Request) error
 
-// Handle adapts fn into an http.Handler: a returned error is written as a
-// problem response through ew. The adapter never writes a second response.
-// A handler that has already committed a response — written a status or a
-// body — and then returns an error produces a logged failure, at error
-// level through the writer's logger, and nothing on the wire. A problem
-// whose body cannot be written (the encoder failed, typically because the
-// client dropped the connection) is also logged at error level through the
-// writer's logger. Either record names the request by OpenTelemetry's
-// semantic conventions (http.request.method, url.path,
-// http.response.status_code) and carries request_id when the request's
-// context holds a correlation id ([WithRequestID]). A nil writer panics:
-// the adapter has no fallback policy, and a missing writer is a wiring
-// mistake.
+// Handle adapts fn into an http.Handler that writes a returned error through
+// ew, never as a second response: an error after commit, or a problem the
+// encoder fails to write, is logged through ew's logger. It panics on a nil ew.
 func Handle(fn HandlerFunc, ew *ErrorWriter) http.Handler {
 	if ew == nil {
 		panic("web: Handle requires an ErrorWriter; wire one with NewErrorWriter")
@@ -36,7 +26,7 @@ func Handle(fn HandlerFunc, ew *ErrorWriter) http.Handler {
 			return
 		}
 		if rec.Committed() {
-			ew.log().LogAttrs(
+			ew.logger.LogAttrs(
 				r.Context(),
 				slog.LevelError,
 				"handler returned an error after committing its response",
@@ -45,7 +35,7 @@ func Handle(fn HandlerFunc, ew *ErrorWriter) http.Handler {
 			return
 		}
 		if werr := ew.Write(rec, r, err); werr != nil {
-			ew.log().LogAttrs(
+			ew.logger.LogAttrs(
 				r.Context(),
 				slog.LevelError,
 				"failed to write problem response",
@@ -55,17 +45,16 @@ func Handle(fn HandlerFunc, ew *ErrorWriter) http.Handler {
 	})
 }
 
-// handleAttrs builds the attribute set of a [Handle] failure record: the
-// request by OpenTelemetry's semantic-convention names, the committed
-// status, the request's correlation id when its context carries one (a
-// chain with no request-id middleware must not log an empty one), and the
-// error.
+// handleAttrs is the attribute set of the error writer's records, named as
+// the middleware package's request logger names them.
 func handleAttrs(r *http.Request, status int, err error) []slog.Attr {
-	attrs := []slog.Attr{
+	attrs := make([]slog.Attr, 0, 6)
+	attrs = append(attrs,
 		slog.String("http.request.method", r.Method),
 		slog.String("url.path", r.URL.Path),
+		slog.String("client.address", r.RemoteAddr),
 		slog.Int("http.response.status_code", status),
-	}
+	)
 	if id, ok := RequestIDFrom(r.Context()); ok && id != "" {
 		attrs = append(attrs, slog.String("request_id", id))
 	}

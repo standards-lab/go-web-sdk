@@ -2,14 +2,15 @@ package web
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 )
 
-// reserved names the query parameters [ParseQuery] consumes itself; every
-// other parameter passes through as a filter. No other layer knows this set.
+// reserved names the parameters [ParseQuery] consumes; every other one is a
+// filter.
 var reserved = map[string]struct{}{
 	"page":   {},
 	"size":   {},
@@ -17,41 +18,35 @@ var reserved = map[string]struct{}{
 	"cursor": {},
 }
 
-// Sort is one sort key parsed from a request: a field name and direction.
-// The name is lexical only — whether it names a readable field is the data
-// layer's check.
+// Sort is one sort key: a field name, and whether the request prefixed it
+// with "-" for descending.
 type Sort struct {
 	Field      string
 	Descending bool
 }
 
-// Filter is one filter parsed from a request: a field name, the operator
-// the request named in brackets after it ("created[gte]=2026-01-01"), and
-// every value the parameter carried. Op is empty when the request named
-// none ("status=active"), the plain form a consumer reads as equality. Both
-// the name and the operator are lexical — whether the field is readable and
-// the operator is one the read model supports is the data layer's check —
-// and what several values mean under one operator is the consumer's
-// translation; the SDK enumerates no operators of its own.
+// Filter is one filter parameter: a field name, the operator the request
+// named in brackets after it ("created[gte]"), empty for the plain form
+// ("status"), and every value the parameter carried. What an operator and
+// several values mean is the consumer's translation; the SDK enumerates no
+// operators. A key with no name, unbalanced or repeated brackets, or an empty
+// operator is rejected, as is an operator on a reserved parameter.
 type Filter struct {
 	Field  string
 	Op     string
 	Values []string
 }
 
-// Query is one read request's parsed query string: the page, size, sort,
-// and cursor parameters, and every remaining parameter as the filter set.
-// A read is addressed one of two ways. By number, Page is 1-based and
-// defaults to 1. By cursor, Cursor is the opaque token a previous page's
-// [Page.Next] carried and Page is 0: the read continues after that page's
-// last item rather than at an offset, so it neither skips nor repeats a row
-// when the collection changes between requests. Size is defaulted and
-// capped by the [Limits] given to [ParseQuery] under either address; Sort
-// preserves request order and is nil when the request carries no sort.
-// Filters is never nil and is ordered by field name, then operator —
-// url.Values carries no request order, and a fixed order lets a consumer
-// compose a deterministic predicate from it. The cursor is lexical only:
-// whether it continues the read it is sent with is the data layer's check.
+// Query is one read request's parsed query string. A read addressed by
+// number has a 1-based Page, 1 when absent and bounded so the offset fits an
+// int; one addressed by Cursor, the token a previous page's [Page.Next]
+// carried, has Page 0 and continues after that page's last item, so it
+// neither skips nor repeats a row when the collection changes; a request
+// naming both is rejected. Size is
+// defaulted and capped by [Limits]. Sort holds the keys of every sort
+// parameter in request order, nil when there are none. Filters is never nil
+// and is ordered by field, then operator, so a consumer composes a
+// deterministic predicate. An empty parameter value reads as omitted.
 type Query struct {
 	Page    int
 	Size    int
@@ -60,40 +55,18 @@ type Query struct {
 	Cursor  string
 }
 
-// Limits bounds query parsing: the page size when a request omits one, the
-// largest size a request may ask for, and whether the read continues by
-// cursor. The package holds no policy numbers of its own; a consumer
-// declares them here. DefaultSize must be at least 1 and MaxSize at least
-// DefaultSize — [ParseQuery] panics otherwise, since invalid limits are a
-// wiring mistake, not request input. Cursor opts a read in to the cursor
-// parameter: a read whose data layer cannot continue by cursor leaves it
-// false, and a request naming one is refused rather than served from the
-// wrong page.
+// Limits is a read's paging policy: the size when a request names none, the
+// largest it may name, and whether the read continues by cursor; a read that
+// does not refuses a cursor rather than serve the wrong page. [ParseQuery]
+// panics unless 1 <= DefaultSize <= MaxSize.
 type Limits struct {
 	DefaultSize int
 	MaxSize     int
 	Cursor      bool
 }
 
-// ParseQuery parses one read request's query string in full: the page,
-// size, sort, and cursor parameters under the given limits, and every
-// remaining parameter as the filter set. One call yields both halves, so a
-// handler cannot parse the paging parameters and forget to strip them from
-// the filters. An absent page is 1 and an absent size is the default. Sort
-// is comma-separated field names, each optionally prefixed with "-" for
-// descending, honored across every occurrence of the parameter in order; an
-// empty parameter value reads as omitted. A cursor names the read by the
-// token a previous page returned; it is refused where [Limits] does not opt
-// the read in, and a request naming both a cursor and a page is rejected,
-// since the two addresses disagree about where the page starts.
-//
-// A filter parameter is a field name, optionally followed by an operator in
-// brackets: "status=active" is the field alone, "created[gte]=2026-01-01"
-// names an operator, and a repeated parameter carries several values under
-// one [Filter]. The operator passes through as text. A key with unbalanced,
-// misplaced, or repeated brackets, an empty name, or an empty operator is
-// rejected, as is an operator on page, size, sort, or cursor. A malformed or
-// out-of-bounds parameter is a *[QueryError].
+// ParseQuery parses a read request's query string into a [Query] under l,
+// rejecting a malformed or out-of-bounds parameter with a *[QueryError].
 func ParseQuery(q url.Values, l Limits) (Query, error) {
 	if l.DefaultSize < 1 || l.MaxSize < l.DefaultSize {
 		panic(fmt.Sprintf(
@@ -110,6 +83,14 @@ func ParseQuery(q url.Values, l Limits) (Query, error) {
 			return Query{}, &QueryError{
 				Param: "page", Value: v,
 				Reason: "must be an integer of at least 1",
+			}
+		}
+		// The data layer's offset, (page-1) times the size, must fit an int
+		// at the largest size a request may ask for.
+		if last := math.MaxInt / l.MaxSize; n > last {
+			return Query{}, &QueryError{
+				Param: "page", Value: v,
+				Reason: fmt.Sprintf("must be at most %d", last),
 			}
 		}
 		out.Page = n
@@ -189,11 +170,8 @@ func ParseQuery(q url.Values, l Limits) (Query, error) {
 	return out, nil
 }
 
-// parseFilterKey splits a filter parameter's key into its field name and
-// operator: "name" yields ("name", ""), "name[op]" yields ("name", "op").
-// Anything else is a *QueryError on the key, with the parameter's first
-// value as the offending input; a reserved name with an operator is
-// rejected on the reserved parameter.
+// parseFilterKey splits a filter key into its field and operator, "name" or
+// "name[op]", rejecting anything else with the parameter's first value.
 func parseFilterKey(key string, values []string) (field, op string, err error) {
 	value := ""
 	if len(values) > 0 {
@@ -203,6 +181,9 @@ func parseFilterKey(key string, values []string) (field, op string, err error) {
 		return "", "", &QueryError{Param: param, Value: value, Reason: reason}
 	}
 
+	if key == "" {
+		return reject(key, "the parameter has no name")
+	}
 	open := strings.IndexByte(key, '[')
 	if open < 0 {
 		if strings.IndexByte(key, ']') >= 0 {

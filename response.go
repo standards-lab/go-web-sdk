@@ -47,7 +47,7 @@ type Object struct {
 // underscore, and filename* follows with the name in RFC 8187's encoding,
 // which a recipient prefers; a byte that is not valid UTF-8 is carried
 // there as U+FFFD. A handler sets the header before calling [WriteObject],
-// which keeps it.
+// which keeps it on success.
 func Attachment(name string) string {
 	var fallback strings.Builder
 	plain := true
@@ -90,24 +90,10 @@ func attrChar(b byte) bool {
 }
 
 // WriteObject proxies a stored object's bytes as the response to a GET or
-// HEAD request: it sets Content-Type, Content-Length, ETag, and
-// Last-Modified from o, and X-Content-Type-Options: nosniff, since the
-// bytes are content the service stored rather than wrote, and a browser
-// must not reinterpret them as another type.
-//
-// The request's preconditions are answered from o alone, before any byte
-// is opened (RFC 9110 §13.2.2): an If-None-Match naming o's entity tag by
-// weak comparison, or *, answers 304 Not Modified, and when If-None-Match
-// is absent, an If-Modified-Since no earlier than ModifiedAt does too. A
-// HEAD request answers with the headers alone. open is called only when
-// the bytes are sent, so a revalidation or a HEAD costs the store nothing
-// beyond the metadata o was built from; WriteObject closes what it
-// returns. An error from open is returned before anything is committed,
-// with the validators cleared, so an adapted handler writes it as a
-// problem. Headers the caller set before the call, such as
-// Content-Disposition or Cache-Control, are kept. An error from the copy
-// is returned after the response is committed, so an adapted handler logs
-// it rather than writing a second response.
+// HEAD, with its validators and X-Content-Type-Options: nosniff, answering a
+// matching If-None-Match or If-Modified-Since with 304 before open is called.
+// An error from open is returned uncommitted, with every representation
+// header cleared, the caller's included, for the error writer to answer.
 func WriteObject(w http.ResponseWriter, r *http.Request, o Object, open func() (io.ReadCloser, error)) error {
 	h := w.Header()
 	if o.ETag != "" {
@@ -125,8 +111,9 @@ func WriteObject(w http.ResponseWriter, r *http.Request, o Object, open func() (
 	if r.Method != http.MethodHead {
 		var err error
 		if body, err = open(); err != nil {
-			h.Del("ETag")
-			h.Del("Last-Modified")
+			for _, name := range representation {
+				h.Del(name)
+			}
 			return err
 		}
 		defer func() { _ = body.Close() }()
@@ -147,6 +134,18 @@ func WriteObject(w http.ResponseWriter, r *http.Request, o Object, open func() (
 	}
 	_, err := io.Copy(w, body)
 	return err
+}
+
+// representation names the headers that describe the object's bytes, set
+// by WriteObject or by its caller for the object, which a problem answering
+// a failed open must not carry.
+var representation = [...]string{
+	"Cache-Control",
+	"Content-Disposition",
+	"Content-Encoding",
+	"Content-Length",
+	"ETag",
+	"Last-Modified",
 }
 
 // notModified evaluates a GET or HEAD request's cache preconditions against
@@ -203,24 +202,11 @@ func noneMatch(header, etag string) bool {
 	return false
 }
 
-// NoTotal is the [Paging] total of a read that did not count its rows:
-// [NewPage] omits the envelope's total for it, where a total of 0 is a
-// counted, empty collection.
-const NoTotal = -1
-
-// Page is the success envelope of a paginated read: one page of items, the
-// address that produced it, the total row count across all pages when the
-// read counted one, whether a further page exists, and the cursor that
-// continues from this page. It is the whole response body, written with
-// [WriteJSON].
-//
-// Page is the 1-based number of a read addressed by number and is omitted
-// for a read addressed by cursor, which has no number. Total is omitted
-// when the read did not count, so a client never mistakes an uncounted
-// read for an empty collection. More reports whether a further page exists,
-// and Next, when present, is the token a client sends as the cursor
-// parameter to read it; a read whose ordering cannot be continued by cursor
-// reports More with no Next, and the client pages by number instead.
+// Page is the success envelope of a paginated read, the whole response
+// body. Page is the 1-based number of a read addressed by number, omitted
+// under a cursor; Total is omitted when the read did not count; Next, when
+// present, is the cursor that continues from this page, and a read that
+// cannot continue by cursor reports More with no Next.
 type Page[T any] struct {
 	Items []T    `json:"items"`
 	Page  int    `json:"page,omitempty"`
@@ -231,21 +217,17 @@ type Page[T any] struct {
 }
 
 // Paging is what a fulfilled read reports beyond its items: the total row
-// count, [NoTotal] (or any negative) when the read did not count one,
-// whether a further page exists, and the cursor that continues from the
-// page, empty when there is none. A data layer's own collection type maps
-// onto it directly, converting its cursor type to a string. The zero value
-// reports a counted, empty read, so a read that did not count says so.
+// count, nil when the read did not count one, whether a further page exists,
+// and the cursor that continues from the page. The zero value is an
+// uncounted read with no further page.
 type Paging struct {
-	Total int
+	Total *int
 	More  bool
 	Next  string
 }
 
-// NewPage assembles the envelope from a fulfilled read: the page's items,
-// the query the read honored, and what the read reported. Nil items become
-// an empty slice, so an empty page marshals its items as [] rather than
-// null, and a negative total becomes an absent one.
+// NewPage assembles the envelope from a page's items, the query the read
+// honored, and its Paging. Nil items marshal as [].
 func NewPage[T any](items []T, q Query, p Paging) Page[T] {
 	if items == nil {
 		items = []T{}
@@ -257,9 +239,8 @@ func NewPage[T any](items []T, q Query, p Paging) Page[T] {
 		More:  p.More,
 		Next:  p.Next,
 	}
-	if p.Total >= 0 {
-		total := p.Total
-		page.Total = &total
+	if p.Total != nil {
+		page.Total = new(*p.Total)
 	}
 	return page
 }

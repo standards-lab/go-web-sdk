@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -57,7 +58,7 @@ func TestClient_RawUploadAndObjectRead(t *testing.T) {
 	var stored []byte
 	var storedType string
 	mux := http.NewServeMux()
-	ew := web.NewErrorWriter()
+	ew := web.NewErrorWriter(slog.New(slog.DiscardHandler))
 	mux.Handle("PUT /files/{name}", web.Handle(func(w http.ResponseWriter, r *http.Request) error {
 		u, err := web.ReadUpload(w, r, 1<<10)
 		if err != nil {
@@ -109,13 +110,5 @@ func TestLive_ObservesTheProbe(t *testing.T) {
 	srv.Close()
 	if webtest.Live(srv.URL) {
 		t.Error("Live = true against a closed server")
-	}
-}
-
-// Probe serves one GET through a handler into a recorder.
-func TestProbe_RecordsOneGet(t *testing.T) {
-	rec := webtest.Probe(web.Liveness(), web.HealthPath)
-	if rec.Code != http.StatusOK {
-		t.Errorf("code = %d", rec.Code)
 	}
 }

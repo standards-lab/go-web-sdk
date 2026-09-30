@@ -13,8 +13,14 @@ import (
 	"github.com/standards-lab/go-core/lifecycle"
 	"github.com/standards-lab/go-web-sdk"
 	"github.com/standards-lab/go-web-sdk/middleware"
-	"github.com/standards-lab/go-web-sdk/webtest"
 )
+
+// probe serves one GET for path through h and returns the recorder.
+func probe(h http.Handler, path string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	return rec
+}
 
 // record serves one GET through the request logger and returns the single log
 // record it emitted. The logger is a plain slog value: the middleware takes the
@@ -24,7 +30,7 @@ func record(t *testing.T, handler http.Handler) map[string]any {
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	webtest.Probe(web.Chain(handler, middleware.RequestLogger(logger)), "/orders/7")
+	probe(web.Chain(handler, middleware.RequestLogger(logger)), "/orders/7")
 
 	var out map[string]any
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &out); err != nil {
@@ -118,7 +124,7 @@ func TestRequestLogger_ResponseControllerReachesTheWriter(t *testing.T) {
 		flushErr = http.NewResponseController(w).Flush()
 	})
 
-	rec := webtest.Probe(web.Chain(handler, middleware.RequestLogger(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)))), "/")
+	rec := probe(web.Chain(handler, middleware.RequestLogger(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)))), "/")
 
 	if flushErr != nil {
 		t.Errorf("Flush through the wrapper: %v", flushErr)
@@ -137,7 +143,7 @@ func TestRequestLogger_WriterSupportsReadFrom(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	rec := webtest.Probe(web.Chain(handler, middleware.RequestLogger(logger)), "/")
+	rec := probe(web.Chain(handler, middleware.RequestLogger(logger)), "/")
 
 	if !isReaderFrom {
 		t.Error("the wrapped writer does not implement io.ReaderFrom")
@@ -160,7 +166,7 @@ func TestRequestLogger_WriterSupportsReadFrom(t *testing.T) {
 func TestRequestLogger_ProbeSuccessLogsAtDebug(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	webtest.Probe(web.Chain(web.Liveness(), middleware.RequestLogger(logger)), web.HealthPath)
+	probe(web.Chain(web.Liveness(), middleware.RequestLogger(logger)), web.HealthPath)
 
 	var out map[string]any
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &out); err != nil {
@@ -177,7 +183,7 @@ func TestRequestLogger_ProbeSuccessLogsAtDebug(t *testing.T) {
 func TestRequestLogger_ProbeSuccessSilentAtInfoLevel(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	webtest.Probe(web.Chain(web.Liveness(), middleware.RequestLogger(logger)), web.HealthPath)
+	probe(web.Chain(web.Liveness(), middleware.RequestLogger(logger)), web.HealthPath)
 
 	if buf.Len() != 0 {
 		t.Errorf("a successful probe logged through an info-level handler: %s", buf.String())
@@ -192,7 +198,7 @@ func TestRequestLogger_ProbeFailureLogsAtInfo(t *testing.T) {
 		web.Readiness(web.Problem{}, lifecycle.Check{Name: "lifecycle"}),
 		middleware.RequestLogger(logger),
 	)
-	webtest.Probe(handler, web.ReadyPath)
+	probe(handler, web.ReadyPath)
 
 	var out map[string]any
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &out); err != nil {
@@ -220,7 +226,7 @@ func TestRequestLogger_PanicWithoutRecovererPropagatesAndLogsAFailure(t *testing
 	var recovered any
 	func() {
 		defer func() { recovered = recover() }()
-		webtest.Probe(handler, "/orders/7")
+		probe(handler, "/orders/7")
 	}()
 
 	if recovered != "boom" {
@@ -261,7 +267,7 @@ func TestRequestLogger_PanicAfterCommitKeepsTheCommittedStatus(t *testing.T) {
 
 	func() {
 		defer func() { _ = recover() }()
-		webtest.Probe(handler, "/orders/7")
+		probe(handler, "/orders/7")
 	}()
 
 	var out map[string]any
@@ -307,7 +313,7 @@ func TestRequestLogger_WithRecovererInEitherOrder(t *testing.T) {
 				panic("boom")
 			}), middleware.Recoverer(logger), middleware.RequestLogger(logger))
 
-			rec := webtest.Probe(handler, "/orders/7")
+			rec := probe(handler, "/orders/7")
 
 			if rec.Code != http.StatusInternalServerError {
 				t.Errorf("status = %d, want 500", rec.Code)

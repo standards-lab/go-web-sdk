@@ -59,7 +59,7 @@ func TestIfMatch_MissingHeader(t *testing.T) {
 }
 
 func TestIfMatch_RejectsMalformedTags(t *testing.T) {
-	cases := []string{`3`, `*`, `W/"3"`, `""`, `"abc"`, `"1", "2"`}
+	cases := []string{`3`, `*`, `W/"3"`, `""`, `"abc"`, `"1", "2"`, `"+3"`, `"-"`, `" 3"`}
 	for _, header := range cases {
 		_, err := ifMatch(t, header)
 
@@ -74,6 +74,23 @@ func TestIfMatch_RejectsMalformedTags(t *testing.T) {
 		if pre.Value != header {
 			t.Errorf("IfMatch(%q): Value = %q, want the header text", header, pre.Value)
 		}
+	}
+}
+
+// Two If-Match field lines are a list, however each line reads alone.
+func TestIfMatch_RejectsRepeatedHeaders(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPatch, "/", nil)
+	r.Header.Add("If-Match", `"1"`)
+	r.Header.Add("If-Match", `"2"`)
+
+	_, err := web.IfMatch(r)
+
+	pre, ok := errors.AsType[*web.PreconditionError](err)
+	if !ok || pre.Missing {
+		t.Fatalf("error = %v, want a *PreconditionError for a present header", err)
+	}
+	if pre.Value != `"1", "2"` {
+		t.Errorf("Value = %q, want both lines", pre.Value)
 	}
 }
 
@@ -131,6 +148,22 @@ func TestDecodeJSON_RejectsWithReason(t *testing.T) {
 	}
 }
 
+// Whatever follows the value, a second value or stray text, the reason is
+// the same one sentence rather than the tokenizer's view of the extra bytes.
+func TestDecodeJSON_TrailingDataHasOneReason(t *testing.T) {
+	for _, body := range []string{`{"name": "widget"} {"name": "gadget"}`, `{"name": "widget"} extra`, `{"name": "widget"}]`} {
+		_, _, err := decode(t, body, 1<<10)
+
+		berr, ok := errors.AsType[*web.BodyError](err)
+		if !ok {
+			t.Fatalf("DecodeJSON(%q) error = %v, want *BodyError", body, err)
+		}
+		if berr.Reason != "unexpected data after the JSON value" {
+			t.Errorf("DecodeJSON(%q) reason = %q", body, berr.Reason)
+		}
+	}
+}
+
 func TestDecodeJSON_EmptyBodyNamesItself(t *testing.T) {
 	_, _, err := decode(t, ``, 1<<10)
 
@@ -166,7 +199,7 @@ func TestDecodeJSON_OverflowAnswers413WithTheReason(t *testing.T) {
 		t.Fatal("DecodeJSON: want an error")
 	}
 
-	ew := web.NewErrorWriter()
+	ew := web.NewErrorWriter(discard)
 	req := httptest.NewRequest(http.MethodPost, "/things", nil)
 	if werr := ew.Write(rec, req, err); werr != nil {
 		t.Fatalf("Write: %v", werr)
@@ -189,7 +222,7 @@ func TestDecodeJSON_RejectionAnswers400(t *testing.T) {
 		t.Fatal("DecodeJSON: want an error")
 	}
 
-	ew := web.NewErrorWriter()
+	ew := web.NewErrorWriter(discard)
 	req := httptest.NewRequest(http.MethodPost, "/things", nil)
 	if werr := ew.Write(rec, req, err); werr != nil {
 		t.Fatalf("Write: %v", werr)
@@ -263,6 +296,7 @@ func TestReadUpload_Refusals(t *testing.T) {
 	}{
 		{"no content type", "", 3, http.StatusUnsupportedMediaType},
 		{"unparsable content type", "image/", 3, http.StatusUnsupportedMediaType},
+		{"no subtype", "image", 3, http.StatusUnsupportedMediaType},
 		{"no content length", "image/png", -1, http.StatusLengthRequired},
 		{"declared over the limit", "image/png", 65, http.StatusRequestEntityTooLarge},
 	}
@@ -273,7 +307,7 @@ func TestReadUpload_Refusals(t *testing.T) {
 			if _, ok := errors.AsType[*web.UploadError](err); !ok {
 				t.Fatalf("error = %v, want *UploadError", err)
 			}
-			ew := web.NewErrorWriter()
+			ew := web.NewErrorWriter(discard)
 			if werr := ew.Write(rec, httptest.NewRequest(http.MethodPut, "/files/logo.png", nil), err); werr != nil {
 				t.Fatalf("Write: %v", werr)
 			}
@@ -320,7 +354,7 @@ func TestReadUpload_OnTheWire(t *testing.T) {
 		}
 		_, err = fmt.Fprintf(w, "size=%d read=%d", u.Size, n)
 		return err
-	}, web.NewErrorWriter()))
+	}, web.NewErrorWriter(discard)))
 	defer srv.Close()
 
 	tests := []struct {
@@ -370,7 +404,40 @@ func TestReadUpload_OnTheWire(t *testing.T) {
 func TestUploadError_ConsumerRefusalIs415(t *testing.T) {
 	err := &web.UploadError{Header: "Content-Type", Reason: "image/gif is not an accepted logo type"}
 
-	if got := web.NewErrorWriter().Status(err); got != http.StatusUnsupportedMediaType {
+	if got := web.NewErrorWriter(discard).Problem(err).Status; got != http.StatusUnsupportedMediaType {
 		t.Errorf("Status = %d, want 415", got)
+	}
+}
+
+func pathUUID(t *testing.T, value string) (string, error) {
+	t.Helper()
+	mux := http.NewServeMux()
+	var id string
+	var err error
+	mux.HandleFunc("GET /things/{id}", func(_ http.ResponseWriter, r *http.Request) {
+		id, err = web.PathUUID(r, "id")
+	})
+	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/things/"+value, nil))
+	return id, err
+}
+
+func TestPathUUID_ReturnsCanonicalForm(t *testing.T) {
+	const want = "0192b3a4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+	for _, in := range []string{want, "0192B3A4-5C6D-7E8F-9A0B-1C2D3E4F5A6B", "0192b3a45c6d7e8f9a0b1c2d3e4f5a6b"} {
+		got, err := pathUUID(t, in)
+		if err != nil || got != want {
+			t.Errorf("PathUUID(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+}
+
+func TestPathUUID_RejectsNonUUIDs(t *testing.T) {
+	for _, in := range []string{"42", "not-a-uuid", "0192b3a4-5c6d-7e8f-9a0b"} {
+		_, err := pathUUID(t, in)
+
+		pe, ok := errors.AsType[*web.PathError](err)
+		if !ok || pe.Name != "id" || pe.Value != in {
+			t.Errorf("PathUUID(%q) error = %v; want a *PathError naming id and the value", in, err)
+		}
 	}
 }

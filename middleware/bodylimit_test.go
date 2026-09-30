@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -62,7 +63,7 @@ func TestBodyLimit_OverflowThroughDecodeJSONIsA413(t *testing.T) {
 		decoded = true
 		w.WriteHeader(http.StatusNoContent)
 		return nil
-	}, web.NewErrorWriter()), middleware.BodyLimit(16))
+	}, web.NewErrorWriter(slog.New(slog.DiscardHandler))), middleware.BodyLimit(16))
 
 	rec := post(handler, `{"name": "`+strings.Repeat("x", 64)+`"}`)
 

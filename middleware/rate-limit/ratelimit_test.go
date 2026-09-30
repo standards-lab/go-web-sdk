@@ -371,31 +371,25 @@ func TestConfig_FinalizeAcceptsOneSecondWindow(t *testing.T) {
 	}
 }
 
-func TestNewEnv_ComposesNamesFromPrefixAndBlock(t *testing.T) {
-	for _, tc := range []struct {
-		block string
-		want  ratelimit.Env
-	}{
-		{"rate_limit", ratelimit.Env{
-			Requests: "HERALD_RATE_LIMIT_REQUESTS",
-			Window:   "HERALD_RATE_LIMIT_WINDOW",
-		}},
-		{"login", ratelimit.Env{
-			Requests: "HERALD_LOGIN_REQUESTS",
-			Window:   "HERALD_LOGIN_WINDOW",
-		}},
-	} {
-		t.Run(tc.block, func(t *testing.T) {
-			if got := ratelimit.NewEnv("herald", tc.block); got != tc.want {
-				t.Errorf("NewEnv(\"herald\", %q) = %+v, want %+v", tc.block, got, tc.want)
-			}
-		})
+func TestConfig_FinalizeBlockComposesNamesFromBlock(t *testing.T) {
+	var cfg ratelimit.Config
+	if err := cfg.FinalizeBlock("herald", "login"); err != nil {
+		t.Fatalf("FinalizeBlock: %v", err)
+	}
+	want := ratelimit.Env{Requests: "HERALD_LOGIN_REQUESTS", Window: "HERALD_LOGIN_WINDOW"}
+	if cfg.Env != want {
+		t.Errorf("Env = %+v, want %+v", cfg.Env, want)
 	}
 }
 
-func TestNewEnv_EmptyPrefixReturnsZeroEnv(t *testing.T) {
-	if env := ratelimit.NewEnv("", "rate_limit"); env != (ratelimit.Env{}) {
-		t.Errorf("NewEnv(\"\", \"rate_limit\") = %+v, want the zero Env (overrides disabled)", env)
+// An empty prefix composes no names, so no override is read.
+func TestConfig_FinalizeEmptyPrefixComposesNoNames(t *testing.T) {
+	var cfg ratelimit.Config
+	if err := cfg.Finalize(""); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if cfg.Env != (ratelimit.Env{}) {
+		t.Errorf("Env = %+v, want the zero Env (overrides disabled)", cfg.Env)
 	}
 }
 

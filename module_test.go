@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/standards-lab/go-web-sdk"
-	"github.com/standards-lab/go-web-sdk/webtest"
 )
 
 // Every route registers under its full pattern: the parent's prefix, the
@@ -20,11 +19,11 @@ func TestNewModule_RegistersFullPatterns(t *testing.T) {
 
 	m := web.NewModule(root)
 	for _, path := range []string{"/api/v1/status", "/api/v1/orders/recent"} {
-		if got := webtest.Probe(m, path).Code; got != http.StatusOK {
+		if got := probe(m, path).Code; got != http.StatusOK {
 			t.Errorf("GET %s = %d, want 200", path, got)
 		}
 	}
-	if got := webtest.Probe(m, "/orders/recent").Code; got != http.StatusNotFound {
+	if got := probe(m, "/orders/recent").Code; got != http.StatusNotFound {
 		t.Errorf("GET /orders/recent = %d, want 404 without the full prefix", got)
 	}
 }
@@ -45,7 +44,7 @@ func TestNewModule_MiddlewareOrderIsRootToLeafThenRoute(t *testing.T) {
 	root.Use(tag(&order, "root"))
 	root.Mount(child)
 
-	webtest.Probe(web.NewModule(root), "/api/orders/recent")
+	probe(web.NewModule(root), "/api/orders/recent")
 
 	want := []string{"root", "leaf", "route", "handler"}
 	if len(order) != len(want) {
@@ -72,8 +71,8 @@ func TestNewModule_ComposesOnce(t *testing.T) {
 	g.Handle(http.MethodGet, "/things", ok())
 	m := web.NewModule(g)
 
-	webtest.Probe(m, "/api/things")
-	webtest.Probe(m, "/api/things")
+	probe(m, "/api/things")
+	probe(m, "/api/things")
 
 	if composed != 1 {
 		t.Errorf("middleware composed %d times, want once at NewModule", composed)
@@ -99,7 +98,7 @@ func TestNewHandlerModule_StripsThePrefix(t *testing.T) {
 		func(_ http.ResponseWriter, r *http.Request) {
 			stripped = r.URL.Path
 		}))
-	webtest.Probe(hm, "/app/index.html")
+	probe(hm, "/app/index.html")
 	if stripped != "/index.html" {
 		t.Errorf("handler module saw %q, want the prefix stripped", stripped)
 	}
@@ -109,7 +108,7 @@ func TestNewHandlerModule_StripsThePrefix(t *testing.T) {
 		func(_ http.ResponseWriter, r *http.Request) {
 			full = r.URL.Path
 		}))
-	webtest.Probe(web.NewModule(g), "/api/things")
+	probe(web.NewModule(g), "/api/things")
 	if full != "/api/things" {
 		t.Errorf("group module saw %q, want the full path", full)
 	}
@@ -122,9 +121,9 @@ func TestModule_MissIsAProblem(t *testing.T) {
 	g.Handle(http.MethodGet, "/things", ok())
 	m := web.NewModule(g)
 
-	expectProblem(t, probe(m, http.MethodGet, "/api/nowhere"), http.StatusNotFound, "Not Found", "/api/nowhere")
+	expectProblem(t, serve(m, http.MethodGet, "/api/nowhere"), http.StatusNotFound, "Not Found", "/api/nowhere")
 
-	rec := probe(m, http.MethodDelete, "/api/things")
+	rec := serve(m, http.MethodDelete, "/api/things")
 	expectProblem(t, rec, http.StatusMethodNotAllowed, "Method Not Allowed", "/api/things")
 	if allow := rec.Header().Get("Allow"); allow != "GET, HEAD" {
 		t.Errorf("Allow = %q, want the mux's computed set preserved", allow)
@@ -136,7 +135,7 @@ func TestModule_MissIsAProblem(t *testing.T) {
 func TestModule_RedirectsStillRedirect(t *testing.T) {
 	m := module("/api", "/things")
 
-	rec := webtest.Probe(m, "/api//nowhere")
+	rec := probe(m, "/api//nowhere")
 	if rec.Code != http.StatusTemporaryRedirect || rec.Header().Get("Location") != "/api/nowhere" {
 		t.Errorf("GET /api//nowhere = %d, Location %q; want 307 to /api/nowhere", rec.Code, rec.Header().Get("Location"))
 	}
@@ -152,11 +151,11 @@ func TestModule_GroupSettersOverrideTheDefaults(t *testing.T) {
 	}))
 	m := web.NewModule(g)
 
-	rec := probe(m, http.MethodGet, "/api/nowhere")
+	rec := serve(m, http.MethodGet, "/api/nowhere")
 	if rec.Code != http.StatusNotFound || rec.Header().Get("X-Custom") != "yes" {
 		t.Errorf("GET /api/nowhere = %d, X-Custom %q; want the custom 404", rec.Code, rec.Header().Get("X-Custom"))
 	}
-	rec = probe(m, http.MethodPost, "/api/things")
+	rec = serve(m, http.MethodPost, "/api/things")
 	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("X-Allow-Seen") != "GET, HEAD" {
 		t.Errorf("POST /api/things = %d, X-Allow-Seen %q; want the custom 405 with Allow visible", rec.Code, rec.Header().Get("X-Allow-Seen"))
 	}
@@ -178,12 +177,12 @@ func TestModule_MissRunsNoGroupMiddleware(t *testing.T) {
 	r.Use(tag(&order, "router"))
 	r.Mount(web.NewModule(root))
 
-	webtest.Probe(r, "/api/orders/nowhere")
+	probe(r, "/api/orders/nowhere")
 	if len(order) != 1 || order[0] != "router" {
 		t.Errorf("order = %v, want only the router middleware on a module miss", order)
 	}
 	order = nil
-	probe(r, http.MethodPost, "/api/orders/recent")
+	serve(r, http.MethodPost, "/api/orders/recent")
 	if len(order) != 1 || order[0] != "router" {
 		t.Errorf("order = %v, want only the router middleware on a module 405", order)
 	}
@@ -216,13 +215,4 @@ func TestGroup_MissSettersAfterNewModulePanic(t *testing.T) {
 	mustPanic(t, "SetMethodNotAllowed after NewModule", func() {
 		g.SetMethodNotAllowed(ok())
 	})
-}
-
-func TestModule_Prefix(t *testing.T) {
-	if got := web.NewModule(web.NewGroup("/api/v1")).Prefix(); got != "/api/v1" {
-		t.Errorf("Prefix() = %q, want /api/v1", got)
-	}
-	if got := web.NewHandlerModule("/app", ok()).Prefix(); got != "/app" {
-		t.Errorf("Prefix() = %q, want /app", got)
-	}
 }

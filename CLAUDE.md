@@ -32,7 +32,7 @@ architecture repository through its `context/`.
   while a sub-module builds against unreleased base changes.
 - **Releases, CI, tests, tasks** — per the Go Elemental standard principles in the architecture
   repository (base `v<semver>` tags and `middleware/<name>/v<semver>` tags from each module's own
-  `CHANGELOG.md`, a per-module CI matrix, hermetic `httptest`/port-0 tests with the recorder
-  helper from `webtest`, mise tasks looping over the modules).
+  `CHANGELOG.md`, a per-module CI matrix, hermetic `httptest`/port-0 tests, mise tasks looping
+  over the modules).
 - **Public repo.** The module resolves through the public Go proxy; CI carries no private-module
   config.

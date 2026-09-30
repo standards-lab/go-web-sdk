@@ -163,6 +163,26 @@ func TestRecorder_FlushAfterWriteHeaderKeepsTheExplicitStatus(t *testing.T) {
 	}
 }
 
+// A handler that asserts http.Flusher, the older interface, reaches the
+// underlying writer's flush and commits the same way.
+func TestRecorder_IsAFlusher(t *testing.T) {
+	under := httptest.NewRecorder()
+	var w http.ResponseWriter = web.WrapWriter(under)
+
+	f, ok := w.(http.Flusher)
+	if !ok {
+		t.Fatal("*Recorder does not implement http.Flusher")
+	}
+	f.Flush()
+
+	if !under.Flushed {
+		t.Error("the underlying writer was not flushed")
+	}
+	if rec := w.(*web.Recorder); rec.Status() != http.StatusOK {
+		t.Errorf("Status() = %d, want the implicit %d", rec.Status(), http.StatusOK)
+	}
+}
+
 func TestRecorder_StatusIsZeroBeforeAnyWrite(t *testing.T) {
 	rec := web.WrapWriter(httptest.NewRecorder())
 

@@ -1,7 +1,6 @@
 package web
 
 import (
-	"bytes"
 	"log/slog"
 	"net/http"
 	"testing"
@@ -21,7 +20,7 @@ func internalConfig(t *testing.T, cfg Config) Config {
 }
 
 func TestNewServer_UnsetMaxHeaderBytesLeavesNetHTTPDefault(t *testing.T) {
-	srv := NewServer(internalConfig(t, Config{Host: "127.0.0.1", Port: new(0)}), http.NewServeMux())
+	srv := NewServer(internalConfig(t, Config{Host: "127.0.0.1", Port: new(0)}), http.NewServeMux(), slog.New(slog.DiscardHandler))
 	if got := srv.http.MaxHeaderBytes; got != 0 {
 		t.Errorf("http.Server.MaxHeaderBytes = %d, want 0 (net/http applies DefaultMaxHeaderBytes itself)", got)
 	}
@@ -29,20 +28,8 @@ func TestNewServer_UnsetMaxHeaderBytesLeavesNetHTTPDefault(t *testing.T) {
 
 func TestNewServer_ThreadsMaxHeaderBytes(t *testing.T) {
 	cfg := internalConfig(t, Config{Host: "127.0.0.1", Port: new(0), MaxHeaderBytes: new(4096)})
-	srv := NewServer(cfg, http.NewServeMux())
+	srv := NewServer(cfg, http.NewServeMux(), slog.New(slog.DiscardHandler))
 	if got := srv.http.MaxHeaderBytes; got != 4096 {
 		t.Errorf("http.Server.MaxHeaderBytes = %d, want 4096", got)
-	}
-}
-
-func TestServer_LogBridgesErrorLog(t *testing.T) {
-	srv := NewServer(internalConfig(t, Config{Host: "127.0.0.1", Port: new(0)}), http.NewServeMux())
-	if srv.http.ErrorLog != nil {
-		t.Fatal("http.Server.ErrorLog is set before Log; NewServer must leave it nil")
-	}
-
-	srv.Log(slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
-	if srv.http.ErrorLog == nil {
-		t.Error("http.Server.ErrorLog = nil after Log, want the slog bridge")
 	}
 }

@@ -74,7 +74,7 @@ func startTestServer(t *testing.T, handler http.Handler) *web.Server {
 func startServer(t *testing.T, cfg web.Config, handler http.Handler) *web.Server {
 	t.Helper()
 
-	srv := web.NewServer(finalized(t, cfg), handler)
+	srv := web.NewServer(finalized(t, cfg), handler, discard)
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -98,11 +98,11 @@ func TestNewServer_PanicsOnUnfinalizedConfig(t *testing.T) {
 			t.Fatalf("panic = %v, want %q", r, want)
 		}
 	}()
-	web.NewServer(web.Config{}, http.NewServeMux())
+	web.NewServer(web.Config{}, http.NewServeMux(), discard)
 }
 
 func TestServer_AddrBeforeStartIsConfigured(t *testing.T) {
-	srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(8080)}), http.NewServeMux())
+	srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(8080)}), http.NewServeMux(), discard)
 	if got, want := srv.Addr(), "127.0.0.1:8080"; got != want {
 		t.Errorf("Addr() = %q, want %q", got, want)
 	}
@@ -160,7 +160,7 @@ func TestServer_StartReportsBindFailure(t *testing.T) {
 		t.Fatalf("parse port %q: %v", port, err)
 	}
 
-	srv := web.NewServer(finalized(t, web.Config{Host: host, Port: new(p)}), http.NewServeMux())
+	srv := web.NewServer(finalized(t, web.Config{Host: host, Port: new(p)}), http.NewServeMux(), discard)
 	err = srv.Start(context.Background())
 	if err == nil {
 		t.Fatal("Start returned nil for an occupied port")
@@ -262,7 +262,7 @@ func TestServer_ShutdownBeforeStartLeavesServerUsable(t *testing.T) {
 	mux.HandleFunc("GET /ping", func(w http.ResponseWriter, _ *http.Request) {
 		_ = web.WriteJSON(w, http.StatusOK, map[string]string{"status": "pong"})
 	})
-	srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), mux)
+	srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), mux, discard)
 
 	ctx, cancel := context.WithTimeout(context.Background(), failsafe)
 	defer cancel()
@@ -328,7 +328,7 @@ func TestServer_MaxHeaderBytesBoundsTheHeaderBlock(t *testing.T) {
 	}
 }
 
-func TestServer_LogRoutesNetHTTPDiagnosticsThroughSlog(t *testing.T) {
+func TestServer_RoutesNetHTTPDiagnosticsThroughSlog(t *testing.T) {
 	var sink lockedBuffer
 	logger := slog.New(slog.NewJSONHandler(&sink, nil))
 
@@ -340,8 +340,7 @@ func TestServer_LogRoutesNetHTTPDiagnosticsThroughSlog(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), mux)
-	srv.Log(logger)
+	srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), mux, logger)
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -366,34 +365,52 @@ func TestServer_LogRoutesNetHTTPDiagnosticsThroughSlog(t *testing.T) {
 	}
 }
 
-func TestServer_LogPanicsOnNilLogger(t *testing.T) {
-	srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), http.NewServeMux())
-
+func TestNewServer_PanicsOnNilLogger(t *testing.T) {
 	defer func() {
 		r := recover()
 		if r == nil {
-			t.Fatal("Log(nil) did not panic")
+			t.Fatal("NewServer with a nil logger did not panic")
 		}
-		if want := "web: Server.Log requires a *slog.Logger"; r != want {
+		if want := "web: NewServer requires a *slog.Logger"; r != want {
 			t.Fatalf("panic = %v, want %q", r, want)
 		}
 	}()
-	srv.Log(nil)
+	web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), http.NewServeMux(), nil)
 }
 
-func TestServer_LogAfterStartPanics(t *testing.T) {
-	srv := startTestServer(t, http.NewServeMux())
+// A drain whose deadline passes with a request still in flight closes the
+// connections rather than leaving them to the handler: Shutdown returns the
+// context's error, and the client sees its connection end instead of hanging.
+func TestServer_ShutdownPastItsDeadlineClosesConnections(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
 
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatal("Log after Start did not panic")
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /stuck", func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		<-release
+	})
+	srv := startTestServer(t, mux)
+
+	done := make(chan error, 1)
+	go func() {
+		resp, err := http.Get("http://" + srv.Addr() + "/stuck")
+		if err == nil {
+			_ = resp.Body.Close()
 		}
-		if want := "web: Server.Log after Start"; r != want {
-			t.Fatalf("panic = %v, want %q", r, want)
-		}
+		done <- err
 	}()
-	srv.Log(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)))
+	recvOrFail(t, started, "the handler to start")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := srv.Shutdown(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Shutdown = %v, want the context's error", err)
+	}
+	if err := recvOrFail(t, done, "the client's connection to close"); err == nil {
+		t.Error("the stuck request completed, want its connection closed")
+	}
 }
 
 func TestServer_WiresReadHeaderTimeoutFromConfig(t *testing.T) {
@@ -402,7 +419,7 @@ func TestServer_WiresReadHeaderTimeoutFromConfig(t *testing.T) {
 		Port:              new(0),
 		ReadHeaderTimeout: dur(100 * time.Millisecond),
 	})
-	srv := web.NewServer(cfg, http.NewServeMux())
+	srv := web.NewServer(cfg, http.NewServeMux(), discard)
 	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}

@@ -33,67 +33,56 @@ type readyBody struct {
 // nothing else.
 func Liveness() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
 		_ = WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 }
 
-// Readiness aggregates the checks: 200 with each participant's state when
-// all are ready, and otherwise notReady written as the problem, at 503,
-// carrying the participants as its "checks" extension member. A zero
-// Problem takes the package defaults (about:blank, "one or more readiness
-// checks failed"); any member notReady names — Type, Title, Detail, or
-// Extras — is used instead. The status and the checks member are always
-// the probe's own: notReady.Status is ignored, and a "checks" key in
-// notReady.Extras is overwritten. Zero checks report ready.
+// Readiness answers 200 with each check's state when every check is ready,
+// and otherwise notReady as a 503 problem whose "checks" member carries the
+// states; a Check with a nil Checker is not ready. A zero member of notReady
+// takes its default (Type about:blank, Title the status phrase, Detail "one
+// or more readiness checks failed"), and its Status and any "checks" in its
+// Extras are replaced.
 func Readiness(notReady Problem, checks ...lifecycle.Check) http.Handler {
+	return readiness(notReady, func() []lifecycle.Check { return checks })
+}
+
+// readiness is [Readiness] over checks read on every request.
+func readiness(notReady Problem, checks func() []lifecycle.Check) http.Handler {
+	notReady.Status = http.StatusServiceUnavailable
+	if notReady.Detail == "" {
+		notReady.Detail = "one or more readiness checks failed"
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		results := make([]checkResult, 0, len(checks))
+		participants := checks()
+		results := make([]checkResult, 0, len(participants))
 		ready := true
-		for _, check := range checks {
+		for _, check := range participants {
 			ok := check.Checker != nil && check.Checker.Ready()
-			if !ok {
-				ready = false
-			}
-			results = append(
-				results,
-				checkResult{Name: check.Name, Ready: ok},
-			)
+			ready = ready && ok
+			results = append(results, checkResult{Name: check.Name, Ready: ok})
 		}
 
+		w.Header().Set("Cache-Control", "no-store")
 		if !ready {
 			p := notReady
-			p.Status = http.StatusServiceUnavailable
-			if p.Detail == "" {
-				p.Detail = "one or more readiness checks failed"
-			}
-			extras := make(map[string]any, len(notReady.Extras)+1)
-			maps.Copy(extras, notReady.Extras)
-			extras["checks"] = results
-			p.Extras = extras
+			p.Extras = make(map[string]any, len(notReady.Extras)+1)
+			maps.Copy(p.Extras, notReady.Extras)
+			p.Extras["checks"] = results
 			_ = p.WriteFor(w, r)
 			return
 		}
-
-		_ = WriteJSON(w, http.StatusOK, readyBody{
-			Status: "ready",
-			Checks: results,
-		})
+		_ = WriteJSON(w, http.StatusOK, readyBody{Status: "ready", Checks: results})
 	})
 }
 
-// RegisterHealth mounts [Liveness] at GET /healthz and a readiness probe at
-// GET /readyz over lc, queried fresh on every request rather than once at
-// registration: a service lc.Add adds after this call still appears on the
-// next probe. notReady is [Readiness]'s own parameter, passed through
-// unchanged. Exposing an in-progress service's check is safe only because
-// the caller registers its own HTTP server at [lifecycle.StageRoot], so the
-// coordinator never serves a request before every numbered stage exists.
+// RegisterHealth mounts [Liveness] at GET /healthz and [Readiness] at GET
+// /readyz over lc: the coordinator itself, as "lifecycle", then its Checks,
+// read on every request, so a service added after this call still appears.
 func RegisterHealth(m Mounter, lc *lifecycle.Coordinator, notReady Problem) {
-	readiness := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		checks := append([]lifecycle.Check{{Name: "lifecycle", Checker: lc}}, lc.Checks()...)
-		Readiness(notReady, checks...).ServeHTTP(w, r)
-	})
-
 	m.Handle("GET "+HealthPath, Liveness())
-	m.Handle("GET "+ReadyPath, readiness)
+	m.Handle("GET "+ReadyPath, readiness(notReady, func() []lifecycle.Check {
+		return append([]lifecycle.Check{{Name: "lifecycle", Checker: lc}}, lc.Checks()...)
+	}))
 }

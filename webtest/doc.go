@@ -13,7 +13,4 @@
 // for an upload.
 // [Live] reports whether a service answers its liveness probe, the condition
 // a harness passes to processtest's Await.
-//
-// [Probe] is the unit-tier helper: one request served through a handler
-// into a recorder, for a handler test that needs no server.
 package webtest

@@ -336,39 +336,14 @@ func TestConfig_FinalizeRejectsNegativePortFromEnv(t *testing.T) {
 	}
 }
 
-func TestNewEnv_ComposesNamesFromPrefixAndBlock(t *testing.T) {
-	for _, tc := range []struct {
-		block string
-		want  web.Env
-	}{
-		{"server", web.Env{
-			Host:              "HERALD_SERVER_HOST",
-			Port:              "HERALD_SERVER_PORT",
-			ReadTimeout:       "HERALD_SERVER_READ_TIMEOUT",
-			ReadHeaderTimeout: "HERALD_SERVER_READ_HEADER_TIMEOUT",
-			WriteTimeout:      "HERALD_SERVER_WRITE_TIMEOUT",
-			IdleTimeout:       "HERALD_SERVER_IDLE_TIMEOUT",
-		}},
-		{"management", web.Env{
-			Host:              "HERALD_MANAGEMENT_HOST",
-			Port:              "HERALD_MANAGEMENT_PORT",
-			ReadTimeout:       "HERALD_MANAGEMENT_READ_TIMEOUT",
-			ReadHeaderTimeout: "HERALD_MANAGEMENT_READ_HEADER_TIMEOUT",
-			WriteTimeout:      "HERALD_MANAGEMENT_WRITE_TIMEOUT",
-			IdleTimeout:       "HERALD_MANAGEMENT_IDLE_TIMEOUT",
-		}},
-	} {
-		t.Run(tc.block, func(t *testing.T) {
-			if got := web.NewEnv("herald", tc.block); got != tc.want {
-				t.Errorf("NewEnv(\"herald\", %q) = %+v, want %+v", tc.block, got, tc.want)
-			}
-		})
+// An empty prefix composes no names, so no override is read.
+func TestConfig_FinalizeEmptyPrefixComposesNoNames(t *testing.T) {
+	var cfg web.Config
+	if err := cfg.Finalize(""); err != nil {
+		t.Fatalf("Finalize: %v", err)
 	}
-}
-
-func TestNewEnv_EmptyPrefixReturnsZeroEnv(t *testing.T) {
-	if env := web.NewEnv("", "server"); env != (web.Env{}) {
-		t.Errorf("NewEnv(\"\", \"server\") = %+v, want the zero Env (overrides disabled)", env)
+	if cfg.Env != (web.Env{}) {
+		t.Errorf("Env = %+v, want the zero Env (overrides disabled)", cfg.Env)
 	}
 }
 
@@ -377,8 +352,16 @@ func TestConfig_FinalizeUsesServerBlock(t *testing.T) {
 	if err := cfg.Finalize(testPrefix); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
-	if got, want := cfg.Env, web.NewEnv(testPrefix, "server"); got != want {
-		t.Errorf("Env = %+v, want the \"server\" block names %+v", got, want)
+	want := web.Env{
+		Host:              envHost,
+		Port:              envPort,
+		ReadTimeout:       envReadTimeout,
+		ReadHeaderTimeout: envReadHeaderTimeout,
+		WriteTimeout:      envWriteTimeout,
+		IdleTimeout:       envIdleTimeout,
+	}
+	if cfg.Env != want {
+		t.Errorf("Env = %+v, want the \"server\" block names %+v", cfg.Env, want)
 	}
 }
 

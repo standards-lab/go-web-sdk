@@ -20,6 +20,13 @@ func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	return body
 }
 
+// probe serves one GET for path through h and returns the recorder.
+func probe(h http.Handler, path string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	return rec
+}
+
 func TestProblem_WriteAppliesDefaults(t *testing.T) {
 	rec := httptest.NewRecorder()
 	if err := (web.Problem{Status: http.StatusNotFound}).Write(rec); err != nil {
