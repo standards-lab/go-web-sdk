@@ -40,10 +40,10 @@
 // its checks live: no request reaches the probe before every check it reads
 // exists.
 //
-//   - [Config] is the server's address, timeouts, and header limit. Its
-//     pointer fields are tri-state: nil takes the default at Finalize, and an
-//     explicit zero survives. [Env] records the override names
-//     [Config.Finalize] composed.
+//   - [Config] is the server's address, timeouts, header limit, and
+//     transfer rate. Its pointer fields are tri-state: nil takes the default
+//     at Finalize, and an explicit zero survives. [Env] records the override
+//     names [Config.Finalize] composed.
 //   - [NewServer] builds the [Server] from a finalized Config, a handler, and
 //     the logger net/http's own diagnostics go to.
 //   - [Liveness] and [Readiness] are the probe handlers. [RegisterHealth]
@@ -139,4 +139,7 @@
 //     [PathError].
 //   - [WriteObject] proxies an [Object]'s bytes with its validators, and
 //     [Attachment] builds the Content-Disposition of a download.
+//   - [Transfer] sets an upload's or a download's connection deadlines from
+//     the body's size and the slowest pace a client is allowed;
+//     [Config.Transfer] and [NewTransfer] build one.
 package web

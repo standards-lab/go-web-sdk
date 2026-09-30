@@ -6,6 +6,28 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.14.0] - 2026-09-30
+
+### Added
+
+- `Transfer` sets the connection deadlines of a route that moves a large body. Each deadline is
+  the grace plus the time the body's size, capped at the route's limit, takes at the minimum
+  rate. `WidenUpload(w, r)` sets the read deadline from the declared `Content-Length` and the
+  write deadline a grace later; `WidenDownload(w, size)` sets the write deadline. A writer with no
+  connection deadlines, such as a test recorder, has none to set, and both return nil.
+  `Config.Transfer(limit)` builds a `Transfer` from the configuration and leaves a disabled
+  timeout disabled; `NewTransfer` builds one from explicit values. `Limit` returns the limit to
+  pass to `ReadUpload`.
+- `Config.TransferRate` (`transfer_rate`, overridden by `<BLOCK>_TRANSFER_RATE`) is the slowest pace
+  a client is allowed, in bytes per second. It defaults to 64 KiB/s.
+
+### Changed
+
+- **Breaking:** the read and write timeouts default to 30 seconds each, down from 1 minute and 15
+  minutes. They are sized for a request that moves no large body; a route that moves one widens
+  its own deadlines through `Transfer`, and must not sit under a `middleware.Timeout` shorter
+  than its transfer.
+
 ## [v0.13.0] - 2026-09-30
 
 A review of the whole repository closes `goals.v1.storage.tasks.suite`: the loggers move into the
@@ -426,7 +448,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.14.0...HEAD
+[v0.14.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.13.0...v0.14.0
 [v0.13.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.12.0...v0.13.0
 [v0.12.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.11.0...v0.12.0
 [v0.11.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.10.0...v0.11.0
