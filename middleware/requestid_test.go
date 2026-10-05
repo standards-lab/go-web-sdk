@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -37,9 +38,7 @@ func identified(t *testing.T, inbound http.Header, opts ...middleware.RequestIDO
 	}), middleware.RequestID(opts...))
 
 	r := httptest.NewRequest(http.MethodGet, "/orders/7", nil)
-	for name, values := range inbound {
-		r.Header[name] = values
-	}
+	maps.Copy(r.Header, inbound)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, r)
 	return rec, seen

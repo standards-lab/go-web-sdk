@@ -134,7 +134,7 @@ func ParseQuery(q url.Values, l Limits) (Query, error) {
 		if v == "" {
 			continue
 		}
-		for _, token := range strings.Split(v, ",") {
+		for token := range strings.SplitSeq(v, ",") {
 			s := Sort{
 				Field:      strings.TrimPrefix(token, "-"),
 				Descending: strings.HasPrefix(token, "-"),
