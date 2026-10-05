@@ -5,7 +5,7 @@ go 1.27
 require (
 	github.com/go-chi/httprate v0.16.0
 	github.com/standards-lab/go-core v0.5.0
-	github.com/standards-lab/go-web-sdk v0.13.0
+	github.com/standards-lab/go-web-sdk v0.14.0
 )
 
 require (
