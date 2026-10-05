@@ -26,10 +26,12 @@ Its repository-level principles:
   idiomatic and stable as the standard library. Vendor SDKs never enter it.
 - A middleware sub-module states its own line. It admits a sourced dependency in one category —
   a specification surface, or a threat model whose corner cases are the library's product —
-  under the organization's markers for a standard library; cryptography stays out of this SDK
-  entirely. `middleware/rate-limit` takes `github.com/go-chi/httprate` under the threat-model
-  category: per-key limiting with eviction, whose failure mode is a memory-growth denial of
-  service rather than a wrong answer a test would catch.
+  under the
+  [markers for a standard library](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/principles/dependencies.md#sourcing);
+  cryptography stays out of this SDK entirely. `middleware/rate-limit` takes
+  `github.com/go-chi/httprate` under the threat-model category: per-key limiting with eviction,
+  whose failure mode is a memory-growth denial of service rather than a wrong answer a test
+  would catch.
 - Its standard tier is RFC 9110 and RFC 9457 over the stdlib `net/http` transport, and it has no
   providers: nothing changes on a provider swap because there is nothing to swap.
 - `web` is one cohesive package. `middleware` is the sub-package holding the hand-rolled
