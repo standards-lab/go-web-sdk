@@ -4,8 +4,8 @@ golangci-lint = "2.14.0"
 jq = "1.8.2"
 
 # Space-separated list of module directories, kept in sync with the go.work
-# use-list and the ci.yml matrix. "." is the base module; a middleware
-# sub-module is added as each is built.
+# use-list; check, upgrade, currency, and CI (through check) loop over it. "."
+# is the base module; a middleware sub-module is added as each is built.
 [env]
 GO_MODULES = ". middleware/rate-limit"
 
