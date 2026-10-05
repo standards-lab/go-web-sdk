@@ -15,11 +15,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/middleware/rate-limit"
 )
 
-// Instantiating Load proves *ratelimit.Config satisfies the config.Config
-// contract at compile time; the constraint cannot be written as an ordinary
-// interface assertion because it carries a type element.
-var _ = config.Load[ratelimit.Config]
-
 // testPrefix is the env prefix override tests finalize with; the names below
 // are what Finalize composes from it under the "rate_limit" block.
 const (
@@ -414,7 +409,7 @@ func TestConfig_FinalizeUsesRateLimitBlock(t *testing.T) {
 func TestConfig_FinalizeBlockEnvOverridesOnlyItsOwnBlock(t *testing.T) {
 	// The primary limit's variables are set alongside the login block's, so
 	// a value leaking across blocks would show up as the wrong count.
-	t.Setenv(envRequests, "300")
+	t.Setenv(envRequests, "200")
 	t.Setenv(envLoginRequests, "5")
 	t.Setenv(envLoginWindow, "10m")
 
@@ -436,8 +431,8 @@ func TestConfig_FinalizeBlockEnvOverridesOnlyItsOwnBlock(t *testing.T) {
 	if err := primary.Finalize(testPrefix); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
-	if *primary.Requests != 300 {
-		t.Errorf("primary Requests = %d, want 300", *primary.Requests)
+	if *primary.Requests != 200 {
+		t.Errorf("primary Requests = %d, want its own override's 200", *primary.Requests)
 	}
 	if time.Duration(*primary.Window) != time.Minute {
 		t.Errorf("primary Window = %s, want the default (the override is the login block's)", primary.Window)

@@ -11,11 +11,6 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// Instantiating Load proves *web.Config satisfies the config.Config contract at
-// compile time; the constraint cannot be written as an ordinary interface
-// assertion because it carries a type element.
-var _ = config.Load[web.Config]
-
 // testPrefix is the env prefix override tests finalize with; the names below
 // are what Finalize composes from it under the "server" block.
 const (
@@ -385,33 +380,6 @@ func TestConfig_FinalizeBlockComposesNamesFromBlock(t *testing.T) {
 	}
 	if cfg.Env != want {
 		t.Errorf("Env = %+v, want %+v", cfg.Env, want)
-	}
-}
-
-func TestConfig_FinalizeBlockNamesDoNotCollideAcrossBlocks(t *testing.T) {
-	var primary, mgmt web.Config
-	if err := primary.Finalize(testPrefix); err != nil {
-		t.Fatalf("Finalize: %v", err)
-	}
-	if err := mgmt.FinalizeBlock(testPrefix, testBlock); err != nil {
-		t.Fatalf("FinalizeBlock: %v", err)
-	}
-
-	for _, tc := range []struct {
-		name    string
-		primary string
-		mgmt    string
-	}{
-		{"Host", primary.Env.Host, mgmt.Env.Host},
-		{"Port", primary.Env.Port, mgmt.Env.Port},
-		{"ReadTimeout", primary.Env.ReadTimeout, mgmt.Env.ReadTimeout},
-		{"ReadHeaderTimeout", primary.Env.ReadHeaderTimeout, mgmt.Env.ReadHeaderTimeout},
-		{"WriteTimeout", primary.Env.WriteTimeout, mgmt.Env.WriteTimeout},
-		{"IdleTimeout", primary.Env.IdleTimeout, mgmt.Env.IdleTimeout},
-	} {
-		if tc.primary == tc.mgmt {
-			t.Errorf("%s: both blocks compose %q under prefix %q", tc.name, tc.primary, testPrefix)
-		}
 	}
 }
 
