@@ -1,7 +1,6 @@
 package web_test
 
 import (
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -66,9 +65,14 @@ func TestRecorder_WriteAfterWriteHeaderKeepsTheExplicitStatus(t *testing.T) {
 }
 
 func TestRecorder_ReadFromCommitsAnImplicitOK(t *testing.T) {
-	rec := web.WrapWriter(httptest.NewRecorder())
+	under := httptest.NewRecorder()
+	rec := web.WrapWriter(under)
 	if _, err := rec.ReadFrom(strings.NewReader("streamed")); err != nil {
 		t.Fatalf("ReadFrom: %v", err)
+	}
+
+	if got := under.Body.String(); got != "streamed" {
+		t.Errorf("underlying body = %q, want the streamed bytes", got)
 	}
 
 	if !rec.Committed() {
@@ -76,13 +80,6 @@ func TestRecorder_ReadFromCommitsAnImplicitOK(t *testing.T) {
 	}
 	if rec.Status() != http.StatusOK {
 		t.Errorf("Status() = %d, want %d", rec.Status(), http.StatusOK)
-	}
-}
-
-func TestRecorder_ImplementsReaderFrom(t *testing.T) {
-	rec := web.WrapWriter(httptest.NewRecorder())
-	if _, ok := any(rec).(io.ReaderFrom); !ok {
-		t.Error("Recorder does not implement io.ReaderFrom")
 	}
 }
 
@@ -167,7 +164,8 @@ func TestRecorder_FlushAfterWriteHeaderKeepsTheExplicitStatus(t *testing.T) {
 // underlying writer's flush and commits the same way.
 func TestRecorder_IsAFlusher(t *testing.T) {
 	under := httptest.NewRecorder()
-	var w http.ResponseWriter = web.WrapWriter(under)
+	rec := web.WrapWriter(under)
+	var w http.ResponseWriter = rec
 
 	f, ok := w.(http.Flusher)
 	if !ok {
@@ -178,7 +176,7 @@ func TestRecorder_IsAFlusher(t *testing.T) {
 	if !under.Flushed {
 		t.Error("the underlying writer was not flushed")
 	}
-	if rec := w.(*web.Recorder); rec.Status() != http.StatusOK {
+	if rec.Status() != http.StatusOK {
 		t.Errorf("Status() = %d, want the implicit %d", rec.Status(), http.StatusOK)
 	}
 }

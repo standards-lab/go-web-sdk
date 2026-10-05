@@ -104,7 +104,9 @@ func TestLive_ObservesTheProbe(t *testing.T) {
 	if !webtest.Live(srv.URL) {
 		t.Error("Live = false against a serving probe")
 	}
-	if webtest.Live(httptest.NewServer(http.NotFoundHandler()).URL) {
+	missing := httptest.NewServer(http.NotFoundHandler())
+	defer missing.Close()
+	if webtest.Live(missing.URL) {
 		t.Error("Live = true against a 404")
 	}
 	srv.Close()
