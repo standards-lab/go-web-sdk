@@ -42,3 +42,11 @@ task under `v1.middleware`.
 
 Each release re-checks the hand-rolled set against `net/http` changes: `http.ResponseController`,
 `ServeMux` pattern semantics, and new `http.Server` fields.
+
+## Open question: the rate-limit default
+
+`middleware/rate-limit` defaults to 300 requests per minute when its configuration leaves the
+limit unset. Baseline-standards bars application policy from a library but allows operational
+defaults; whether a default request rate is policy or an operational default is undecided.
+Settle it before the sub-module's next release, either by keeping the default or by requiring
+the consumer to set the limit.
