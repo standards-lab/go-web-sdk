@@ -3,9 +3,8 @@
 This note records the unbuilt middleware: one hand-rolled item and three sourced ones. CORS is
 planned under `v1.middleware`; real client IP and compression wait in the backlog.
 
-The organization's rule (`architecture/context/dependency-sourcing.md`, a note until the
-architecture repository writes its page) decides whether a middleware is hand-rolled or sourced, and
-the README states where each kind lives.
+The sourcing section of `architecture/standards/go-elemental/principles/dependencies.md` decides
+whether a middleware is hand-rolled or sourced, and the README states where each kind lives.
 
 ## Path hygiene
 
