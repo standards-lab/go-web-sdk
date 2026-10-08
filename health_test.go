@@ -3,8 +3,10 @@ package web_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -333,6 +335,136 @@ func TestRegisterHealth_QueriesCoordinatorLive(t *testing.T) {
 	if got := databaseReady(); got != true {
 		t.Errorf("database ready = %v after it became ready, want true read live", got)
 	}
+}
+
+// A nil Doctor is a wiring mistake: RegisterHealth panics naming the fix
+// rather than mounting a probe that nil-dereferences on its first request.
+func TestRegisterHealth_PanicsOnNilDoctor(t *testing.T) {
+	defer func() {
+		const want = "web: RegisterHealth requires a Doctor; pass the *lifecycle.Coordinator or a *lifecycle.Readiness node's value"
+		if r := recover(); r != want {
+			t.Fatalf("panic = %v, want %q", r, want)
+		}
+	}()
+	web.RegisterHealth(http.NewServeMux(), nil, web.Problem{})
+}
+
+// TestRegisterHealth_ReadsAReadinessNodeLive mounts the probes inside a node
+// constructor, over a lifecycle.Readiness the Coordinator does not exist yet
+// to bind. Until New binds it, /readyz reports "lifecycle" alone, not ready;
+// once New has, the same probe reports "lifecycle" then the System's
+// ReadinessChecker nodes, layer 0 before layer 1 and, within a layer, in
+// definition order rather than the order the constructors reached them.
+// Nothing else registers a check.
+func TestRegisterHealth_ReadsAReadinessNodeLive(t *testing.T) {
+	g := graph.New()
+	readiness := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
+		return new(lifecycle.Readiness), nil
+	})
+	queue := g.Define("queue", func(*graph.Scope) (*toggleChecker, error) {
+		return &toggleChecker{}, nil
+	})
+	database := g.Define("database", func(*graph.Scope) (*toggleChecker, error) {
+		return &toggleChecker{}, nil
+	})
+	search := g.Define("search", func(s *graph.Scope) (*toggleChecker, error) {
+		s.Use(database)
+		return &toggleChecker{}, nil
+	})
+	var duringBuild *httptest.ResponseRecorder
+	mux := g.Define("mux", func(s *graph.Scope) (*http.ServeMux, error) {
+		m := http.NewServeMux()
+		web.RegisterHealth(m, s.Use(readiness), web.Problem{})
+		// search reaches database before queue is used, so discovery order
+		// differs from definition order within layer 0.
+		s.Use(search)
+		s.Use(queue)
+		duringBuild = handlertest.Get(m, web.ReadyPath)
+		return m, nil
+	})
+	sys := build(t, g, mux)
+
+	unbound := []string{"lifecycle=false"}
+	if got := readyChecks(t, duringBuild); !slices.Equal(got, unbound) {
+		t.Errorf("checks during Build = %v, want %v", got, unbound)
+	}
+	if got := readyChecks(t, handlertest.Get(sys.Get(mux), web.ReadyPath)); !slices.Equal(got, unbound) {
+		t.Errorf("checks before New = %v, want %v", got, unbound)
+	}
+
+	lifecycle.New(sys, coordinatorConfig)
+	sys.Get(database).ready.Store(true)
+	want := []string{"lifecycle=false", "queue=false", "database=true", "search=false"}
+	if got := readyChecks(t, handlertest.Get(sys.Get(mux), web.ReadyPath)); !slices.Equal(got, want) {
+		t.Errorf("checks once New bound the Readiness = %v, want %v", got, want)
+	}
+}
+
+// TestRegisterHealth_ServerNodeAddsNoCheck runs a System whose server node
+// serves the probes over a Readiness node: the Coordinator starts the
+// Server, so /readyz answers over the network, ready, with "lifecycle" as
+// its only check, and shuts it down when Run ends.
+func TestRegisterHealth_ServerNodeAddsNoCheck(t *testing.T) {
+	g := graph.New()
+	readiness := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
+		return new(lifecycle.Readiness), nil
+	})
+	cfg := finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)})
+	server := g.Define("server", func(s *graph.Scope) (*web.Server, error) {
+		mux := http.NewServeMux()
+		web.RegisterHealth(mux, s.Use(readiness), web.Problem{})
+		return web.NewServer(cfg, mux, discard), nil
+	})
+	sys := build(t, g, server)
+	lc := lifecycle.New(sys, coordinatorConfig)
+	ready := make(chan struct{})
+	lc.OnReady(func() { close(ready) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- lc.Run(ctx) }()
+	recvOrFail(t, ready, "coordinator to become ready")
+
+	res, err := http.Get("http://" + sys.Get(server).Addr() + web.ReadyPath)
+	if err != nil {
+		t.Fatalf("GET %s: %v", web.ReadyPath, err)
+	}
+	rec := httptest.NewRecorder()
+	rec.Code = res.StatusCode
+	_, _ = rec.Body.ReadFrom(res.Body)
+	_ = res.Body.Close()
+	if rec.Code != http.StatusOK {
+		t.Errorf("readyz = %d, want 200", rec.Code)
+	}
+	if got, want := readyChecks(t, rec), []string{"lifecycle=true"}; !slices.Equal(got, want) {
+		t.Errorf("checks = %v, want %v: the Server is not a readiness check", got, want)
+	}
+
+	cancel()
+	if err := recvOrFail(t, done, "Run to return"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
+// readyChecks returns the checks a /readyz response carries, each as
+// "name=ready", in the order the probe reported them.
+func readyChecks(t *testing.T, rec *httptest.ResponseRecorder) []string {
+	t.Helper()
+	var body struct {
+		Checks []struct {
+			Name  string `json:"name"`
+			Ready bool   `json:"ready"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body %q: %v", rec.Body.String(), err)
+	}
+	out := make([]string, 0, len(body.Checks))
+	for _, c := range body.Checks {
+		out = append(out, fmt.Sprintf("%s=%t", c.Name, c.Ready))
+	}
+	return out
 }
 
 // coordinatorConfig is a finalized lifecycle.Config, whose positive

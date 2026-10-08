@@ -8,6 +8,13 @@ only; the base module keeps its own.
 
 ## [Unreleased]
 
+### Changed
+
+- Built against `github.com/standards-lab/go-core v0.6.0`.
+- Built against `github.com/go-chi/httprate v0.16.1`, which changes the bucketing: an
+  IPv4-mapped IPv6 address (`::ffff:192.0.2.1`) now shares the IPv4 address's counter instead of
+  counting under its own key.
+
 ## [v0.2.0] - 2026-09-30
 
 ### Changed

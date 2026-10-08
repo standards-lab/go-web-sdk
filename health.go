@@ -77,13 +77,35 @@ func readiness(notReady Problem, checks func() []lifecycle.Check) http.Handler {
 	})
 }
 
+// Doctor is what [RegisterHealth] probes: its own readiness, reported as
+// "lifecycle", and the readiness checks it aggregates. A
+// *lifecycle.Coordinator is one, and so is a *lifecycle.Readiness, the
+// graph node value that lets a node constructed before the Coordinator
+// exists, such as the one that mounts the probes, report it.
+type Doctor interface {
+	lifecycle.ReadinessChecker
+	Checks() []lifecycle.Check
+}
+
+// Both of go-core's readiness sources are Doctors, so RegisterHealth takes
+// either.
+var (
+	_ Doctor = (*lifecycle.Coordinator)(nil)
+	_ Doctor = (*lifecycle.Readiness)(nil)
+)
+
 // RegisterHealth mounts [Liveness] at GET /healthz and [Readiness] at GET
-// /readyz. The readiness probe checks lc itself, as "lifecycle", then lc's
-// Checks in start order. It reads them on every request, so a service added
-// after this call still appears.
-func RegisterHealth(m Mounter, lc *lifecycle.Coordinator, notReady Problem) {
+// /readyz. The readiness probe checks d itself, as "lifecycle", then d's
+// Checks: for a Coordinator, or a Readiness bound to one, the System's
+// ReadinessChecker values in layer order. It reads d on every request, so a
+// Readiness bound after this call reports its Coordinator from then on;
+// until then it reports "lifecycle" alone, not ready. It panics on a nil d.
+func RegisterHealth(m Mounter, d Doctor, notReady Problem) {
+	if d == nil {
+		panic("web: RegisterHealth requires a Doctor; pass the *lifecycle.Coordinator or a *lifecycle.Readiness node's value")
+	}
 	m.Handle("GET "+HealthPath, Liveness())
 	m.Handle("GET "+ReadyPath, readiness(notReady, func() []lifecycle.Check {
-		return append([]lifecycle.Check{{Name: "lifecycle", Checker: lc}}, lc.Checks()...)
+		return append([]lifecycle.Check{{Name: "lifecycle", Checker: d}}, d.Checks()...)
 	}))
 }
