@@ -6,9 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/standards-lab/go-core/config"
+	"github.com/standards-lab/go-core/graph"
 	"github.com/standards-lab/go-core/lifecycle"
 	"github.com/standards-lab/go-web-sdk"
 	"github.com/standards-lab/go-web-sdk/internal/handlertest"
@@ -229,58 +232,46 @@ func TestReadiness_NilCheckerIsNotReady(t *testing.T) {
 }
 
 // TestReadiness_TracksCoordinator walks the readiness signal through a whole
-// process lifetime: warming up, ready, and stopped. The middle and last
-// transitions are what make /readyz useful to an orchestrator.
+// graph Run: warming up while a Starter blocks, ready once OnReady fires,
+// and stopped once Run returns. The middle and last transitions are what make
+// /readyz useful to an orchestrator; /healthz answers 200 throughout.
 func TestReadiness_TracksCoordinator(t *testing.T) {
-	lc := lifecycle.New()
+	g := graph.New()
+	warmup := g.Define("warmup", func(*graph.Scope) (*blockingStarter, error) {
+		return &blockingStarter{started: make(chan struct{}), release: make(chan struct{})}, nil
+	})
+	sys := build(t, g, warmup)
+	lc := lifecycle.New(sys, coordinatorConfig)
 
 	mux := http.NewServeMux()
 	web.RegisterHealth(mux, lc, web.Problem{})
 
-	started := make(chan struct{})
-	release := make(chan struct{})
-	lc.OnStartup(func(context.Context) error {
-		close(started)
-		<-release
-		return nil
-	})
 	ready := make(chan struct{})
 	lc.OnReady(func() { close(ready) })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- lc.Run(ctx, 2*time.Second) }()
+	go func() { done <- lc.Run(ctx) }()
 
-	recvOrFail(t, started, "startup hook to start")
-	if got := handlertest.Get(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
-		t.Errorf("status = %d during startup, want 503", got)
-	}
-	// Liveness is independent of readiness: the process is serving either way.
-	if got := handlertest.Get(mux, web.HealthPath).Code; got != http.StatusOK {
-		t.Errorf("healthz = %d during startup, want 200", got)
-	}
+	starter := sys.Get(warmup)
+	recvOrFail(t, starter.started, "the Starter to start")
+	expectProbes(t, mux, "during startup", http.StatusServiceUnavailable)
 
-	close(release)
+	close(starter.release)
 	recvOrFail(t, ready, "coordinator to become ready")
-
-	if got := handlertest.Get(mux, web.ReadyPath).Code; got != http.StatusOK {
-		t.Errorf("status = %d after startup, want 200", got)
-	}
+	expectProbes(t, mux, "once ready", http.StatusOK)
 
 	cancel()
 	if err := recvOrFail(t, done, "Run to return"); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-
-	if got := handlertest.Get(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
-		t.Errorf("status = %d after Run returned, want 503", got)
-	}
+	expectProbes(t, mux, "after Run returned", http.StatusServiceUnavailable)
 }
 
 func TestRegisterHealth_MountsBothPaths(t *testing.T) {
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux, lifecycle.New(), web.Problem{})
+	web.RegisterHealth(mux, idleCoordinator(t), web.Problem{})
 
 	if got := handlertest.Get(mux, web.HealthPath).Code; got != http.StatusOK {
 		t.Errorf("GET %s = %d, want 200", web.HealthPath, got)
@@ -294,7 +285,7 @@ func TestRegisterHealth_MountsBothPaths(t *testing.T) {
 
 func TestRegisterHealth_RejectsOtherMethods(t *testing.T) {
 	mux := http.NewServeMux()
-	web.RegisterHealth(mux, lifecycle.New(), web.Problem{})
+	web.RegisterHealth(mux, idleCoordinator(t), web.Problem{})
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, web.HealthPath, nil))
@@ -304,32 +295,95 @@ func TestRegisterHealth_RejectsOtherMethods(t *testing.T) {
 	}
 }
 
-// TestRegisterHealth_QueriesCoordinatorLive is the regression test for the
-// fix: RegisterHealth used to close over a snapshot of the coordinator's
-// checks, so a service added afterward never appeared on the probe.
+// TestRegisterHealth_QueriesCoordinatorLive pins that a ReadinessChecker
+// node defined in the graph appears on /readyz once New runs, after the
+// coordinator's own "lifecycle" check, and that its state is read on every
+// request rather than snapshotted when RegisterHealth mounts the probe.
 func TestRegisterHealth_QueriesCoordinatorLive(t *testing.T) {
-	lc := lifecycle.New()
+	g := graph.New()
+	database := g.Define("database", func(*graph.Scope) (*toggleChecker, error) {
+		return &toggleChecker{}, nil
+	})
+	sys := build(t, g, database)
+	lc := lifecycle.New(sys, coordinatorConfig)
 	mux := http.NewServeMux()
 	web.RegisterHealth(mux, lc, web.Problem{})
 
-	lc.Add(lifecycle.Service{
-		Name:  "database",
-		Stage: 0,
-		Check: staticChecker(false),
-	})
-
-	rec := handlertest.Get(mux, web.ReadyPath)
-	body := decodeBody(t, rec)
-	checks, ok := body["checks"].([]any)
-	if !ok || len(checks) != 2 {
-		t.Fatalf("checks = %v, want the lifecycle check plus database, registered after RegisterHealth", body["checks"])
+	databaseReady := func() any {
+		t.Helper()
+		body := decodeBody(t, handlertest.Get(mux, web.ReadyPath))
+		checks, ok := body["checks"].([]any)
+		if !ok || len(checks) != 2 {
+			t.Fatalf("checks = %v, want the lifecycle check plus database, inferred from the graph", body["checks"])
+		}
+		if first, ok := checks[0].(map[string]any); !ok || first["name"] != "lifecycle" {
+			t.Fatalf("checks[0] = %v, want the coordinator's lifecycle check first", checks[0])
+		}
+		check, ok := checks[1].(map[string]any)
+		if !ok || check["name"] != "database" {
+			t.Fatalf("checks[1] = %v, want the database node's check", checks[1])
+		}
+		return check["ready"]
 	}
 
-	database, ok := checks[1].(map[string]any)
-	if !ok || database["name"] != "database" {
-		t.Fatalf("checks[1] = %v, want the late-registered database check", checks[1])
+	if got := databaseReady(); got != false {
+		t.Errorf("database ready = %v, want false", got)
 	}
-	if database["ready"] != false {
-		t.Errorf("database ready = %v, want false", database["ready"])
+	sys.Get(database).ready.Store(true)
+	if got := databaseReady(); got != true {
+		t.Errorf("database ready = %v after it became ready, want true read live", got)
 	}
 }
+
+// coordinatorConfig is a finalized lifecycle.Config, whose positive
+// ShutdownTimeout lifecycle.New requires.
+var coordinatorConfig = lifecycle.Config{ShutdownTimeout: config.Duration(2 * time.Second)}
+
+// build builds g from roots, failing the test on a constructor error.
+func build(t *testing.T, g *graph.Graph, roots ...graph.Ref) *graph.System {
+	t.Helper()
+	sys, err := g.Build(roots...)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return sys
+}
+
+// idleCoordinator returns a coordinator over an empty System that never
+// runs, so it reports not ready.
+func idleCoordinator(t *testing.T) *lifecycle.Coordinator {
+	t.Helper()
+	return lifecycle.New(build(t, graph.New()), coordinatorConfig)
+}
+
+// expectProbes fails the test unless /readyz answers readyz and /healthz
+// answers 200: liveness is independent of readiness, since the process is
+// serving either way.
+func expectProbes(t *testing.T, h http.Handler, when string, readyz int) {
+	t.Helper()
+	if got := handlertest.Get(h, web.ReadyPath).Code; got != readyz {
+		t.Errorf("readyz = %d %s, want %d", got, when, readyz)
+	}
+	if got := handlertest.Get(h, web.HealthPath).Code; got != http.StatusOK {
+		t.Errorf("healthz = %d %s, want 200", got, when)
+	}
+}
+
+// blockingStarter is a lifecycle.Starter whose Start closes started, then
+// blocks until release is closed, holding the coordinator in startup.
+type blockingStarter struct {
+	started, release chan struct{}
+}
+
+func (s *blockingStarter) Start(context.Context) error {
+	close(s.started)
+	<-s.release
+	return nil
+}
+
+// toggleChecker is a lifecycle.ReadinessChecker whose state a test flips.
+type toggleChecker struct {
+	ready atomic.Bool
+}
+
+func (c *toggleChecker) Ready() bool { return c.ready.Load() }
