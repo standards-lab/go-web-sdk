@@ -273,6 +273,52 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 	expectProbes(t, mux, "after Run returned", http.StatusServiceUnavailable)
 }
 
+// TestReadiness_TracksReadinessNode walks the same Run as
+// TestReadiness_TracksCoordinator, but with the probes mounted inside a node
+// constructor over a lifecycle.Readiness node, the wiring a graph uses since
+// the Coordinator does not exist while the graph builds. /readyz follows the
+// Coordinator New bound the Readiness to: 503 while a Starter blocks, 200
+// once OnReady fires, 503 after Run returns; /healthz answers 200 throughout.
+func TestReadiness_TracksReadinessNode(t *testing.T) {
+	g := graph.New()
+	readiness := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
+		return new(lifecycle.Readiness), nil
+	})
+	warmup := g.Define("warmup", func(*graph.Scope) (*blockingStarter, error) {
+		return &blockingStarter{started: make(chan struct{}), release: make(chan struct{})}, nil
+	})
+	muxNode := g.Define("mux", func(s *graph.Scope) (*http.ServeMux, error) {
+		m := http.NewServeMux()
+		web.RegisterHealth(m, s.Use(readiness), web.Problem{})
+		return m, nil
+	})
+	sys := build(t, g, muxNode, warmup)
+	lc := lifecycle.New(sys, coordinatorConfig)
+	mux := sys.Get(muxNode)
+
+	ready := make(chan struct{})
+	lc.OnReady(func() { close(ready) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- lc.Run(ctx) }()
+
+	starter := sys.Get(warmup)
+	recvOrFail(t, starter.started, "the Starter to start")
+	expectProbes(t, mux, "during startup", http.StatusServiceUnavailable)
+
+	close(starter.release)
+	recvOrFail(t, ready, "coordinator to become ready")
+	expectProbes(t, mux, "once ready", http.StatusOK)
+
+	cancel()
+	if err := recvOrFail(t, done, "Run to return"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	expectProbes(t, mux, "after Run returned", http.StatusServiceUnavailable)
+}
+
 func TestRegisterHealth_MountsBothPaths(t *testing.T) {
 	mux := http.NewServeMux()
 	web.RegisterHealth(mux, idleCoordinator(t), web.Problem{})
