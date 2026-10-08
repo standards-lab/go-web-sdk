@@ -6,6 +6,28 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.15.0] - 2026-10-08
+
+### Added
+
+- `Doctor` is what `RegisterHealth` probes: a `lifecycle.ReadinessChecker` that also returns its
+  `Checks`. Both `*lifecycle.Coordinator` and `*lifecycle.Readiness` satisfy it.
+
+### Changed
+
+- **Breaking:** the `go-core` requirement is v0.6.0, whose lifecycle runs a built `graph.System`.
+  An importer still declaring a `lifecycle.Service` with `Add` must move to the graph: the
+  `Server` is a graph node's value, a `lifecycle.Subsystem` and a `lifecycle.Monitored`, which the
+  Coordinator starts, shuts down, and watches through `Err` without a `Monitor` call.
+- `RegisterHealth` takes a `Doctor` in place of a `*lifecycle.Coordinator`, so the value of a
+  `lifecycle.Readiness` node works: the node that mounts the probes can be built before the
+  Coordinator exists. A caller passing a Coordinator compiles unchanged. It reads the `Doctor` on
+  every request, so an unbound `Readiness` reports `"lifecycle"` alone, not ready, until
+  `lifecycle.New` binds it. A nil `Doctor` panics at wiring.
+- The checks `/readyz` reports after `"lifecycle"` follow the System's layer order, and
+  definition order within a layer, as `Coordinator.Checks` returns them, in place of the stage
+  start order. The probe bodies, statuses, and headers are unchanged.
+
 ## [v0.14.0] - 2026-09-30
 
 ### Added
@@ -448,7 +470,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.0...HEAD
+[v0.15.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.14.0...v0.15.0
 [v0.14.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.13.0...v0.14.0
 [v0.13.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.12.0...v0.13.0
 [v0.12.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.11.0...v0.12.0

@@ -8,11 +8,14 @@ import (
 	"net"
 	"net/http"
 	"sync"
+
+	"github.com/standards-lab/go-core/lifecycle"
 )
 
-// Server wraps an http.Server whose bind and serve phases are split, so a
-// composition root declares [Server.Start] and [Server.Shutdown] as a
-// lifecycle service's members and monitors [Server.Err].
+// Server wraps an http.Server whose bind and serve phases are split. As a
+// graph node's value it is a lifecycle.Subsystem and a lifecycle.Monitored:
+// the Coordinator starts it with [Server.Start], shuts it down with
+// [Server.Shutdown], and watches [Server.Err]. It is not a readiness check.
 type Server struct {
 	http *http.Server
 	errs chan error
@@ -20,6 +23,12 @@ type Server struct {
 	mu       sync.Mutex
 	listener net.Listener
 }
+
+// The Coordinator starts, stops, and watches a Server node's value.
+var (
+	_ lifecycle.Subsystem = (*Server)(nil)
+	_ lifecycle.Monitored = (*Server)(nil)
+)
 
 // NewServer builds a Server from a finalized [Config] and the handler it
 // serves, with net/http's own diagnostics (a TLS handshake failure, a

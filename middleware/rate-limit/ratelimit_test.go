@@ -162,6 +162,21 @@ func TestNew_IPv6ClientsShareTheirSlash64(t *testing.T) {
 	}
 }
 
+// An IPv4-mapped IPv6 address is the IPv4 client it maps: it shares that
+// client's budget, and not one with every other mapped address.
+func TestNew_IPv4MappedClientSharesItsIPv4Budget(t *testing.T) {
+	handler := limited(t)
+
+	get(handler, "192.0.2.1:1234")
+	get(handler, "[::ffff:192.0.2.1]:1234")
+	if rec := get(handler, "[::ffff:c000:201]:1234"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("mapped 192.0.2.1: status = %d, want 429", rec.Code)
+	}
+	if rec := get(handler, "[::ffff:192.0.2.2]:1234"); rec.Code != http.StatusNoContent {
+		t.Errorf("mapped 192.0.2.2: status = %d, want 204", rec.Code)
+	}
+}
+
 // A RemoteAddr with no port is keyed as it is rather than rejected.
 func TestNew_RemoteAddrWithoutPortIsKeyed(t *testing.T) {
 	handler := limited(t)

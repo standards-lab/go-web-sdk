@@ -1,9 +1,9 @@
-github.com/go-chi/httprate v0.16.0 h1:8V5DH9j6pSK6UQoBsTpvMyFxycqaKEIToyPKzHJjUa8=
-github.com/go-chi/httprate v0.16.0/go.mod h1:A8lo+qRhk+s9LiuP5saS7XCGDXRXMcrueq0NfIuCa/I=
+github.com/go-chi/httprate v0.16.1 h1:q2M8FmDsI4oEr1oRX43N+VeA0Ujd1tb/EasrSzXy87o=
+github.com/go-chi/httprate v0.16.1/go.mod h1:A8lo+qRhk+s9LiuP5saS7XCGDXRXMcrueq0NfIuCa/I=
 github.com/klauspost/cpuid/v2 v2.2.10 h1:tBs3QSyvjDyFTq3uoc/9xFpCuOsJQFNPiAhYdw2skhE=
 github.com/klauspost/cpuid/v2 v2.2.10/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
-github.com/standards-lab/go-core v0.5.0 h1:ZWe5o92DIICVH43B5TNXTfyG5H/O6Vs9CsBUUTS8whI=
-github.com/standards-lab/go-core v0.5.0/go.mod h1:Yl/R+gM9YWczsePBCKXdPGh3FSdZ/5i8SapLIh3BDHU=
+github.com/standards-lab/go-core v0.6.0 h1:Ywf+gyndx4+PV2DtzmAxsgnMJWIRS+RpQJhuvdUVq60=
+github.com/standards-lab/go-core v0.6.0/go.mod h1:Yl/R+gM9YWczsePBCKXdPGh3FSdZ/5i8SapLIh3BDHU=
 github.com/standards-lab/go-web-sdk v0.14.0 h1:MB9ZxCbihOi64da0n1GDfVRgsgaoMA+4dktAfWz3wx4=
 github.com/standards-lab/go-web-sdk v0.14.0/go.mod h1:5vBlt5szeqrejedHJGxjAh0Nb5wouMlTJ7OS64sylu4=
 github.com/zeebo/assert v1.3.0 h1:g7C04CbJuIDKNPFHmsk4hwZDO5O+kntRxzaUoNXj+IQ=

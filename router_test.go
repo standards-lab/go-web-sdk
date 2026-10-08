@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/standards-lab/go-core/lifecycle"
 	"github.com/standards-lab/go-web-sdk"
 	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
@@ -93,7 +92,7 @@ func TestRouter_ProbesMountOutsideModuleMiddleware(t *testing.T) {
 
 	r := web.NewRouter()
 	r.Mount(web.NewModule(g))
-	web.RegisterHealth(r, lifecycle.New(), web.Problem{})
+	web.RegisterHealth(r, idleCoordinator(t), web.Problem{})
 
 	if got := handlertest.Get(r, web.HealthPath).Code; got != http.StatusOK {
 		t.Fatalf("GET %s = %d, want 200", web.HealthPath, got)

@@ -18,7 +18,7 @@ only points to it. An unbuilt capability gains written detail when a session is 
   `NewModule`, `Router`), the problem model (`Problem`, `ErrorWriter`, `Handle`), the read
   contract (`ParseQuery`, `NewPage`), the request helpers (`IfMatch`, `DecodeJSON`,
   `ReadUpload`, `PathUUID`), the object proxy (`WriteObject`, `Attachment`), the probes
-  (`RegisterHealth`), `Recorder`, and the `Middleware` type with `Chain`. Built.
+  (`RegisterHealth`, `Doctor`), `Recorder`, and the `Middleware` type with `Chain`. Built.
 - **middleware** (`middleware/doc.go`) holds the hand-rolled middleware, written in this
   repository, and their chain order. `middleware/rate-limit`, built over a third-party library,
   is the first sourced sub-module. Built.

@@ -103,7 +103,8 @@ func (c *Config) finalized() bool {
 }
 
 // New limits each client to cfg.Requests per cfg.Window, keying a client by
-// its remote address with IPv6 reduced to its /64. It answers a request over
+// its remote address with IPv6 reduced to its /64 and an IPv4-mapped IPv6
+// address keyed as its IPv4 address. It answers a request over
 // the limit with a 429 problem and Retry-After, the window in whole seconds.
 // Every response it judges carries X-RateLimit-Limit, X-RateLimit-Remaining,
 // and X-RateLimit-Reset. It panics on a Config that has not passed Finalize.
