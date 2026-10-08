@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -311,29 +313,12 @@ func TestRegisterHealth_QueriesCoordinatorLive(t *testing.T) {
 	mux := http.NewServeMux()
 	web.RegisterHealth(mux, lc, web.Problem{})
 
-	databaseReady := func() any {
-		t.Helper()
-		body := decodeBody(t, handlertest.Get(mux, web.ReadyPath))
-		checks, ok := body["checks"].([]any)
-		if !ok || len(checks) != 2 {
-			t.Fatalf("checks = %v, want the lifecycle check plus database, inferred from the graph", body["checks"])
-		}
-		if first, ok := checks[0].(map[string]any); !ok || first["name"] != "lifecycle" {
-			t.Fatalf("checks[0] = %v, want the coordinator's lifecycle check first", checks[0])
-		}
-		check, ok := checks[1].(map[string]any)
-		if !ok || check["name"] != "database" {
-			t.Fatalf("checks[1] = %v, want the database node's check", checks[1])
-		}
-		return check["ready"]
-	}
-
-	if got := databaseReady(); got != false {
-		t.Errorf("database ready = %v, want false", got)
+	if got, want := readyChecks(t, handlertest.Get(mux, web.ReadyPath).Body.Bytes()), []string{"lifecycle=false", "database=false"}; !slices.Equal(got, want) {
+		t.Errorf("checks = %v, want %v", got, want)
 	}
 	sys.Get(database).ready.Store(true)
-	if got := databaseReady(); got != true {
-		t.Errorf("database ready = %v after it became ready, want true read live", got)
+	if got, want := readyChecks(t, handlertest.Get(mux, web.ReadyPath).Body.Bytes()), []string{"lifecycle=false", "database=true"}; !slices.Equal(got, want) {
+		t.Errorf("checks after database became ready = %v, want %v, read live", got, want)
 	}
 }
 
@@ -385,17 +370,17 @@ func TestRegisterHealth_ReadsAReadinessNodeLive(t *testing.T) {
 	sys := build(t, g, mux)
 
 	unbound := []string{"lifecycle=false"}
-	if got := readyChecks(t, duringBuild); !slices.Equal(got, unbound) {
+	if got := readyChecks(t, duringBuild.Body.Bytes()); !slices.Equal(got, unbound) {
 		t.Errorf("checks during Build = %v, want %v", got, unbound)
 	}
-	if got := readyChecks(t, handlertest.Get(sys.Get(mux), web.ReadyPath)); !slices.Equal(got, unbound) {
+	if got := readyChecks(t, handlertest.Get(sys.Get(mux), web.ReadyPath).Body.Bytes()); !slices.Equal(got, unbound) {
 		t.Errorf("checks before New = %v, want %v", got, unbound)
 	}
 
 	lifecycle.New(sys, coordinatorConfig)
 	sys.Get(database).ready.Store(true)
 	want := []string{"lifecycle=false", "queue=false", "database=true", "search=false"}
-	if got := readyChecks(t, handlertest.Get(sys.Get(mux), web.ReadyPath)); !slices.Equal(got, want) {
+	if got := readyChecks(t, handlertest.Get(sys.Get(mux), web.ReadyPath).Body.Bytes()); !slices.Equal(got, want) {
 		t.Errorf("checks once New bound the Readiness = %v, want %v", got, want)
 	}
 }
@@ -430,14 +415,15 @@ func TestRegisterHealth_ServerNodeAddsNoCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET %s: %v", web.ReadyPath, err)
 	}
-	rec := httptest.NewRecorder()
-	rec.Code = res.StatusCode
-	_, _ = rec.Body.ReadFrom(res.Body)
+	body, err := io.ReadAll(res.Body)
 	_ = res.Body.Close()
-	if rec.Code != http.StatusOK {
-		t.Errorf("readyz = %d, want 200", rec.Code)
+	if err != nil {
+		t.Fatalf("read %s body: %v", web.ReadyPath, err)
 	}
-	if got, want := readyChecks(t, rec), []string{"lifecycle=true"}; !slices.Equal(got, want) {
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("readyz = %d, want 200", res.StatusCode)
+	}
+	if got, want := readyChecks(t, body), []string{"lifecycle=true"}; !slices.Equal(got, want) {
 		t.Errorf("checks = %v, want %v: the Server is not a readiness check", got, want)
 	}
 
@@ -445,23 +431,29 @@ func TestRegisterHealth_ServerNodeAddsNoCheck(t *testing.T) {
 	if err := recvOrFail(t, done, "Run to return"); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
+	// The Coordinator shut the Server down: its listener is closed, so a
+	// fresh connection is refused.
+	if conn, err := net.Dial("tcp", sys.Get(server).Addr()); err == nil {
+		_ = conn.Close()
+		t.Errorf("dial %s after Run returned succeeded, want the Server shut down", sys.Get(server).Addr())
+	}
 }
 
-// readyChecks returns the checks a /readyz response carries, each as
+// readyChecks returns the checks a /readyz response body carries, each as
 // "name=ready", in the order the probe reported them.
-func readyChecks(t *testing.T, rec *httptest.ResponseRecorder) []string {
+func readyChecks(t *testing.T, body []byte) []string {
 	t.Helper()
-	var body struct {
+	var decoded struct {
 		Checks []struct {
 			Name  string `json:"name"`
 			Ready bool   `json:"ready"`
 		} `json:"checks"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode body %q: %v", rec.Body.String(), err)
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("decode body %q: %v", body, err)
 	}
-	out := make([]string, 0, len(body.Checks))
-	for _, c := range body.Checks {
+	out := make([]string, 0, len(decoded.Checks))
+	for _, c := range decoded.Checks {
 		out = append(out, fmt.Sprintf("%s=%t", c.Name, c.Ready))
 	}
 	return out
