@@ -10,8 +10,8 @@
 // then, with the fix named, rather than failing a request later: an
 // unfinalized [Config], a nil logger or writer, a nil [Doctor] passed to
 // [RegisterHealth], a malformed prefix, a duplicate pattern, or a mutation
-// of a group [NewModule] sealed. A constructor takes what the value cannot work without, including the
-// *slog.Logger it reports through. Optional behavior is set by a method
+// of a group [NewModule] sealed. A constructor takes what the value cannot
+// work without, including the *slog.Logger it reports through. Optional behavior is set by a method
 // called during wiring: [Group.Use], [Group.Mount], [Group.SetErrorWriter],
 // [Group.SetNotFound], [Group.SetMethodNotAllowed], [Router.Use],
 // [Router.SetNotFound], [Router.SetMethodNotAllowed], and
@@ -24,11 +24,11 @@
 // [Server.Start] binds on the calling goroutine and only then serves in the
 // background, so a bind failure is returned rather than lost, and
 // [Server.Err] reports a later serve failure. A *Server is a
-// lifecycle.Subsystem and a lifecycle.Monitored, so a composition root
-// defines it as a graph node's value and the Coordinator starts it, shuts
-// it down, and watches its Err, with no Monitor call. A [lifecycle.Readiness]
-// node lets the node that mounts the probes report the Coordinator that
-// lifecycle.New later binds it to:
+// [lifecycle.Subsystem] and a [lifecycle.Monitored], so a composition root
+// defines it as a graph node's value and the [lifecycle.Coordinator] starts
+// it, shuts it down, and watches its Err, with no Monitor call. A
+// [lifecycle.Readiness] node lets the node that mounts the probes report the
+// Coordinator that [lifecycle.New] later binds it to:
 //
 //	ready := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
 //		return new(lifecycle.Readiness), nil
@@ -44,8 +44,8 @@
 //	err = lifecycle.New(sys, lcCfg).Run(ctx)
 //
 // The server node uses what it serves, so it sits in a layer above them:
-// it starts after them and drains before them, and no request reaches the
-// readiness probe before every check it reads exists.
+// it starts after them and drains before them, so no request reaches a
+// handler before what it uses has started or after it has shut down.
 //
 //   - [Config] is the server's address, timeouts, header limit, and
 //     transfer rate. Its pointer fields are tri-state: nil takes the default
@@ -54,9 +54,9 @@
 //   - [NewServer] builds the [Server] from a finalized Config, a handler, and
 //     the logger net/http's own diagnostics go to.
 //   - [Liveness] and [Readiness] are the probe handlers. [RegisterHealth]
-//     mounts them at [HealthPath] and [ReadyPath] over a [Doctor], a
-//     lifecycle.Coordinator or a lifecycle.Readiness, on a [Mounter]: an
-//     http.ServeMux or a [Router].
+//     mounts them at [HealthPath] and [ReadyPath] over a [Doctor], the
+//     readiness source a lifecycle.Coordinator and a lifecycle.Readiness
+//     both are, on a [Mounter]: an http.ServeMux or a [Router].
 //
 // # Routing
 //
