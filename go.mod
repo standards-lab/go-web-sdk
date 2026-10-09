@@ -2,4 +2,4 @@ module github.com/standards-lab/go-web-sdk
 
 go 1.27
 
-require github.com/standards-lab/go-core v0.6.0
+require github.com/standards-lab/go-core v0.7.0
