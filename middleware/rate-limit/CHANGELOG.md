@@ -12,9 +12,9 @@ only; the base module keeps its own.
 
 ### Changed
 
-- **Breaking:** Built against `github.com/standards-lab/go-web-sdk v0.15.1` and
-  `github.com/standards-lab/go-core v0.7.0`. An importer still on go-core's `lifecycle.Service`,
-  `Add`, or stages breaks, since the requirements pull go-core v0.6.0's lifecycle into its build.
+- **Breaking:** The `go-web-sdk` requirement is v0.15.1 and the `go-core` requirement v0.7.0.
+  An importer still on go-core's `lifecycle.Service`, `Add`, or stages breaks, since the
+  requirements pull go-core v0.6.0's lifecycle into its build.
 - Built against `github.com/go-chi/httprate v0.16.1`, which changes the bucketing: an
   IPv4-mapped IPv6 address (`::ffff:192.0.2.1`) is now keyed as its IPv4 address and shares that
   address's counter. Under v0.16.0 it was reduced to the `::` /64 prefix, one counter every

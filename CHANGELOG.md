@@ -10,8 +10,8 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ### Changed
 
-- The `go-core` requirement is v0.7.0, whose logger writes each record's time in UTC, whatever
-  the host's zone. The SDK's own behavior is unchanged.
+- The `go-core` requirement is v0.7.0, whose logger writes each record's time in `time.UTC`,
+  whatever `time.Local` is. The SDK's own behavior is unchanged.
 
 ## [v0.15.0] - 2026-10-08
 
