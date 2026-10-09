@@ -6,6 +6,13 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.15.1] - 2026-10-09
+
+### Changed
+
+- The `go-core` requirement is v0.7.0, whose logger writes each record's time in `time.UTC`,
+  whatever `time.Local` is. The SDK's own behavior is unchanged.
+
 ## [v0.15.0] - 2026-10-08
 
 ### Added
@@ -470,7 +477,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.1...HEAD
+[v0.15.1]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.0...v0.15.1
 [v0.15.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.14.0...v0.15.0
 [v0.14.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.13.0...v0.14.0
 [v0.13.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.12.0...v0.13.0
