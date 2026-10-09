@@ -8,10 +8,13 @@ only; the base module keeps its own.
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-10-09
+
 ### Changed
 
-- Built against `github.com/standards-lab/go-web-sdk v0.15.0` and
-  `github.com/standards-lab/go-core v0.6.0`.
+- **Breaking:** Built against `github.com/standards-lab/go-web-sdk v0.15.1` and
+  `github.com/standards-lab/go-core v0.7.0`. An importer still on go-core's `lifecycle.Service`,
+  `Add`, or stages breaks, since the requirements pull go-core v0.6.0's lifecycle into its build.
 - Built against `github.com/go-chi/httprate v0.16.1`, which changes the bucketing: an
   IPv4-mapped IPv6 address (`::ffff:192.0.2.1`) is now keyed as its IPv4 address and shares that
   address's counter. Under v0.16.0 it was reduced to the `::` /64 prefix, one counter every
@@ -51,7 +54,8 @@ The first release of the rate-limiting middleware, against
   `Retry-After` header. `Config` loads through go-core's config contract under the block
   `rate_limit`, defaulting to 300 requests per minute.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.2.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.3.0...HEAD
+[v0.3.0]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.2.0...middleware/rate-limit/v0.3.0
 [v0.2.0]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.1...middleware/rate-limit/v0.2.0
 [v0.1.1]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.0...middleware/rate-limit/v0.1.1
 [v0.1.0]: https://github.com/standards-lab/go-web-sdk/releases/tag/middleware/rate-limit/v0.1.0
