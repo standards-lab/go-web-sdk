@@ -97,12 +97,10 @@ var (
 // RegisterHealth mounts [Liveness] at GET /healthz and [Readiness] at GET
 // /readyz. The readiness probe checks d itself, as "lifecycle", then d's
 // Checks: for a Coordinator, or a Readiness bound to one, the System's
-// lifecycle.ReadyStarter values, those that implement both
-// lifecycle.Starter and lifecycle.ReadinessChecker, in layer order. A
-// value with Ready and no Start is not among them. It reads d on every
-// request, so a
-// Readiness bound after this call reports its Coordinator from then on;
-// until then it reports "lifecycle" alone, not ready. It panics on a nil d.
+// [lifecycle.ReadyStarter] values in layer order, so a value with Ready and
+// no Start adds no check. It reads d on every request, so a Readiness bound
+// after this call reports its Coordinator from then on; until then it
+// reports "lifecycle" alone, not ready. It panics on a nil d.
 func RegisterHealth(m Mounter, d Doctor, notReady Problem) {
 	if d == nil {
 		panic("web: RegisterHealth requires a Doctor; pass the *lifecycle.Coordinator or a *lifecycle.Readiness node's value")
