@@ -6,6 +6,15 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.15.2] - 2026-10-12
+
+### Changed
+
+- The `go-core` requirement is v0.8.0, whose Coordinator infers a readiness check only from a node
+  value that implements both `lifecycle.Starter` and `lifecycle.ReadinessChecker`.
+  `RegisterHealth`'s `/readyz` no longer lists node values that have `Ready` but no `Start`, in
+  either its 200 or its 503 body. The SDK's API is unchanged.
+
 ## [v0.15.1] - 2026-10-09
 
 ### Changed
@@ -477,7 +486,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.2...HEAD
+[v0.15.2]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.1...v0.15.2
 [v0.15.1]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.0...v0.15.1
 [v0.15.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.14.0...v0.15.0
 [v0.14.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.13.0...v0.14.0

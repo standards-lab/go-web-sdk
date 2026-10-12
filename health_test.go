@@ -345,14 +345,14 @@ func TestRegisterHealth_RejectsOtherMethods(t *testing.T) {
 	}
 }
 
-// TestRegisterHealth_QueriesCoordinatorLive pins that a ReadinessChecker
-// node defined in the graph appears on /readyz once New runs, after the
+// TestRegisterHealth_QueriesCoordinatorLive pins that a Starter with Ready
+// defined in the graph appears on /readyz once New runs, after the
 // coordinator's own "lifecycle" check, and that its state is read on every
 // request rather than snapshotted when RegisterHealth mounts the probe.
 func TestRegisterHealth_QueriesCoordinatorLive(t *testing.T) {
 	g := graph.New()
-	database := g.Define("database", func(*graph.Scope) (*toggleChecker, error) {
-		return &toggleChecker{}, nil
+	database := g.Define("database", func(*graph.Scope) (*toggleStarter, error) {
+		return &toggleStarter{}, nil
 	})
 	sys := build(t, g, database)
 	lc := lifecycle.New(sys, coordinatorConfig)
@@ -384,7 +384,7 @@ func TestRegisterHealth_PanicsOnNilDoctor(t *testing.T) {
 // constructor, over a lifecycle.Readiness the Coordinator does not exist yet
 // to bind. Until New binds it, /readyz reports "lifecycle" alone, not ready;
 // once New has, the same probe reports "lifecycle" then the System's
-// ReadinessChecker nodes, layer 0 before layer 1 and, within a layer, in
+// Starter nodes with Ready, layer 0 before layer 1 and, within a layer, in
 // definition order rather than the order the constructors reached them.
 // Nothing else registers a check.
 func TestRegisterHealth_ReadsAReadinessNodeLive(t *testing.T) {
@@ -392,15 +392,15 @@ func TestRegisterHealth_ReadsAReadinessNodeLive(t *testing.T) {
 	readiness := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
 		return new(lifecycle.Readiness), nil
 	})
-	queue := g.Define("queue", func(*graph.Scope) (*toggleChecker, error) {
-		return &toggleChecker{}, nil
+	queue := g.Define("queue", func(*graph.Scope) (*toggleStarter, error) {
+		return &toggleStarter{}, nil
 	})
-	database := g.Define("database", func(*graph.Scope) (*toggleChecker, error) {
-		return &toggleChecker{}, nil
+	database := g.Define("database", func(*graph.Scope) (*toggleStarter, error) {
+		return &toggleStarter{}, nil
 	})
-	search := g.Define("search", func(s *graph.Scope) (*toggleChecker, error) {
+	search := g.Define("search", func(s *graph.Scope) (*toggleStarter, error) {
 		s.Use(database)
-		return &toggleChecker{}, nil
+		return &toggleStarter{}, nil
 	})
 	var duringBuild *httptest.ResponseRecorder
 	mux := g.Define("mux", func(s *graph.Scope) (*http.ServeMux, error) {
@@ -428,6 +428,85 @@ func TestRegisterHealth_ReadsAReadinessNodeLive(t *testing.T) {
 	want := []string{"lifecycle=false", "queue=false", "database=true", "search=false"}
 	if got := readyChecks(t, handlertest.Get(sys.Get(mux), web.ReadyPath).Body.Bytes()); !slices.Equal(got, want) {
 		t.Errorf("checks once New bound the Readiness = %v, want %v", got, want)
+	}
+}
+
+// TestRegisterHealth_ListsOnlyStarterChecks runs a System holding a Starter
+// with Ready ("database") and a value with Ready but no Start ("view"),
+// with the probes over the Coordinator and over a Readiness bound to it.
+// Either way /readyz lists "lifecycle" first, then "database"; "view" is
+// absent from the 200 once everything is ready and from the 503 once the
+// Starter is not, though view's own Ready would fail it.
+func TestRegisterHealth_ListsOnlyStarterChecks(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// mount returns the mux serving the probes over the Doctor under
+		// test, given the System, its Coordinator, and the mux node that
+		// mounted the probes over the Readiness node.
+		mount func(*graph.System, *lifecycle.Coordinator, *graph.Node[*http.ServeMux]) http.Handler
+	}{
+		{"coordinator", func(_ *graph.System, lc *lifecycle.Coordinator, _ *graph.Node[*http.ServeMux]) http.Handler {
+			mux := http.NewServeMux()
+			web.RegisterHealth(mux, lc, web.Problem{})
+			return mux
+		}},
+		{"readiness", func(sys *graph.System, _ *lifecycle.Coordinator, muxNode *graph.Node[*http.ServeMux]) http.Handler {
+			return sys.Get(muxNode)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := graph.New()
+			readiness := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
+				return new(lifecycle.Readiness), nil
+			})
+			database := g.Define("database", func(*graph.Scope) (*toggleStarter, error) {
+				return &toggleStarter{}, nil
+			})
+			view := g.Define("view", func(*graph.Scope) (*toggleChecker, error) {
+				return &toggleChecker{}, nil
+			})
+			muxNode := g.Define("mux", func(s *graph.Scope) (*http.ServeMux, error) {
+				m := http.NewServeMux()
+				web.RegisterHealth(m, s.Use(readiness), web.Problem{})
+				return m, nil
+			})
+			sys := build(t, g, muxNode, database, view)
+			lc := lifecycle.New(sys, coordinatorConfig)
+			h := tc.mount(sys, lc, muxNode)
+
+			ready := make(chan struct{})
+			lc.OnReady(func() { close(ready) })
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan error, 1)
+			go func() { done <- lc.Run(ctx) }()
+			defer func() {
+				cancel()
+				if err := recvOrFail(t, done, "Run to return"); err != nil {
+					t.Errorf("Run: %v", err)
+				}
+			}()
+			recvOrFail(t, ready, "coordinator to become ready")
+
+			sys.Get(database).ready.Store(true)
+			sys.Get(view).ready.Store(true)
+			rec := handlertest.Get(h, web.ReadyPath)
+			if rec.Code != http.StatusOK {
+				t.Errorf("readyz = %d with every check ready, want 200", rec.Code)
+			}
+			if got, want := readyChecks(t, rec.Body.Bytes()), []string{"lifecycle=true", "database=true"}; !slices.Equal(got, want) {
+				t.Errorf("checks in the 200 = %v, want %v: no Check for a value with Ready and no Start", got, want)
+			}
+
+			sys.Get(database).ready.Store(false)
+			sys.Get(view).ready.Store(false)
+			rec = handlertest.Get(h, web.ReadyPath)
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Errorf("readyz = %d with the Starter not ready, want 503", rec.Code)
+			}
+			if got, want := readyChecks(t, rec.Body.Bytes()), []string{"lifecycle=true", "database=false"}; !slices.Equal(got, want) {
+				t.Errorf("checks in the 503 = %v, want %v: no Check for a value with Ready and no Start", got, want)
+			}
+		})
 	}
 }
 
@@ -552,8 +631,18 @@ func (s *blockingStarter) Start(context.Context) error {
 }
 
 // toggleChecker is a lifecycle.ReadinessChecker whose state a test flips.
+// It has no Start, so go-core infers no lifecycle.Check from it.
 type toggleChecker struct {
 	ready atomic.Bool
 }
 
 func (c *toggleChecker) Ready() bool { return c.ready.Load() }
+
+// toggleStarter is a toggleChecker that is also a lifecycle.Starter, whose
+// Start returns at once: the least a node value needs for go-core to infer
+// a lifecycle.Check from it.
+type toggleStarter struct {
+	toggleChecker
+}
+
+func (*toggleStarter) Start(context.Context) error { return nil }
