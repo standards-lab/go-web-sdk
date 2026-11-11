@@ -33,8 +33,7 @@ type Service struct {
 
 // Run builds Roots, Server, and LifecycleConfig from Graph, runs the System
 // under a [lifecycle.Coordinator] configured with LifecycleConfig's value
-// until ctx ends, and returns the process exit code. It reports its outcome
-// once:
+// until ctx ends, and returns the process exit code. It reports:
 //
 //   - once startup completes, it logs "server ready" on Logger's value, with
 //     the server's bound address as addr

@@ -340,7 +340,11 @@ func TestService_PanicsWhenLoggerNotReached(t *testing.T) {
 	})
 
 	panicsWith(t, "Logger", func() { s.value().Run(context.Background(), io.Discard) })
-	if addr := s.builtServer().Addr(); !strings.HasSuffix(addr, ":0") {
+	srv := s.builtServer()
+	if srv == nil {
+		t.Fatal("the server was not constructed: the panic came before the Build")
+	}
+	if addr := srv.Addr(); !strings.HasSuffix(addr, ":0") {
 		t.Errorf("server Addr = %q, want the configured port 0: the server started", addr)
 	}
 }
