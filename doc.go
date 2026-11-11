@@ -28,18 +28,22 @@
 // defines it as a graph node's value and the [lifecycle.Coordinator] starts
 // it, shuts it down, and watches its Err, with no Monitor call. A
 // [lifecycle.Readiness] node lets the node that mounts the probes report the
-// Coordinator that [lifecycle.New] later binds it to:
+// Coordinator that [Service.Run] later creates and binds it to:
 //
 //	ready := g.Fresh[lifecycle.Readiness]("readiness")
 //	server := g.Define("server", func(s *graph.Scope) (*web.Server, error) {
 //		mux := http.NewServeMux()
 //		web.RegisterHealth(mux, s.Use(ready), web.Problem{})
 //		mux.Handle("/", s.Use(api))
-//		return web.NewServer(cfg, mux, logger), nil
+//		return web.NewServer(cfg, mux, s.Use(logger)), nil
 //	})
-//	sys, err := g.Build(server)
-//	// ...
-//	err = lifecycle.New(sys, lcCfg).Run(ctx)
+//	code := web.Service{
+//		Graph:           g,
+//		LifecycleConfig: lcConfig,
+//		Logger:          logger,
+//		Server:          server,
+//		Roots:           []graph.Ref{server},
+//	}.Run(ctx, os.Stderr)
 //
 // The server node uses what it serves, so it sits in a layer above them:
 // it starts after them and drains before them, so no request reaches a
@@ -55,6 +59,10 @@
 //     mounts them at [HealthPath] and [ReadyPath] over a [Doctor], the
 //     readiness source a lifecycle.Coordinator and a lifecycle.Readiness
 //     both are, on a [Mounter]: an http.ServeMux or a [Router].
+//   - [Service] is the service runner: [Service.Run] builds the graph's
+//     roots with the server and lifecycle config nodes, runs the System
+//     under a [lifecycle.Coordinator] until ctx ends, logs the server ready
+//     with its bound address, and returns the process exit code.
 //
 // # Routing
 //

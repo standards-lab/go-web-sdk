@@ -46,6 +46,9 @@ Its repository-level principles:
     groups, modules, and the router. Its read and write timeouts are tight, so a route that moves
     a large body sets its own deadlines through `Transfer`, from the body's size and the slowest
     pace a client is allowed
+  - the service runner: `web.Service{...}.Run(ctx, os.Stderr)` builds the service's graph, runs
+    it under go-core's lifecycle Coordinator until the context ends, logs the server ready with
+    its bound address, and returns the process exit code
   - RFC 9457 problem responses and a JSON writer
   - the read contract: a request's paging, sort, cursor, and filters parsed as one `Query`, and
     the `Page` envelope with its total, `more`, and `next`
