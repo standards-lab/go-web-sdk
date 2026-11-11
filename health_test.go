@@ -281,9 +281,7 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 // once OnReady fires, 503 after Run returns; /healthz answers 200 throughout.
 func TestReadiness_TracksReadinessNode(t *testing.T) {
 	g := graph.New()
-	readiness := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
-		return new(lifecycle.Readiness), nil
-	})
+	readiness := g.Fresh[lifecycle.Readiness]("readiness")
 	warmup := g.Define("warmup", func(*graph.Scope) (*blockingStarter, error) {
 		return &blockingStarter{started: make(chan struct{}), release: make(chan struct{})}, nil
 	})
@@ -351,9 +349,7 @@ func TestRegisterHealth_RejectsOtherMethods(t *testing.T) {
 // request rather than snapshotted when RegisterHealth mounts the probe.
 func TestRegisterHealth_QueriesCoordinatorLive(t *testing.T) {
 	g := graph.New()
-	database := g.Define("database", func(*graph.Scope) (*toggleStarter, error) {
-		return &toggleStarter{}, nil
-	})
+	database := g.Fresh[toggleStarter]("database")
 	sys := build(t, g, database)
 	lc := lifecycle.New(sys, coordinatorConfig)
 	mux := http.NewServeMux()
@@ -389,15 +385,9 @@ func TestRegisterHealth_PanicsOnNilDoctor(t *testing.T) {
 // Nothing else registers a check.
 func TestRegisterHealth_ReadsAReadinessNodeLive(t *testing.T) {
 	g := graph.New()
-	readiness := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
-		return new(lifecycle.Readiness), nil
-	})
-	queue := g.Define("queue", func(*graph.Scope) (*toggleStarter, error) {
-		return &toggleStarter{}, nil
-	})
-	database := g.Define("database", func(*graph.Scope) (*toggleStarter, error) {
-		return &toggleStarter{}, nil
-	})
+	readiness := g.Fresh[lifecycle.Readiness]("readiness")
+	queue := g.Fresh[toggleStarter]("queue")
+	database := g.Fresh[toggleStarter]("database")
 	search := g.Define("search", func(s *graph.Scope) (*toggleStarter, error) {
 		s.Use(database)
 		return &toggleStarter{}, nil
@@ -456,15 +446,9 @@ func TestRegisterHealth_ListsOnlyStarterChecks(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			g := graph.New()
-			readiness := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
-				return new(lifecycle.Readiness), nil
-			})
-			database := g.Define("database", func(*graph.Scope) (*toggleStarter, error) {
-				return &toggleStarter{}, nil
-			})
-			view := g.Define("view", func(*graph.Scope) (*toggleChecker, error) {
-				return &toggleChecker{}, nil
-			})
+			readiness := g.Fresh[lifecycle.Readiness]("readiness")
+			database := g.Fresh[toggleStarter]("database")
+			view := g.Fresh[toggleChecker]("view")
 			muxNode := g.Define("mux", func(s *graph.Scope) (*http.ServeMux, error) {
 				m := http.NewServeMux()
 				web.RegisterHealth(m, s.Use(readiness), web.Problem{})
@@ -516,9 +500,7 @@ func TestRegisterHealth_ListsOnlyStarterChecks(t *testing.T) {
 // its only check, and shuts it down when Run ends.
 func TestRegisterHealth_ServerNodeAddsNoCheck(t *testing.T) {
 	g := graph.New()
-	readiness := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
-		return new(lifecycle.Readiness), nil
-	})
+	readiness := g.Fresh[lifecycle.Readiness]("readiness")
 	cfg := finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)})
 	server := g.Define("server", func(s *graph.Scope) (*web.Server, error) {
 		mux := http.NewServeMux()

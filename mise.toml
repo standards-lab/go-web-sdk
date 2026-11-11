@@ -1,6 +1,6 @@
 [tools]
-go = "1.27.2"
-golangci-lint = "2.14.0"
+go = "1.27.4"
+golangci-lint = "2.15.0"
 jq = "1.8.2"
 
 # Space-separated list of module directories, kept in sync with the go.work

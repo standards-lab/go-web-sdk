@@ -30,9 +30,7 @@
 // [lifecycle.Readiness] node lets the node that mounts the probes report the
 // Coordinator that [lifecycle.New] later binds it to:
 //
-//	ready := g.Define("readiness", func(*graph.Scope) (*lifecycle.Readiness, error) {
-//		return new(lifecycle.Readiness), nil
-//	})
+//	ready := g.Fresh[lifecycle.Readiness]("readiness")
 //	server := g.Define("server", func(s *graph.Scope) (*web.Server, error) {
 //		mux := http.NewServeMux()
 //		web.RegisterHealth(mux, s.Use(ready), web.Problem{})
