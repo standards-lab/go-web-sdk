@@ -8,6 +8,17 @@ only; the base module keeps its own.
 
 ## [Unreleased]
 
+## [v0.5.0] - 2026-11-11
+
+### Changed
+
+- **Breaking:** The `go-core` requirement is v0.12.0, whose `reactor.New` and
+  `event.NewRecorder` take a trailing Options struct in place of variadic option functions.
+- **Breaking:** The `go-web-sdk` requirement is v0.17.0, which carries the same go-core
+  requirement, takes `middleware.RequestID`'s options as a `RequestIDOptions` value, and removes
+  `web.WriteProblem`. The limited and failed responses are written with `Problem.WriteFor` and
+  are unchanged.
+
 ## [v0.4.0] - 2026-11-11
 
 ### Changed
@@ -68,7 +79,8 @@ The first release of the rate-limiting middleware, against
   `Retry-After` header. `Config` loads through go-core's config contract under the block
   `rate_limit`, defaulting to 300 requests per minute.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.4.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.5.0...HEAD
+[v0.5.0]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.4.0...middleware/rate-limit/v0.5.0
 [v0.4.0]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.3.0...middleware/rate-limit/v0.4.0
 [v0.3.0]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.2.0...middleware/rate-limit/v0.3.0
 [v0.2.0]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.1...middleware/rate-limit/v0.2.0
