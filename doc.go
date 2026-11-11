@@ -16,9 +16,9 @@
 // Optional behavior is set by a method called during wiring: [Group.Use],
 // [Group.Mount], [Group.SetErrorWriter], [Group.SetNotFound],
 // [Group.SetMethodNotAllowed], [Router.Use], [Router.SetNotFound],
-// [Router.SetMethodNotAllowed], and [ErrorWriter.Detail]. Configuration accumulated from files and the
-// environment is a struct instead, as [Config] is, loaded through go-core's
-// config package.
+// [Router.SetMethodNotAllowed], and [ErrorWriter.Detail]. Configuration
+// accumulated from files and the environment is a struct instead, as
+// [Config] is, loaded through go-core's config package.
 //
 // # Server lifecycle
 //
