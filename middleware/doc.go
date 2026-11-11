@@ -5,8 +5,7 @@
 // each symbol's own documentation states its contract.
 //
 //   - [RequestID] gives each request a correlation id, echoed as
-//     [RequestIDHeader]; [WithTrustedHeader] and [WithIDSource] are the
-//     [RequestIDOption] values that take it from upstream.
+//     [RequestIDHeader]; [RequestIDOptions] takes it from upstream instead.
 //   - [RequestLogger] logs one record per request.
 //   - [Recoverer] turns a handler's panic into a logged 500 problem.
 //   - [Timeout] gives the next handler's context a deadline.

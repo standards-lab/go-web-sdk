@@ -12,56 +12,38 @@ import (
 // correlation id.
 const RequestIDHeader = "X-Request-Id"
 
-// RequestIDOption configures [RequestID].
-type RequestIDOption func(*requestIDConfig)
+// RequestIDOptions configures [RequestID]. The zero value trusts nothing
+// upstream and generates every id.
+type RequestIDOptions struct {
+	// Source is asked first for the id, such as a tracing layer's function
+	// returning the request's trace id; its return is used verbatim. A
+	// Source that returns "" declines, and a nil Source is unset.
+	Source func(*http.Request) string
 
-// requestIDConfig is the settled configuration of one RequestID middleware.
-type requestIDConfig struct {
-	source func(*http.Request) string
-	header string
-}
-
-// WithIDSource supplies the function [RequestID] asks first for an id, such
-// as a tracing layer's function returning the request's trace id. A function
-// that returns "" declines. It panics on a nil fn.
-func WithIDSource(fn func(*http.Request) string) RequestIDOption {
-	if fn == nil {
-		panic("middleware: WithIDSource requires a non-nil source")
-	}
-	return func(c *requestIDConfig) { c.source = fn }
-}
-
-// WithTrustedHeader names an inbound header whose value [RequestID] echoes
-// as the id, for a deployment whose reverse proxy assigns one; no header is
-// trusted otherwise. It panics on an empty name.
-func WithTrustedHeader(name string) RequestIDOption {
-	if name == "" {
-		panic("middleware: WithTrustedHeader requires a header name")
-	}
-	return func(c *requestIDConfig) { c.header = name }
+	// TrustedHeader names an inbound header whose value is echoed as the id,
+	// for a deployment whose reverse proxy assigns one. The name is matched
+	// case-insensitively. Empty, the default, trusts no header: any client
+	// can send one.
+	TrustedHeader string
 }
 
 // RequestID gives every request a correlation id, the first of these that
 // yields one:
 //
-//  1. The source function from [WithIDSource].
-//  2. The inbound header named by [WithTrustedHeader], when its value is 1
-//     to 128 visible ASCII characters.
+//  1. opts.Source's return, when Source is set and returns a non-empty id.
+//  2. The inbound header named by opts.TrustedHeader, when TrustedHeader is
+//     set and the header's value is 1 to 128 visible ASCII characters.
 //  3. A generated id: 16 bytes from crypto/rand, hex-encoded, the shape of an
 //     OpenTelemetry trace id.
 //
 // The id is set on the request's context ([web.WithRequestID]) and the
-// [RequestIDHeader] response header before the next handler runs.
-func RequestID(opts ...RequestIDOption) web.Middleware {
-	var cfg requestIDConfig
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&cfg)
-		}
-	}
+// [RequestIDHeader] response header before the next handler runs. A nil
+// Source or an empty TrustedHeader is skipped, so RequestID never panics on
+// its options and the zero [RequestIDOptions] generates every id.
+func RequestID(opts RequestIDOptions) web.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			id := cfg.id(r)
+			id := opts.id(r)
 			w.Header().Set(RequestIDHeader, id)
 			next.ServeHTTP(w, r.WithContext(web.WithRequestID(r.Context(), id)))
 		})
@@ -69,14 +51,14 @@ func RequestID(opts ...RequestIDOption) web.Middleware {
 }
 
 // id resolves r's correlation id by the precedence RequestID documents.
-func (c *requestIDConfig) id(r *http.Request) string {
-	if c.source != nil {
-		if id := c.source(r); id != "" {
+func (o RequestIDOptions) id(r *http.Request) string {
+	if o.Source != nil {
+		if id := o.Source(r); id != "" {
 			return id
 		}
 	}
-	if c.header != "" {
-		if id := r.Header.Get(c.header); validID(id) {
+	if o.TrustedHeader != "" {
+		if id := r.Header.Get(o.TrustedHeader); validID(id) {
 			return id
 		}
 	}

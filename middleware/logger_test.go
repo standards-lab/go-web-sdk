@@ -514,7 +514,7 @@ func TestRequestLogger_RouteAndIDNeedRequestIDOutside(t *testing.T) {
 			r := web.NewRouter()
 			r.Handle("GET /status", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 			logger := middleware.RequestLogger(slog.New(slog.NewJSONHandler(&buf, nil)))
-			h := tt.chain(r, logger, middleware.RequestID())
+			h := tt.chain(r, logger, middleware.RequestID(middleware.RequestIDOptions{}))
 
 			out := logged(t, h, &buf, httptest.NewRequest(http.MethodGet, "/status", nil))
 
