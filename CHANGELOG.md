@@ -6,6 +6,32 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.16.0] - 2026-11-11
+
+### Added
+
+- `Service` is the service runner: a composition root's `Graph`, its `LifecycleConfig`, `Logger`,
+  and `Server` nodes, and the `Roots` it builds. `Service.Run(ctx, stderr)` builds `Roots` with
+  `Server` and `LifecycleConfig`, runs the System under a `lifecycle.Coordinator` configured with
+  `LifecycleConfig`'s value until `ctx` ends, and returns go-core's `process` exit code. On
+  `Logger`'s value it logs "server ready" with the server's bound address once startup
+  completes, "server stopped" on a clean drain, and "service failed" with the Coordinator's
+  error, which names the failing node. A failed Build writes "service failed: <error>" to
+  `stderr`, logs nothing, and starts nothing. `Run` panics before anything starts on a nil
+  `Graph`, `LifecycleConfig`, `Logger`, or `Server`, an empty `Roots`, or a Build that did not
+  reach `Logger`.
+
+### Changed
+
+- **Breaking:** the `go-core` requirement is v0.11.0, which pulls its graph and lifecycle break
+  into every importer's build: `graph.Scope.After` is removed, and a node's order-only edges are
+  declared at `Define` with `graph.After`; `graph.Graph.Observe` takes `func(graph.Ref)` in
+  place of `func(string)`; a node name containing a comma or a newline panics at `Define`; and a
+  `lifecycle.Monitored` value's runtime failure ends the run as `run: <node>: <error>`. go-core's
+  changelog has the migration from v0.10.0. The SDK's existing API is unchanged.
+- The package documentation's wiring example defines the readiness node with `g.Fresh` and ends
+  in `web.Service{...}.Run`.
+
 ## [v0.15.2] - 2026-10-12
 
 ### Changed
@@ -486,7 +512,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.2...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.16.0...HEAD
+[v0.16.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.2...v0.16.0
 [v0.15.2]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.1...v0.15.2
 [v0.15.1]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.0...v0.15.1
 [v0.15.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.14.0...v0.15.0

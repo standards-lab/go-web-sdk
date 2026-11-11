@@ -9,8 +9,8 @@
 // An application is wired once, before it serves. A wiring mistake panics
 // then, with the fix named, rather than failing a request later: an
 // unfinalized [Config], a nil logger or writer, a nil [Doctor] passed to
-// [RegisterHealth], a malformed prefix, a duplicate pattern, or a mutation
-// of a group [NewModule] sealed. A constructor takes what the value cannot
+// [RegisterHealth], a malformed prefix, a duplicate pattern, a mutation
+// of a group [NewModule] sealed, or a [Service] missing a field. A constructor takes what the value cannot
 // work without, including the *slog.Logger it reports through. Optional behavior is set by a method
 // called during wiring: [Group.Use], [Group.Mount], [Group.SetErrorWriter],
 // [Group.SetNotFound], [Group.SetMethodNotAllowed], [Router.Use],
