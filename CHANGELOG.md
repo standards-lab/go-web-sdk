@@ -6,6 +6,65 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.17.0] - 2026-11-11
+
+Constructors and functions that take configuration take it as one value, not variadic option
+functions or a long parameter list: `middleware.RequestID` takes a `middleware.RequestIDOptions`,
+and a problem is written for a request with `web.Problem{...}.WriteFor`.
+
+### Added
+
+- `middleware.RequestIDOptions`, which configures `RequestID`. `Source` is asked first for
+  the id and `TrustedHeader` names the inbound header echoed next; a nil `Source` or an
+  empty `TrustedHeader` is unset, so the zero value generates every id.
+
+### Changed
+
+- **Breaking:** the `go-core` requirement is v0.12.0, which pulls its options break into every
+  importer's build: `reactor.New` takes a trailing `reactor.Options` and `event.NewRecorder` an
+  `event.Options` in place of variadic option functions, and `reactor.CancelWithin` returns a
+  `time.Duration`. go-core's changelog has the migration from v0.11.0. The SDK calls neither.
+- **Breaking:** `middleware.RequestID` takes a `RequestIDOptions` in place of variadic
+  `RequestIDOption` values. A call with no option passes `middleware.RequestIDOptions{}`. The id's
+  precedence is unchanged, and `RequestID` no longer panics on its options.
+- `middleware.Recoverer` and `middleware.ContentType` write their problems with
+  `Problem.WriteFor`; their responses are unchanged.
+
+### Removed
+
+- **Breaking:** `middleware.RequestIDOption` and the `WithIDSource` and `WithTrustedHeader` option
+  functions. Set `RequestIDOptions.Source` and `RequestIDOptions.TrustedHeader`.
+- **Breaking:** `web.WriteProblem`. Build a `web.Problem` and call its `WriteFor`, which sets
+  `Instance` to the request path and applies the same defaults.
+
+### Migrating from v0.16.0
+
+- **A RequestID's options become one `middleware.RequestIDOptions` value.** Leave a field unset
+  for its default.
+
+  ```go
+  // v0.16.0
+  mw := middleware.RequestID()
+  mw := middleware.RequestID(middleware.WithIDSource(traceID))
+  mw := middleware.RequestID(middleware.WithTrustedHeader("X-Amzn-Trace-Id"))
+
+  // v0.17.0
+  mw := middleware.RequestID(middleware.RequestIDOptions{})
+  mw := middleware.RequestID(middleware.RequestIDOptions{Source: traceID})
+  mw := middleware.RequestID(middleware.RequestIDOptions{TrustedHeader: "X-Amzn-Trace-Id"})
+  ```
+
+- **`WriteProblem`'s arguments become a `web.Problem` value.** An empty title still defaults to
+  the status text.
+
+  ```go
+  // v0.16.0
+  err := web.WriteProblem(w, r, http.StatusConflict, "", "order already shipped")
+
+  // v0.17.0
+  err := web.Problem{Status: http.StatusConflict, Detail: "order already shipped"}.WriteFor(w, r)
+  ```
+
 ## [v0.16.0] - 2026-11-11
 
 ### Added
@@ -514,7 +573,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.17.0...HEAD
+[v0.17.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.16.0...v0.17.0
 [v0.16.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.2...v0.16.0
 [v0.15.2]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.1...v0.15.2
 [v0.15.1]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.0...v0.15.1

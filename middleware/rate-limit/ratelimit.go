@@ -121,7 +121,7 @@ func New(cfg Config) web.Middleware {
 		*cfg.Requests, cfg.Window,
 	)
 	limited := func(w http.ResponseWriter, r *http.Request) {
-		_ = web.WriteProblem(w, r, http.StatusTooManyRequests, "", detail)
+		_ = web.Problem{Status: http.StatusTooManyRequests, Detail: detail}.WriteFor(w, r)
 	}
 
 	return httprate.LimitBy(*cfg.Requests, cfg.Window.Duration(), keyByRemoteAddr,
@@ -143,11 +143,8 @@ func keyByRemoteAddr(r *http.Request) (string, error) {
 // failed answers httprate's error path, which neither the key function nor
 // the in-memory counter reaches, with a fixed 500 problem.
 func failed(w http.ResponseWriter, r *http.Request, _ error) {
-	_ = web.WriteProblem(
-		w,
-		r,
-		http.StatusInternalServerError,
-		"",
-		"The server could not evaluate the rate limit.",
-	)
+	_ = web.Problem{
+		Status: http.StatusInternalServerError,
+		Detail: "The server could not evaluate the rate limit.",
+	}.WriteFor(w, r)
 }

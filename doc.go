@@ -108,7 +108,7 @@
 // "request_id" member.
 //
 //   - [Problem] is the document, served as [ProblemMediaType];
-//     [Problem.WriteFor] and [WriteProblem] send one for a request.
+//     [Problem.WriteFor] sends one for a request.
 //   - [NewErrorWriter] builds the [ErrorWriter] from its logger and
 //     matchers. The writer logs the cause of every 5xx it sends: a 503 at
 //     warn, the client's own cancellation at debug, and every other 5xx at

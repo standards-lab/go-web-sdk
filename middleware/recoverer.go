@@ -49,13 +49,10 @@ func Recoverer(logger *slog.Logger) web.Middleware {
 				if rec.Committed() {
 					panic(http.ErrAbortHandler)
 				}
-				err := web.WriteProblem(
-					rec,
-					r,
-					http.StatusInternalServerError,
-					"",
-					"The server encountered an unexpected condition.",
-				)
+				err := web.Problem{
+					Status: http.StatusInternalServerError,
+					Detail: "The server encountered an unexpected condition.",
+				}.WriteFor(rec, r)
 				if err != nil {
 					logger.LogAttrs(r.Context(), slog.LevelError, "failed to write problem response",
 						append(slices.Clip(base),

@@ -88,7 +88,7 @@ func TestRequestLogger_WriteThenWriteHeaderRecordsTheCommittedStatus(t *testing.
 
 func TestRequestLogger_RecordsProblemStatus(t *testing.T) {
 	out := record(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = web.WriteProblem(w, r, http.StatusTeapot, "", "no coffee")
+		_ = web.Problem{Status: http.StatusTeapot, Detail: "no coffee"}.WriteFor(w, r)
 	}))
 
 	if got := out["http.response.status_code"]; got != float64(http.StatusTeapot) {
@@ -514,7 +514,7 @@ func TestRequestLogger_RouteAndIDNeedRequestIDOutside(t *testing.T) {
 			r := web.NewRouter()
 			r.Handle("GET /status", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 			logger := middleware.RequestLogger(slog.New(slog.NewJSONHandler(&buf, nil)))
-			h := tt.chain(r, logger, middleware.RequestID())
+			h := tt.chain(r, logger, middleware.RequestID(middleware.RequestIDOptions{}))
 
 			out := logged(t, h, &buf, httptest.NewRequest(http.MethodGet, "/status", nil))
 

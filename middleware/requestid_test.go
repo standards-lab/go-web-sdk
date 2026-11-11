@@ -24,7 +24,7 @@ var generatedID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 // identified serves one GET through RequestID built with opts, with inbound
 // carrying any request headers to send, and returns the recorder and the id
 // the downstream handler read from its context.
-func identified(t *testing.T, inbound http.Header, opts ...middleware.RequestIDOption) (*httptest.ResponseRecorder, string) {
+func identified(t *testing.T, inbound http.Header, opts middleware.RequestIDOptions) (*httptest.ResponseRecorder, string) {
 	t.Helper()
 
 	var seen string
@@ -35,7 +35,7 @@ func identified(t *testing.T, inbound http.Header, opts ...middleware.RequestIDO
 		}
 		seen = id
 		w.WriteHeader(http.StatusNoContent)
-	}), middleware.RequestID(opts...))
+	}), middleware.RequestID(opts))
 
 	r := httptest.NewRequest(http.MethodGet, "/orders/7", nil)
 	maps.Copy(r.Header, inbound)
@@ -50,7 +50,7 @@ func fixedSource(id string) func(*http.Request) string {
 }
 
 func TestRequestID_GeneratesByDefault(t *testing.T) {
-	rec, seen := identified(t, nil)
+	rec, seen := identified(t, nil, middleware.RequestIDOptions{})
 
 	got := rec.Header().Get(middleware.RequestIDHeader)
 	if !generatedID.MatchString(got) {
@@ -62,8 +62,8 @@ func TestRequestID_GeneratesByDefault(t *testing.T) {
 }
 
 func TestRequestID_GeneratedIDsDiffer(t *testing.T) {
-	_, first := identified(t, nil)
-	_, second := identified(t, nil)
+	_, first := identified(t, nil, middleware.RequestIDOptions{})
+	_, second := identified(t, nil, middleware.RequestIDOptions{})
 
 	if first == second {
 		t.Errorf("two requests got the same generated id %q", first)
@@ -71,12 +71,12 @@ func TestRequestID_GeneratedIDsDiffer(t *testing.T) {
 }
 
 // An inbound X-Request-Id is not echoed unless the caller opted in through
-// WithTrustedHeader: any client can send one.
+// TrustedHeader: any client can send one.
 func TestRequestID_IgnoresAnUntrustedInboundHeader(t *testing.T) {
-	rec, seen := identified(t, http.Header{middleware.RequestIDHeader: {"client-chosen"}})
+	rec, seen := identified(t, http.Header{middleware.RequestIDHeader: {"client-chosen"}}, middleware.RequestIDOptions{})
 
 	if seen == "client-chosen" || rec.Header().Get(middleware.RequestIDHeader) == "client-chosen" {
-		t.Errorf("echoed the inbound id without WithTrustedHeader: context %q, header %q",
+		t.Errorf("echoed the inbound id without TrustedHeader: context %q, header %q",
 			seen, rec.Header().Get(middleware.RequestIDHeader))
 	}
 	if !generatedID.MatchString(seen) {
@@ -87,7 +87,7 @@ func TestRequestID_IgnoresAnUntrustedInboundHeader(t *testing.T) {
 func TestRequestID_EchoesATrustedHeader(t *testing.T) {
 	rec, seen := identified(t,
 		http.Header{"X-Proxy-Id": {"proxy-42"}},
-		middleware.WithTrustedHeader("x-proxy-id"),
+		middleware.RequestIDOptions{TrustedHeader: "x-proxy-id"},
 	)
 
 	if seen != "proxy-42" {
@@ -104,7 +104,7 @@ func TestRequestID_EchoesATrustedHeader(t *testing.T) {
 // than written into every log record and response.
 func TestRequestID_TrustedHeaderOutOfShapeIsReplaced(t *testing.T) {
 	longest := strings.Repeat("a", 128)
-	if _, seen := identified(t, http.Header{"X-Proxy-Id": {longest}}, middleware.WithTrustedHeader("X-Proxy-Id")); seen != longest {
+	if _, seen := identified(t, http.Header{"X-Proxy-Id": {longest}}, middleware.RequestIDOptions{TrustedHeader: "X-Proxy-Id"}); seen != longest {
 		t.Errorf("a 128-character id was replaced by %q", seen)
 	}
 	for name, value := range map[string]string{
@@ -114,7 +114,7 @@ func TestRequestID_TrustedHeaderOutOfShapeIsReplaced(t *testing.T) {
 		"non-ASCII": "proxy-\u00e9",
 	} {
 		t.Run(name, func(t *testing.T) {
-			rec, seen := identified(t, http.Header{"X-Proxy-Id": {value}}, middleware.WithTrustedHeader("X-Proxy-Id"))
+			rec, seen := identified(t, http.Header{"X-Proxy-Id": {value}}, middleware.RequestIDOptions{TrustedHeader: "X-Proxy-Id"})
 
 			if !generatedID.MatchString(seen) {
 				t.Errorf("context id = %q, want a generated one", seen)
@@ -136,7 +136,7 @@ func TestRequestID_TrustedHeaderMissingFallsThroughToGeneration(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec, seen := identified(t, tt.inbound, middleware.WithTrustedHeader("X-Proxy-Id"))
+			rec, seen := identified(t, tt.inbound, middleware.RequestIDOptions{TrustedHeader: "X-Proxy-Id"})
 
 			if !generatedID.MatchString(seen) {
 				t.Errorf("context id = %q, want a generated one", seen)
@@ -149,7 +149,7 @@ func TestRequestID_TrustedHeaderMissingFallsThroughToGeneration(t *testing.T) {
 }
 
 func TestRequestID_SourceIsUsedVerbatim(t *testing.T) {
-	rec, seen := identified(t, nil, middleware.WithIDSource(fixedSource("Trace-ABC")))
+	rec, seen := identified(t, nil, middleware.RequestIDOptions{Source: fixedSource("Trace-ABC")})
 
 	if seen != "Trace-ABC" {
 		t.Errorf("context id = %q, want the source's Trace-ABC untouched", seen)
@@ -160,9 +160,9 @@ func TestRequestID_SourceIsUsedVerbatim(t *testing.T) {
 }
 
 func TestRequestID_SourceSeesTheRequest(t *testing.T) {
-	_, seen := identified(t, nil, middleware.WithIDSource(func(r *http.Request) string {
+	_, seen := identified(t, nil, middleware.RequestIDOptions{Source: func(r *http.Request) string {
 		return r.Method + " " + r.URL.Path
-	}))
+	}})
 
 	if seen != "GET /orders/7" {
 		t.Errorf("context id = %q, want the source to have seen the request", seen)
@@ -170,61 +170,67 @@ func TestRequestID_SourceSeesTheRequest(t *testing.T) {
 }
 
 // The precedence chain: the source first, the trusted header second,
-// generation last. Each step is skipped when it yields nothing.
+// generation last. Each step is skipped when it is unset or yields nothing.
 func TestRequestID_Precedence(t *testing.T) {
 	inbound := http.Header{"X-Proxy-Id": {"proxy-42"}}
 	tests := []struct {
 		name    string
 		inbound http.Header
-		opts    []middleware.RequestIDOption
+		opts    middleware.RequestIDOptions
 		want    string // "" means a generated id
 	}{
 		{
 			"source wins over a present trusted header",
 			inbound,
-			[]middleware.RequestIDOption{
-				middleware.WithIDSource(fixedSource("trace-1")),
-				middleware.WithTrustedHeader("X-Proxy-Id"),
-			},
-			"trace-1",
-		},
-		{
-			"source wins in either option order",
-			inbound,
-			[]middleware.RequestIDOption{
-				middleware.WithTrustedHeader("X-Proxy-Id"),
-				middleware.WithIDSource(fixedSource("trace-1")),
-			},
+			middleware.RequestIDOptions{Source: fixedSource("trace-1"), TrustedHeader: "X-Proxy-Id"},
 			"trace-1",
 		},
 		{
 			"a declining source yields to a present trusted header",
 			inbound,
-			[]middleware.RequestIDOption{
-				middleware.WithIDSource(fixedSource("")),
-				middleware.WithTrustedHeader("X-Proxy-Id"),
-			},
+			middleware.RequestIDOptions{Source: fixedSource(""), TrustedHeader: "X-Proxy-Id"},
+			"proxy-42",
+		},
+		{
+			"a nil source yields to a present trusted header",
+			inbound,
+			middleware.RequestIDOptions{TrustedHeader: "X-Proxy-Id"},
 			"proxy-42",
 		},
 		{
 			"a declining source and an absent trusted header generate",
 			nil,
-			[]middleware.RequestIDOption{
-				middleware.WithIDSource(fixedSource("")),
-				middleware.WithTrustedHeader("X-Proxy-Id"),
-			},
+			middleware.RequestIDOptions{Source: fixedSource(""), TrustedHeader: "X-Proxy-Id"},
+			"",
+		},
+		{
+			"a nil source and an absent trusted header generate",
+			inbound,
+			middleware.RequestIDOptions{TrustedHeader: "X-Upstream-Id"},
+			"",
+		},
+		{
+			"a declining source and an out-of-shape trusted header generate",
+			http.Header{"X-Proxy-Id": {"proxy 42"}},
+			middleware.RequestIDOptions{Source: fixedSource(""), TrustedHeader: "X-Proxy-Id"},
 			"",
 		},
 		{
 			"a declining source alone generates",
-			nil,
-			[]middleware.RequestIDOption{middleware.WithIDSource(fixedSource(""))},
+			inbound,
+			middleware.RequestIDOptions{Source: fixedSource("")},
+			"",
+		},
+		{
+			"the zero value generates despite an inbound header",
+			inbound,
+			middleware.RequestIDOptions{},
 			"",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec, seen := identified(t, tt.inbound, tt.opts...)
+			rec, seen := identified(t, tt.inbound, tt.opts)
 
 			switch {
 			case tt.want == "" && !generatedID.MatchString(seen):
@@ -244,7 +250,7 @@ func TestRequestID_Precedence(t *testing.T) {
 func TestRequestID_ProblemDocumentCarriesTheID(t *testing.T) {
 	handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = web.Problem{Status: http.StatusNotFound}.WriteFor(w, r)
-	}), middleware.RequestID())
+	}), middleware.RequestID(middleware.RequestIDOptions{}))
 
 	rec := handlertest.Get(handler, "/orders/7")
 
@@ -279,12 +285,12 @@ func TestRequestID_HeaderSurvivesARecoveredPanic(t *testing.T) {
 	}{
 		{
 			"RequestID outside Recoverer",
-			web.Chain(panicking, middleware.RequestID(), middleware.Recoverer(logger)),
+			web.Chain(panicking, middleware.RequestID(middleware.RequestIDOptions{}), middleware.Recoverer(logger)),
 			true,
 		},
 		{
 			"Recoverer outside RequestID",
-			web.Chain(panicking, middleware.Recoverer(logger), middleware.RequestID()),
+			web.Chain(panicking, middleware.Recoverer(logger), middleware.RequestID(middleware.RequestIDOptions{})),
 			false,
 		},
 	}
@@ -319,7 +325,7 @@ func TestRequestID_HeaderSurvivesARecoveredPanic(t *testing.T) {
 func TestRequestID_PassesTheResponseThrough(t *testing.T) {
 	handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = web.WriteJSON(w, http.StatusCreated, map[string]string{"id": "7"})
-	}), middleware.RequestID())
+	}), middleware.RequestID(middleware.RequestIDOptions{}))
 
 	rec := handlertest.Get(handler, "/orders/7")
 
@@ -329,16 +335,4 @@ func TestRequestID_PassesTheResponseThrough(t *testing.T) {
 	if got := bytes.TrimSpace(rec.Body.Bytes()); string(got) != `{"id":"7"}` {
 		t.Errorf("body = %q, want %q", got, `{"id":"7"}`)
 	}
-}
-
-func TestWithIDSource_NilPanics(t *testing.T) {
-	mustPanic(t, "WithIDSource(nil)", func() {
-		middleware.WithIDSource(nil)
-	})
-}
-
-func TestWithTrustedHeader_EmptyPanics(t *testing.T) {
-	mustPanic(t, `WithTrustedHeader("")`, func() {
-		middleware.WithTrustedHeader("")
-	})
 }
