@@ -88,7 +88,7 @@ func TestRequestLogger_WriteThenWriteHeaderRecordsTheCommittedStatus(t *testing.
 
 func TestRequestLogger_RecordsProblemStatus(t *testing.T) {
 	out := record(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = web.WriteProblem(w, r, http.StatusTeapot, "", "no coffee")
+		_ = web.Problem{Status: http.StatusTeapot, Detail: "no coffee"}.WriteFor(w, r)
 	}))
 
 	if got := out["http.response.status_code"]; got != float64(http.StatusTeapot) {

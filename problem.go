@@ -147,14 +147,3 @@ func (p Problem) WriteFor(w http.ResponseWriter, r *http.Request) error {
 	}
 	return p.Write(w)
 }
-
-// WriteProblem sends a problem for the request, with Instance set to the
-// request path and [Problem.Write]'s defaults applied.
-func WriteProblem(
-	w http.ResponseWriter,
-	r *http.Request,
-	status int,
-	title, detail string,
-) error {
-	return Problem{Title: title, Status: status, Detail: detail}.WriteFor(w, r)
-}

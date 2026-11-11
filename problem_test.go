@@ -69,13 +69,13 @@ func TestProblem_WriteKeepsConsumerType(t *testing.T) {
 	}
 }
 
-func TestWriteProblem_UsesRequestPathAsInstance(t *testing.T) {
+func TestProblem_WriteForUsesRequestPathAsInstance(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/orders/42", nil)
 
-	err := web.WriteProblem(rec, r, http.StatusConflict, "", "order already shipped")
-	if err != nil {
-		t.Fatalf("WriteProblem: %v", err)
+	p := web.Problem{Status: http.StatusConflict, Detail: "order already shipped"}
+	if err := p.WriteFor(rec, r); err != nil {
+		t.Fatalf("WriteFor: %v", err)
 	}
 
 	body := decodeBody(t, rec)
