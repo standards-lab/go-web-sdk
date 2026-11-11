@@ -8,6 +8,20 @@ only; the base module keeps its own.
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-11-11
+
+### Changed
+
+- **Breaking:** The `go-core` requirement is v0.11.0, which pulls the breaks of v0.8.0 and
+  v0.11.0 into every importer's build: `lifecycle.Coordinator.Checks` holds a `Check` only for a
+  value that implements both `Starter` and `ReadinessChecker`; `graph.Scope.After` is removed in
+  favor of `graph.After` at `Define`; `graph.Graph.Observe` takes a `graph.Ref`; `Define`,
+  `Value`, `Fresh`, and `Group` panic on a name with a comma or a newline; `graph.Dependency`
+  gains a `Ref` field, so an unkeyed `Dependency` literal no longer compiles; and a
+  `lifecycle.Monitored` value's runtime failure ends the run as `run: <node>: <error>`.
+- **Breaking:** The `go-web-sdk` requirement is v0.16.0, which carries the same go-core
+  requirement and adds `web.Service`. The middleware's own behavior is unchanged.
+
 ## [v0.3.0] - 2026-10-09
 
 ### Changed
@@ -54,7 +68,8 @@ The first release of the rate-limiting middleware, against
   `Retry-After` header. `Config` loads through go-core's config contract under the block
   `rate_limit`, defaulting to 300 requests per minute.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.3.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.4.0...HEAD
+[v0.4.0]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.3.0...middleware/rate-limit/v0.4.0
 [v0.3.0]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.2.0...middleware/rate-limit/v0.3.0
 [v0.2.0]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.1...middleware/rate-limit/v0.2.0
 [v0.1.1]: https://github.com/standards-lab/go-web-sdk/compare/middleware/rate-limit/v0.1.0...middleware/rate-limit/v0.1.1
