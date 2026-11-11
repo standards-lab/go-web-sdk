@@ -37,9 +37,8 @@ type RequestIDOptions struct {
 //     OpenTelemetry trace id.
 //
 // The id is set on the request's context ([web.WithRequestID]) and the
-// [RequestIDHeader] response header before the next handler runs. A nil
-// Source or an empty TrustedHeader is skipped, so RequestID never panics on
-// its options and the zero [RequestIDOptions] generates every id.
+// [RequestIDHeader] response header before the next handler runs. RequestID
+// skips a nil Source or an empty TrustedHeader and does not panic on either.
 func RequestID(opts RequestIDOptions) web.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
