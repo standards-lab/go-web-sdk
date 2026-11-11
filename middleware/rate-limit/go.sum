@@ -4,8 +4,8 @@ github.com/klauspost/cpuid/v2 v2.2.10 h1:tBs3QSyvjDyFTq3uoc/9xFpCuOsJQFNPiAhYdw2
 github.com/klauspost/cpuid/v2 v2.2.10/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
 github.com/standards-lab/go-core v0.11.0 h1:Ls/jdYSRaC6ch187B1xNz39qfWXmSgNpOZ5Ot+2z+U8=
 github.com/standards-lab/go-core v0.11.0/go.mod h1:Yl/R+gM9YWczsePBCKXdPGh3FSdZ/5i8SapLIh3BDHU=
-github.com/standards-lab/go-web-sdk v0.15.2 h1:5Kha74IY8wT0XPcQEnZ/1bLBkxy13r33cgT6i2/X3E0=
-github.com/standards-lab/go-web-sdk v0.15.2/go.mod h1:aQyDvkE5cfwL1n1s79X5UnNmSPwtDTqhoFcsHKsdyJQ=
+github.com/standards-lab/go-web-sdk v0.16.0 h1:rpSz8+/FwkyOXATx0RW3QezD5dAUGnItqjJj/n8xTX0=
+github.com/standards-lab/go-web-sdk v0.16.0/go.mod h1:xcvmTq3KwIZJUHlpGNfRogzxph8ldlviYExMmmdf1Mk=
 github.com/zeebo/assert v1.3.0 h1:g7C04CbJuIDKNPFHmsk4hwZDO5O+kntRxzaUoNXj+IQ=
 github.com/zeebo/assert v1.3.0/go.mod h1:Pq9JiuJQpG8JLJdtkwrJESF0Foym2/D9XMU5ciN/wJ0=
 github.com/zeebo/xxh3 v1.0.2 h1:xZmwmqxHZA8AI603jOQ0tMqmBr9lPeFwGg6d+xy9DC0=
