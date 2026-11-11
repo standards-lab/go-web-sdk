@@ -10,5 +10,6 @@ The judgement calls the standards-reviewer applies to go-web-sdk, beyond what `m
 - `architecture/standards/go-elemental/principles/lifecycle-and-context.md`: `Server`'s `Start` and `Shutdown`, the `/readyz` probe over the coordinator's checks, and the construction panics on an unfinalized `Config`, a malformed prefix, a duplicate mount or a group modified after its module is built.
 - `architecture/standards/go-elemental/principles/timeouts.md`: `Config`'s server timeouts and `TransferRate`, `Transfer`, and `middleware.Timeout`.
 - `architecture/standards/go-elemental/principles/baseline-standards.md`: `ParseQuery`'s `Limits` and `BodyLimit`'s limit, which the caller supplies, and the defaults of `Config` and of `middleware/rate-limit`'s `Config`.
+- `architecture/standards/go-elemental/principles/construction-and-execution.md`: `Service`, whose `Run` panics naming a nil field, and every new exported function and constructor, `webtest`'s included.
 - `architecture/principles/validation-first.md`: `Config.Finalize` and `ParseQuery`.
 - `architecture/principles/context-architecture.md`: the README and each `doc.go` are the homes.
