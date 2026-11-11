@@ -26,9 +26,11 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 - **Breaking:** the `go-core` requirement is v0.11.0, which pulls its graph and lifecycle break
   into every importer's build: `graph.Scope.After` is removed, and a node's order-only edges are
   declared at `Define` with `graph.After`; `graph.Graph.Observe` takes `func(graph.Ref)` in
-  place of `func(string)`; a node name containing a comma or a newline panics at `Define`; and a
-  `lifecycle.Monitored` value's runtime failure ends the run as `run: <node>: <error>`. go-core's
-  changelog has the migration from v0.10.0. The SDK's existing API is unchanged.
+  place of `func(string)`; `Define`, `Value`, `Fresh`, and `Group` panic on a name containing a
+  comma or a newline; `graph.Dependency` gains a `Ref` field, so an unkeyed `Dependency` literal
+  no longer compiles; and a `lifecycle.Monitored` value's runtime failure ends the run as
+  `run: <node>: <error>`. go-core's changelog has the migration from v0.10.0. The SDK's existing
+  API is unchanged.
 - The package documentation's wiring example defines the readiness node with `g.Fresh` and ends
   in `web.Service{...}.Run`.
 

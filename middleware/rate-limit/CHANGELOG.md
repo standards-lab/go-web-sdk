@@ -12,10 +12,13 @@ only; the base module keeps its own.
 
 ### Changed
 
-- **Breaking:** The `go-core` requirement is v0.11.0, which pulls its graph and lifecycle break
-  into every importer's build: `graph.Scope.After` is removed in favor of `graph.After` at
-  `Define`, `graph.Graph.Observe` takes a `graph.Ref`, a node name with a comma or a newline
-  panics, and a `lifecycle.Monitored` value's runtime failure is labelled with its node's name.
+- **Breaking:** The `go-core` requirement is v0.11.0, which pulls the breaks of v0.8.0 and
+  v0.11.0 into every importer's build: `lifecycle.Coordinator.Checks` holds a `Check` only for a
+  value that implements both `Starter` and `ReadinessChecker`; `graph.Scope.After` is removed in
+  favor of `graph.After` at `Define`; `graph.Graph.Observe` takes a `graph.Ref`; `Define`,
+  `Value`, `Fresh`, and `Group` panic on a name with a comma or a newline; `graph.Dependency`
+  gains a `Ref` field, so an unkeyed `Dependency` literal no longer compiles; and a
+  `lifecycle.Monitored` value's runtime failure ends the run as `run: <node>: <error>`.
 - **Breaking:** The `go-web-sdk` requirement is v0.16.0, which carries the same go-core
   requirement and adds `web.Service`. The middleware's own behavior is unchanged.
 
