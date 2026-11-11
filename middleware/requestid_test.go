@@ -204,6 +204,12 @@ func TestRequestID_Precedence(t *testing.T) {
 			"",
 		},
 		{
+			"a nil source and an absent trusted header generate",
+			inbound,
+			middleware.RequestIDOptions{TrustedHeader: "X-Upstream-Id"},
+			"",
+		},
+		{
 			"a declining source and an out-of-shape trusted header generate",
 			http.Header{"X-Proxy-Id": {"proxy 42"}},
 			middleware.RequestIDOptions{Source: fixedSource(""), TrustedHeader: "X-Proxy-Id"},
@@ -328,37 +334,5 @@ func TestRequestID_PassesTheResponseThrough(t *testing.T) {
 	}
 	if got := bytes.TrimSpace(rec.Body.Bytes()); string(got) != `{"id":"7"}` {
 		t.Errorf("body = %q, want %q", got, `{"id":"7"}`)
-	}
-}
-
-// An unset Source or TrustedHeader is skipped, not refused, as the removed
-// WithIDSource and WithTrustedHeader refused them: building and serving
-// through the zero value, or with either field unset, never panics, and with
-// nothing else yielding an id it is generated.
-func TestRequestID_UnsetOptionsDoNotPanic(t *testing.T) {
-	tests := []struct {
-		name string
-		opts middleware.RequestIDOptions
-	}{
-		{"zero value", middleware.RequestIDOptions{}},
-		{"nil source, header absent", middleware.RequestIDOptions{Source: nil, TrustedHeader: "X-Upstream-Id"}},
-		{"declining source, empty header", middleware.RequestIDOptions{Source: fixedSource(""), TrustedHeader: ""}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); r != nil {
-					t.Fatalf("RequestID(%+v) panicked: %v", tt.opts, r)
-				}
-			}()
-			rec, seen := identified(t, http.Header{"X-Proxy-Id": {"proxy-42"}}, tt.opts)
-
-			if !generatedID.MatchString(seen) {
-				t.Errorf("context id = %q, want a generated one", seen)
-			}
-			if got := rec.Header().Get(middleware.RequestIDHeader); got != seen {
-				t.Errorf("%s = %q, want the context's %q", middleware.RequestIDHeader, got, seen)
-			}
-		})
 	}
 }
