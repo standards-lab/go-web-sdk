@@ -109,6 +109,8 @@ func TestNewClient_FailsNamingTheProblem(t *testing.T) {
 	delete(noManifest, web.ManifestPath)
 	badManifest := viteBuild()
 	badManifest[web.ManifestPath] = &fstest.MapFile{Data: []byte("{")}
+	goneImport := viteBuild()
+	goneImport[web.ManifestPath] = &fstest.MapFile{Data: []byte(`{"src/main.ts": {"file": "assets/main-a.js", "imports": ["_gone.js"]}}`)}
 	unreadable := unreadableFS{viteBuild(), "favicon.svg"}
 
 	cases := map[string]struct {
@@ -121,6 +123,7 @@ func TestNewClient_FailsNamingTheProblem(t *testing.T) {
 		"corrupt manifest": {badManifest, clientEntry, web.ClientOptions{}, "decode the build's manifest"},
 		"missing entry":    {viteBuild(), "src/index.ts", web.ClientOptions{}, `no entry "src/index.ts"`},
 		"missing blocking": {viteBuild(), clientEntry, web.ClientOptions{RenderBlocking: []string{"src/register.ts", "src/theme.ts"}}, `no entry "src/theme.ts"`},
+		"missing import":   {goneImport, clientEntry, web.ClientOptions{}, `no entry "_gone.js", which "src/main.ts" imports`},
 		"unencodable":      {viteBuild(), clientEntry, web.ClientOptions{Config: func() {}}, "encode the config"},
 		"unreadable file":  {unreadable, clientEntry, web.ClientOptions{}, "open favicon.svg"},
 	}

@@ -206,7 +206,9 @@ type assets struct {
 // chunks it imports statically, transitively, and the CSS of it and every
 // one of those chunks, in import order. A file is named once across every
 // key, and a chunk a script loads is never also preloaded. It fails naming
-// the first key the manifest lacks.
+// the first key the manifest lacks, and, for a static import the manifest
+// lacks, the key that imports it: such a manifest is corrupt. Dynamic
+// imports are never resolved, so they are never required to exist.
 func (m manifest) resolve(keys ...string) (assets, error) {
 	var a assets
 	for _, key := range keys {
@@ -217,8 +219,9 @@ func (m manifest) resolve(keys ...string) (assets, error) {
 		a.scripts = append(a.scripts, root.File)
 	}
 	seen := map[string]bool{}
-	var walk func(c chunk)
-	walk = func(c chunk) {
+	var walk func(key string) error
+	walk = func(key string) error {
+		c := m[key]
 		for _, f := range c.CSS {
 			if !slices.Contains(a.css, f) {
 				a.css = append(a.css, f)
@@ -229,16 +232,24 @@ func (m manifest) resolve(keys ...string) (assets, error) {
 				continue
 			}
 			seen[k] = true
-			imported := m[k]
+			imported, ok := m[k]
+			if !ok || imported.File == "" {
+				return fmt.Errorf("the build's manifest %s has no entry %q, which %q imports", ManifestPath, k, key)
+			}
 			if !slices.Contains(a.scripts, imported.File) && !slices.Contains(a.preload, imported.File) {
 				a.preload = append(a.preload, imported.File)
 			}
-			walk(imported)
+			if err := walk(k); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
 	for _, key := range keys {
 		seen[key] = true
-		walk(m[key])
+		if err := walk(key); err != nil {
+			return assets{}, err
+		}
 	}
 	return a, nil
 }
