@@ -2,6 +2,8 @@ package web_test
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -87,14 +89,30 @@ func shellOf(t *testing.T, opts web.ClientOptions) string {
 	return handlertest.Get(newClient(t, opts), "/").Body.String()
 }
 
+// unreadableFS is a build one of whose files cannot be opened, as a read
+// failure on a real file system would leave it. It implements Open alone,
+// so every read of the build reaches it.
+type unreadableFS struct {
+	build fstest.MapFS
+	name  string
+}
+
+func (u unreadableFS) Open(name string) (fs.File, error) {
+	if name == u.name {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: errors.New("input/output error")}
+	}
+	return u.build.Open(name)
+}
+
 func TestNewClient_FailsNamingTheProblem(t *testing.T) {
 	noManifest := viteBuild()
 	delete(noManifest, web.ManifestPath)
 	badManifest := viteBuild()
 	badManifest[web.ManifestPath] = &fstest.MapFile{Data: []byte("{")}
+	unreadable := unreadableFS{viteBuild(), "favicon.svg"}
 
 	cases := map[string]struct {
-		dist  fstest.MapFS
+		dist  fs.FS
 		entry string
 		opts  web.ClientOptions
 		want  string
@@ -104,12 +122,13 @@ func TestNewClient_FailsNamingTheProblem(t *testing.T) {
 		"missing entry":    {viteBuild(), "src/index.ts", web.ClientOptions{}, `no entry "src/index.ts"`},
 		"missing blocking": {viteBuild(), clientEntry, web.ClientOptions{RenderBlocking: []string{"src/register.ts", "src/theme.ts"}}, `no entry "src/theme.ts"`},
 		"unencodable":      {viteBuild(), clientEntry, web.ClientOptions{Config: func() {}}, "encode the config"},
+		"unreadable file":  {unreadable, clientEntry, web.ClientOptions{}, "open favicon.svg"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			h, err := web.NewClient(tc.dist, tc.entry, tc.opts)
+			_, err := web.NewClient(tc.dist, tc.entry, tc.opts)
 			if err == nil {
-				t.Fatalf("NewClient = %v, nil; want an error naming %q", h, tc.want)
+				t.Fatalf("NewClient succeeded; want an error naming %q", tc.want)
 			}
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("error = %v, want it to name %q", err, tc.want)
