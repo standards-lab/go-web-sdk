@@ -6,6 +6,31 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.18.0] - 2026-11-19
+
+A service serves its client application from the same binary: `web.NewClient` serves an embedded
+Vite build, answering every client route with its HTML shell and serving its files with cache
+validators. It is ported from the `sdk` package of spike-html-apps (2883d78); Added says how it
+differs.
+
+### Added
+
+- `web.NewClient`, the handler that serves a client application from its Vite build, and
+  `web.ClientOptions`, which configures it. It reads the manifest at `web.ManifestPath` and
+  renders the shell once, at construction, writing the client's configuration as JSON into the
+  element `web.ConfigElementID` names. It is mounted with `Router.SetNotFound` at the root or with
+  `NewHandlerModule` under a prefix. It differs from the spike's handler in four ways. The
+  entry's manifest key is a positional argument, so the zero-value `ClientOptions` selects every
+  default. A malformed `Base` panics at wiring instead of returning an error. A manifest that
+  names a static import it lacks, or an import with no file, fails construction with an error
+  naming the import and the key that imports it. The shell and every build file outside the
+  manifest's directories carry a strong content-hash ETag, and a matching `If-None-Match`
+  answers 304.
+
+### Changed
+
+- CI runs jdx/mise-action v5.2.10.
+
 ## [v0.17.0] - 2026-11-11
 
 Constructors and functions that take configuration take it as one value, not variadic option
@@ -573,7 +598,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.18.0...HEAD
+[v0.18.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.17.0...v0.18.0
 [v0.17.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.16.0...v0.17.0
 [v0.16.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.2...v0.16.0
 [v0.15.2]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.1...v0.15.2
