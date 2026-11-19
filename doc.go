@@ -1,8 +1,9 @@
 // Package web provides the HTTP layer: a net/http server bound to a
 // caller-supplied handler, routing, RFC 9457 problem responses, the read and
-// request helpers, and the liveness and readiness endpoints an orchestrator
-// probes. This comment lists every exported name by section; each symbol's
-// own documentation states its contract.
+// request helpers, the handler that serves an embedded client application,
+// and the liveness and readiness endpoints an orchestrator probes. This
+// comment lists every exported name by section; each symbol's own
+// documentation states its contract.
 //
 // # Wiring
 //
@@ -10,8 +11,9 @@
 // then, with the fix named, rather than failing a request later: an
 // unfinalized [Config], a nil logger or writer, a nil [Doctor] passed to
 // [RegisterHealth], a malformed prefix, a duplicate pattern, a mutation
-// of a group [NewModule] sealed, or a [Service] missing a field or whose
-// Build does not reach its logger. A constructor takes what the value
+// of a group [NewModule] sealed, a malformed [ClientOptions] Base passed to
+// [NewClient], or a [Service] missing a field or whose Build does not reach
+// its logger. A constructor takes what the value
 // cannot work without, including the *slog.Logger it reports through.
 // Optional behavior is set by a method called during wiring: [Group.Use],
 // [Group.Mount], [Group.SetErrorWriter], [Group.SetNotFound],
@@ -90,6 +92,48 @@
 //     implementations.
 //   - [Recorder] records whether and with what status a response committed,
 //     and [WrapWriter] shares one per request among the layers that need it.
+//
+// # Serving a client
+//
+// [NewClient] serves a client application from its Vite build, embedded in
+// the binary. It reads the build's manifest and renders the HTML shell once,
+// at construction, and answers every client route with the shell, so a deep
+// link or a reload reaches the client's router. A file under the
+// manifest's directories, whose name is hashed, is cached for a year; the
+// shell and every other build file are revalidated against a strong ETag. The handler is mounted in one of two ways: as the router's fallback,
+// with [Router.SetNotFound], when the client owns the server's root and
+// every module's prefix is matched first; or under a prefix with
+// [NewHandlerModule], whose bare prefix redirects to prefix/. Base names
+// where it is mounted:
+//
+//	//go:embed all:dist
+//	var dist embed.FS
+//
+//	build, err := fs.Sub(dist, "dist")
+//	if err != nil {
+//		return err
+//	}
+//	client, err := web.NewClient(build, "src/main.ts", web.ClientOptions{
+//		Base:   "/app",
+//		Title:  "Console",
+//		Config: cfg,
+//	})
+//	if err != nil {
+//		return err
+//	}
+//	router.Mount(web.NewHandlerModule("/app", client))
+//	// or, served at the root with Base left empty:
+//	// router.SetNotFound(client)
+//
+// The all: prefix embeds the build's .vite directory, which holds the
+// manifest.
+//
+//   - [NewClient] builds the handler from the build, the manifest key of the
+//     client's entry, and its [ClientOptions]: the base, the title, the
+//     modules that block rendering, and the configuration the shell writes.
+//   - [ManifestPath] is where the manifest sits in the build, and
+//     [ConfigElementID] the id of the element the client reads its
+//     configuration from.
 //
 // # Problems
 //

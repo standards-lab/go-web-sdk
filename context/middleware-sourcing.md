@@ -35,7 +35,7 @@ task under `v1.middleware`.
   `middleware/rate-limit`. Once it is built, rate limiting takes its key from this middleware's
   output instead of `RemoteAddr`.
 - **Compression**: a response large enough to pay for the wrapping, such as a paginated list over
-  many rows or a bulk export.
+  many rows or a bulk export, or an embedded client's JavaScript and CSS, served by `NewClient`.
 - **CORS**: the client layer, `v1.client`.
 
 ## Maintenance of the hand-rolled set

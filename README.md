@@ -5,6 +5,7 @@ provides:
 
 - the HTTP server and its configuration
 - routing
+- serving an embedded client application
 - RFC 9457 problem responses
 - the liveness and readiness probes
 - middleware
@@ -55,6 +56,9 @@ Its repository-level principles:
   - the request helpers: the `If-Match` precondition, a strict JSON body, a UUID path value, and a
     raw upload accepted by its declared type and length
   - the proxied object response, with its validators and a 304 on a matching `If-None-Match`
+  - `NewClient`, the handler that serves a client application from its embedded Vite build: the
+    HTML shell for every client route, with the client's configuration written into it, and the
+    build's files, hashed ones cached for a year and the rest revalidated against an ETag
   - the `/healthz` and `/readyz` probes
   - the middleware primitives
 - `middleware` holds the hand-rolled middleware implementations: the request logger, the

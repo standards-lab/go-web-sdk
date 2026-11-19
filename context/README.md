@@ -17,9 +17,13 @@ only points to it. An unbuilt capability gains written detail when a session is 
 - **web** (`doc.go`) is the HTTP layer: the server (`NewServer`, `Config`), routing (`Group`,
   `NewModule`, `Router`), the problem model (`Problem`, `ErrorWriter`, `Handle`), the read
   contract (`ParseQuery`, `NewPage`), the request helpers (`IfMatch`, `DecodeJSON`,
-  `ReadUpload`, `PathUUID`), the object proxy (`WriteObject`, `Attachment`), the probes
+  `ReadUpload`, `PathUUID`), the object proxy (`WriteObject`, `Attachment`), the client handler
+  (`NewClient`, `ClientOptions`, `ManifestPath`, `ConfigElementID`), the probes
   (`RegisterHealth`, `Doctor`), `Recorder`, the `Middleware` type with `Chain`, and the service
-  runner (`Service`). Built.
+  runner (`Service`). Built. The client handler is ported from spike-html-apps (2883d78),
+  `sdk/web.go`: it computes a strong content-hash ETag for the shell and every unhashed file and
+  answers a matching `If-None-Match` with 304, and its constructor takes the entry as a
+  positional argument beside a zero-value `ClientOptions`, whose malformed `Base` panics.
 - **middleware** (`middleware/doc.go`) holds the hand-rolled middleware, written in this
   repository, and their chain order. `middleware/rate-limit`, built over a third-party library,
   is the first sourced sub-module. Built.
