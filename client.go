@@ -65,9 +65,10 @@ type ClientOptions struct {
 // "src/main.ts".
 //
 // It reads the manifest and renders the shell once, here. It panics when
-// opts.Base is malformed, and returns an error naming the problem when the
-// manifest is missing or corrupt, it lacks entry or a key RenderBlocking
-// lists, or Config does not encode as JSON.
+// opts.Base is malformed. It returns an error naming the problem when the
+// manifest is missing or corrupt; when the manifest lacks entry, a key
+// RenderBlocking lists, or a chunk one of them imports statically; when
+// Config does not encode as JSON; or when a build file cannot be read.
 //
 // A request path, cleaned inside the build, is an asset, a missing asset,
 // or a client route; a client route answers the shell, so a deep link or a

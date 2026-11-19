@@ -2,8 +2,8 @@
 
 go-web-sdk is the Application SDK for web services of Go Elemental, the Standards Lab
 organization's Go implementation of the Elemental Architecture. It provides the HTTP server and
-its configuration, routing, RFC 9457 problem responses, the liveness and readiness probes, and
-middleware.
+its configuration, routing, serving an embedded client application, RFC 9457 problem responses,
+the liveness and readiness probes, and middleware.
 
 The README and each package's `doc.go` document this repository. The
 [Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md) standard states the principles it follows.
@@ -20,12 +20,9 @@ only points to it. An unbuilt capability gains written detail when a session is 
   `ReadUpload`, `PathUUID`), the object proxy (`WriteObject`, `Attachment`), the client handler
   (`NewClient`, `ClientOptions`, `ManifestPath`, `ConfigElementID`), the probes
   (`RegisterHealth`, `Doctor`), `Recorder`, the `Middleware` type with `Chain`, and the service
-  runner (`Service`). Built. The client handler is ported from spike-html-apps (2883d78),
-  `sdk/web.go` ([github.com/JaimeStill/spike-html-apps](https://github.com/JaimeStill/spike-html-apps),
-  archived): it computes a strong content-hash ETag for the shell and every build file outside the
-  manifest's directories and answers a matching `If-None-Match` with 304, and its constructor
-  takes the entry as a positional argument beside a zero-value `ClientOptions`, whose malformed
-  `Base` panics.
+  runner (`Service`). Built. The client handler is ported from spike-html-apps' `sdk/web.go`
+  (2883d78) ([github.com/JaimeStill/spike-html-apps](https://github.com/JaimeStill/spike-html-apps),
+  archived); the v0.18.0 CHANGELOG entry says how it differs.
 - **middleware** (`middleware/doc.go`) holds the hand-rolled middleware, written in this
   repository, and their chain order. `middleware/rate-limit`, built over a third-party library,
   is the first sourced sub-module. Built.

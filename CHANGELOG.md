@@ -9,8 +9,9 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 ## [v0.18.0] - 2026-11-19
 
 A service serves its client application from the same binary: `web.NewClient` serves an embedded
-Vite build, its HTML shell on every client route and its files with cache validators. It is
-ported from spike-html-apps (2883d78), the `sdk` package; Added says how it differs.
+Vite build, answering every client route with its HTML shell and serving its files with cache
+validators. It is ported from the `sdk` package of spike-html-apps (2883d78); Added says how it
+differs.
 
 ### Added
 
@@ -18,11 +19,13 @@ ported from spike-html-apps (2883d78), the `sdk` package; Added says how it diff
   `web.ClientOptions`, which configures it. It reads the manifest at `web.ManifestPath` and
   renders the shell once, at construction, writing the client's configuration as JSON into the
   element `web.ConfigElementID` names. It is mounted with `Router.SetNotFound` at the root or with
-  `NewHandlerModule` under a prefix. Unlike the spike's, the entry's manifest key is a positional
-  argument; the zero-value `ClientOptions` selects every default; a malformed `Base` panics at
-  wiring rather than surfacing as an error; and the shell and every build file outside the
-  manifest's directories carry a strong content-hash ETag, against which a matching
-  `If-None-Match` answers 304.
+  `NewHandlerModule` under a prefix. It differs from the spike's handler in four ways. The
+  entry's manifest key is a positional argument, so the zero-value `ClientOptions` selects every
+  default. A malformed `Base` panics at wiring instead of returning an error. A manifest that
+  names a static import it lacks, or an import with no file, fails construction with an error
+  naming the import and the key that imports it. The shell and every build file outside the
+  manifest's directories carry a strong content-hash ETag, and a matching `If-None-Match`
+  answers 304.
 
 ### Changed
 
