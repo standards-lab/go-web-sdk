@@ -134,7 +134,7 @@ func (c *client) hashRevalidated() (map[string]string, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("web: NewClient: hash the build's files: %w", err)
+		return nil, fmt.Errorf("hash the build's files: %w", err)
 	}
 	return etags, nil
 }
@@ -172,11 +172,11 @@ type manifest map[string]chunk
 func readManifest(dist fs.FS) (manifest, error) {
 	data, err := fs.ReadFile(dist, ManifestPath)
 	if err != nil {
-		return nil, fmt.Errorf("web: NewClient: read the build's manifest %s (is the app built?): %w", ManifestPath, err)
+		return nil, fmt.Errorf("read the build's manifest %s (is the app built?): %w", ManifestPath, err)
 	}
 	var m manifest
 	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("web: NewClient: decode the build's manifest %s: %w", ManifestPath, err)
+		return nil, fmt.Errorf("decode the build's manifest %s: %w", ManifestPath, err)
 	}
 	return m, nil
 }
@@ -212,7 +212,7 @@ func (m manifest) resolve(keys ...string) (assets, error) {
 	for _, key := range keys {
 		root, ok := m[key]
 		if !ok || root.File == "" {
-			return assets{}, fmt.Errorf("web: NewClient: the build's manifest %s has no entry %q", ManifestPath, key)
+			return assets{}, fmt.Errorf("the build's manifest %s has no entry %q", ManifestPath, key)
 		}
 		a.scripts = append(a.scripts, root.File)
 	}
@@ -286,7 +286,7 @@ func renderShell(m manifest, base, entry string, opts ClientOptions) ([]byte, er
 	blocking, entryFile := a.scripts[:len(a.scripts)-1], a.scripts[len(a.scripts)-1]
 	config, err := json.Marshal(opts.Config)
 	if err != nil {
-		return nil, fmt.Errorf("web: NewClient: encode the config: %w", err)
+		return nil, fmt.Errorf("encode the config: %w", err)
 	}
 	var buf bytes.Buffer
 	err = shellTemplate.Execute(&buf, struct {
@@ -295,7 +295,7 @@ func renderShell(m manifest, base, entry string, opts ClientOptions) ([]byte, er
 		Config                 template.JS
 	}{base, opts.Title, entryFile, a.css, a.preload, blocking, template.JS(config)})
 	if err != nil {
-		return nil, fmt.Errorf("web: NewClient: render the shell: %w", err)
+		return nil, fmt.Errorf("render the shell: %w", err)
 	}
 	return buf.Bytes(), nil
 }
