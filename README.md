@@ -58,7 +58,8 @@ Its repository-level principles:
   - the proxied object response, with its validators and a 304 on a matching `If-None-Match`
   - `NewClient`, the handler that serves a client application from its embedded Vite build: the
     HTML shell for every client route, with the client's configuration written into it, and the
-    build's files, hashed ones cached for a year and the rest revalidated against an ETag
+    build's files, those under the manifest's directories cached for a year and the rest
+    revalidated against an ETag
   - the `/healthz` and `/readyz` probes
   - the middleware primitives
 - `middleware` holds the hand-rolled middleware implementations: the request logger, the

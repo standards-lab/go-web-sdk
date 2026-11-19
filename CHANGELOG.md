@@ -20,8 +20,9 @@ ported from spike-html-apps (2883d78), the `sdk` package; Added says how it diff
   element `web.ConfigElementID` names. It is mounted with `Router.SetNotFound` at the root or with
   `NewHandlerModule` under a prefix. Unlike the spike's, the entry's manifest key is a positional
   argument; the zero-value `ClientOptions` selects every default; a malformed `Base` panics at
-  wiring rather than surfacing as an error; and the shell and every unhashed file carry a strong
-  content-hash ETag, against which a matching `If-None-Match` answers 304.
+  wiring rather than surfacing as an error; and the shell and every build file outside the
+  manifest's directories carry a strong content-hash ETag, against which a matching
+  `If-None-Match` answers 304.
 
 ### Changed
 

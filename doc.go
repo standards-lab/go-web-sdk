@@ -13,10 +13,10 @@
 // [RegisterHealth], a malformed prefix, a duplicate pattern, a mutation
 // of a group [NewModule] sealed, a malformed [ClientOptions] Base passed to
 // [NewClient], or a [Service] missing a field or whose Build does not reach
-// its logger. A constructor takes what the value
-// cannot work without, including the *slog.Logger it reports through.
-// Optional behavior is set by a method called during wiring: [Group.Use],
-// [Group.Mount], [Group.SetErrorWriter], [Group.SetNotFound],
+// its logger. A constructor takes what the value cannot work without,
+// including the *slog.Logger it reports through. Optional behavior is set
+// by a method called during wiring: [Group.Use], [Group.Mount],
+// [Group.SetErrorWriter], [Group.SetNotFound],
 // [Group.SetMethodNotAllowed], [Router.Use], [Router.SetNotFound],
 // [Router.SetMethodNotAllowed], and [ErrorWriter.Detail]. Configuration
 // accumulated from files and the environment is a struct instead, as
@@ -100,9 +100,10 @@
 // at construction, and answers every client route with the shell, so a deep
 // link or a reload reaches the client's router. A file under the
 // manifest's directories, whose name is hashed, is cached for a year; the
-// shell and every other build file are revalidated against a strong ETag. The handler is mounted in one of two ways: as the router's fallback,
-// with [Router.SetNotFound], when the client owns the server's root and
-// every module's prefix is matched first; or under a prefix with
+// shell and every other build file are revalidated against a strong ETag.
+// The handler is mounted in one of two ways: as the router's fallback, with
+// [Router.SetNotFound], when the client owns the server's root and every
+// module's prefix is matched first; or under a prefix with
 // [NewHandlerModule], whose bare prefix redirects to prefix/. Base names
 // where it is mounted:
 //

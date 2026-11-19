@@ -21,9 +21,11 @@ only points to it. An unbuilt capability gains written detail when a session is 
   (`NewClient`, `ClientOptions`, `ManifestPath`, `ConfigElementID`), the probes
   (`RegisterHealth`, `Doctor`), `Recorder`, the `Middleware` type with `Chain`, and the service
   runner (`Service`). Built. The client handler is ported from spike-html-apps (2883d78),
-  `sdk/web.go`: it computes a strong content-hash ETag for the shell and every unhashed file and
-  answers a matching `If-None-Match` with 304, and its constructor takes the entry as a
-  positional argument beside a zero-value `ClientOptions`, whose malformed `Base` panics.
+  `sdk/web.go` ([github.com/JaimeStill/spike-html-apps](https://github.com/JaimeStill/spike-html-apps),
+  archived): it computes a strong content-hash ETag for the shell and every build file outside the
+  manifest's directories and answers a matching `If-None-Match` with 304, and its constructor
+  takes the entry as a positional argument beside a zero-value `ClientOptions`, whose malformed
+  `Base` panics.
 - **middleware** (`middleware/doc.go`) holds the hand-rolled middleware, written in this
   repository, and their chain order. `middleware/rate-limit`, built over a third-party library,
   is the first sourced sub-module. Built.
