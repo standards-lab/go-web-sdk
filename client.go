@@ -2,6 +2,8 @@ package web
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -69,7 +71,10 @@ type ClientOptions struct {
 //
 // A request path, cleaned inside the build, is an asset, a missing asset,
 // or a client route; a client route answers the shell, so a deep link or a
-// reload reaches the client's router.
+// reload reaches the client's router. The shell and every build file
+// outside the manifest's directories, which a browser revalidates, carry a
+// strong ETag hashed from their content here, once; a request whose
+// If-None-Match matches it answers 304 with no body.
 func NewClient(dist fs.FS, entry string, opts ClientOptions) (http.Handler, error) {
 	base := clientBase(opts.Base)
 	manifest, err := readManifest(dist)
@@ -80,12 +85,58 @@ func NewClient(dist fs.FS, entry string, opts ClientOptions) (http.Handler, erro
 	if err != nil {
 		return nil, err
 	}
-	return &client{
-		dist:   dist,
-		base:   base,
-		hashed: manifest.dirs(),
-		shell:  shell,
-	}, nil
+	c := &client{
+		dist:      dist,
+		base:      base,
+		hashed:    manifest.dirs(),
+		shell:     shell,
+		shellETag: etag(shell),
+	}
+	if c.etags, err = c.hashRevalidated(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// etag returns data's strong entity tag: the quoted hex of the first 16
+// bytes of its SHA-256, enough that two builds' versions of a file never
+// share one.
+func etag(data []byte) string {
+	sum := sha256.Sum256(data)
+	return `"` + hex.EncodeToString(sum[:16]) + `"`
+}
+
+// hashRevalidated returns the ETag of every file the client serves as
+// no-cache, by name: each file in dist outside the directories of hashed
+// files, dotfiles and dot directories left out, since they are never
+// served. A hashed file needs none: its name changes with its content, and
+// a browser never revalidates it.
+func (c *client) hashRevalidated() (map[string]string, error) {
+	etags := map[string]string{}
+	err := fs.WalkDir(c.dist, ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if name != "." && strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() || c.underHashed(name) {
+			return nil
+		}
+		data, err := fs.ReadFile(c.dist, name)
+		if err != nil {
+			return err
+		}
+		etags[name] = etag(data)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("web: NewClient: hash the build's files: %w", err)
+	}
+	return etags, nil
 }
 
 // clientBase returns base with exactly one trailing slash, the shell's
@@ -251,10 +302,12 @@ func renderShell(m manifest, base, entry string, opts ClientOptions) ([]byte, er
 
 // client is NewClient's handler.
 type client struct {
-	dist   fs.FS
-	base   string   // the <base href>, with its trailing slash
-	hashed []string // the directories of hashed files
-	shell  []byte
+	dist      fs.FS
+	base      string   // the <base href>, with its trailing slash
+	hashed    []string // the directories of hashed files
+	shell     []byte
+	shellETag string
+	etags     map[string]string // the ETags of the build's no-cache files, by name
 }
 
 // ServeHTTP answers a request path, after path.Clean, with one of three
@@ -311,22 +364,26 @@ func (c *client) underHashed(name string) bool {
 }
 
 // serveShell answers the shell. http.ServeContent writes its Content-Type
-// and Content-Length and leaves the body off a HEAD.
+// and Content-Length, leaves the body off a HEAD, and answers 304 to an
+// If-None-Match naming the ETag set here.
 func (c *client) serveShell(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", cacheNoCache)
+	w.Header().Set("ETag", c.shellETag)
 	http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(c.shell))
 }
 
 // serveAsset answers a build file's bytes, typed by its extension (a file
 // with an unknown one is sniffed), with Range and HEAD handled by
 // http.ServeContent. An embedded file has no modification time, so no
-// Last-Modified is sent.
+// Last-Modified is sent; a no-cache file carries its ETag instead, against
+// which http.ServeContent answers a conditional request.
 func (c *client) serveAsset(w http.ResponseWriter, r *http.Request, name string, data []byte) {
-	cache := cacheNoCache
 	if c.underHashed(name) {
-		cache = cacheImmutable
+		w.Header().Set("Cache-Control", cacheImmutable)
+	} else {
+		w.Header().Set("Cache-Control", cacheNoCache)
+		w.Header().Set("ETag", c.etags[name])
 	}
-	w.Header().Set("Cache-Control", cache)
 	http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(data))
 }
 
