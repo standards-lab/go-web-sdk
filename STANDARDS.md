@@ -13,4 +13,4 @@ The judgement calls the standards-reviewer applies to go-web-sdk, beyond what `m
 - `architecture/standards/go-elemental/principles/construction-and-execution.md`: `Service`, whose `Run` panics naming a nil field; `middleware.RequestIDOptions`, the one options value `RequestID` takes; `Problem.WriteFor`, the struct-with-method form a problem is written with; and `webtest`'s exported functions and constructors.
 - `architecture/principles/comments.md`: every comment.
 - `architecture/principles/validation-first.md`: `Config.Finalize` and `ParseQuery`.
-- `architecture/principles/context-architecture.md`: the pages under `docs/`, which hold the reasoning behind the unexported machinery.
+- `architecture/principles/context-architecture.md`: the README, each `doc.go`, and the pages under `docs/`, which hold the reasoning behind the unexported machinery.
