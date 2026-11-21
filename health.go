@@ -48,7 +48,6 @@ func Readiness(notReady Problem, checks ...lifecycle.Check) http.Handler {
 	return readiness(notReady, func() []lifecycle.Check { return checks })
 }
 
-// readiness is [Readiness] over checks read on every request.
 func readiness(notReady Problem, checks func() []lifecycle.Check) http.Handler {
 	notReady.Status = http.StatusServiceUnavailable
 	if notReady.Detail == "" {
@@ -87,8 +86,6 @@ type Doctor interface {
 	Checks() []lifecycle.Check
 }
 
-// Both of go-core's readiness sources are Doctors, so RegisterHealth takes
-// either.
 var (
 	_ Doctor = (*lifecycle.Coordinator)(nil)
 	_ Doctor = (*lifecycle.Readiness)(nil)

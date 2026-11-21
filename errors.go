@@ -5,9 +5,6 @@ import (
 	"net/http"
 )
 
-// statusError is implemented by this package's own errors, each carrying its
-// status. The method is unexported so a consumer's status policy stays in
-// its matchers.
 type statusError interface {
 	error
 	status() int

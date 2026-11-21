@@ -24,7 +24,6 @@ type Server struct {
 	listener net.Listener
 }
 
-// The Coordinator starts, stops, and watches a Server node's value.
 var (
 	_ lifecycle.Subsystem = (*Server)(nil)
 	_ lifecycle.Monitored = (*Server)(nil)
@@ -51,8 +50,6 @@ func NewServer(cfg Config, handler http.Handler, logger *slog.Logger) *Server {
 		IdleTimeout:       cfg.IdleTimeout.Duration(),
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
 	}
-	// An unset MaxHeaderBytes stays zero, net/http's signal to apply its own
-	// default.
 	if cfg.MaxHeaderBytes != nil {
 		srv.MaxHeaderBytes = *cfg.MaxHeaderBytes
 	}
@@ -125,8 +122,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	err := s.http.Shutdown(ctx)
 	if err != nil && errors.Is(err, ctx.Err()) {
-		// Close reaches only the connections net/http tracks; it neither
-		// waits for a running handler nor touches a hijacked connection.
 		_ = s.http.Close()
 	}
 	return err

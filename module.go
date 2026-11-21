@@ -50,9 +50,6 @@ func (m *Module) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func compile(mux *http.ServeMux, parent string, outer []Middleware, g *Group) {
 	g.sealed = true
 	prefix := parent + g.prefix
-	// The miss handlers are the module's, read from the root group alone;
-	// one set on a nested group would be dead wiring, so it panics like
-	// every other registration mistake.
 	if parent != "" && (g.notFound != nil || g.methodNotAllowed != nil) {
 		panic("web: SetNotFound/SetMethodNotAllowed on a nested group; set them on the group passed to NewModule: " + prefix)
 	}

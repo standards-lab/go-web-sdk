@@ -67,8 +67,6 @@ func (ew *ErrorWriter) Problem(err error) Problem {
 	return p
 }
 
-// problem is [ErrorWriter.Problem], also reporting whether the problem was
-// returned whole, which Write sends without adding the error text.
 func (ew *ErrorWriter) problem(err error) (p Problem, whole bool) {
 	if own, ok := errors.AsType[statusError](err); ok {
 		return Problem{Status: own.status()}, false

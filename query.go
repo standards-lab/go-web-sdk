@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-// reserved names the parameters [ParseQuery] consumes; every other one is a
-// filter.
 var reserved = map[string]struct{}{
 	"page":   {},
 	"size":   {},
@@ -85,8 +83,6 @@ func ParseQuery(q url.Values, l Limits) (Query, error) {
 				Reason: "must be an integer of at least 1",
 			}
 		}
-		// The data layer's offset, (page-1) times the size, must fit an int
-		// at the largest size a request may ask for.
 		if last := math.MaxInt / l.MaxSize; n > last {
 			return Query{}, &QueryError{
 				Param: "page", Value: v,
@@ -170,8 +166,6 @@ func ParseQuery(q url.Values, l Limits) (Query, error) {
 	return out, nil
 }
 
-// parseFilterKey splits a filter key into its field and operator, "name" or
-// "name[op]", rejecting anything else with the parameter's first value.
 func parseFilterKey(key string, values []string) (field, op string, err error) {
 	value := ""
 	if len(values) > 0 {

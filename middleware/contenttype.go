@@ -54,9 +54,6 @@ func ContentType(allowed ...string) web.Middleware {
 	}
 }
 
-// reject writes the 415 for ContentType: why the request's Content-Type
-// failed, and the types that would have passed. The encoder's error is
-// dropped, as the router's own miss handlers drop theirs; nothing here logs.
 func reject(w http.ResponseWriter, r *http.Request, why, accepted string) {
 	_ = web.Problem{
 		Status: http.StatusUnsupportedMediaType,

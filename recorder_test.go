@@ -160,8 +160,6 @@ func TestRecorder_FlushAfterWriteHeaderKeepsTheExplicitStatus(t *testing.T) {
 	}
 }
 
-// A handler that asserts http.Flusher, the older interface, reaches the
-// underlying writer's flush and commits the same way.
 func TestRecorder_IsAFlusher(t *testing.T) {
 	under := httptest.NewRecorder()
 	rec := web.WrapWriter(under)

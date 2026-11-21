@@ -2,11 +2,8 @@ package web
 
 import "context"
 
-// requestIDMember is the extension member under which [Problem.WriteFor]
-// surfaces the request's correlation id.
 const requestIDMember = "request_id"
 
-// requestIDKey is the context key for the request's correlation id.
 type requestIDKey struct{}
 
 // WithRequestID returns a context carrying id as the request's correlation

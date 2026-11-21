@@ -17,8 +17,6 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// lockedBuffer is a log sink a live server's goroutines can write while the
-// test goroutine reads it back.
 type lockedBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -36,8 +34,6 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-// failsafe bounds every wait for an event that should occur, so a broken server
-// fails the test instead of hanging it.
 const failsafe = 2 * time.Second
 
 func recvOrFail[T any](t *testing.T, ch <-chan T, what string) T {
@@ -52,9 +48,6 @@ func recvOrFail[T any](t *testing.T, ch <-chan T, what string) T {
 	}
 }
 
-// finalized fills the config's unset fields with defaults so NewServer, which
-// expects a finalized config, can be handed explicit values — an explicit
-// Port 0 survives Finalize and means an ephemeral port.
 func finalized(t *testing.T, cfg web.Config) web.Config {
 	t.Helper()
 	if err := cfg.Finalize(""); err != nil {
@@ -63,14 +56,11 @@ func finalized(t *testing.T, cfg web.Config) web.Config {
 	return cfg
 }
 
-// startTestServer binds a server on an ephemeral port.
 func startTestServer(t *testing.T, handler http.Handler) *web.Server {
 	t.Helper()
 	return startServer(t, web.Config{Host: "127.0.0.1", Port: new(0)}, handler)
 }
 
-// startServer binds cfg's server (finalized here, so cfg names the ephemeral
-// port itself) and registers its shutdown.
 func startServer(t *testing.T, cfg web.Config, handler http.Handler) *web.Server {
 	t.Helper()
 
@@ -86,8 +76,6 @@ func startServer(t *testing.T, cfg web.Config, handler http.Handler) *web.Server
 	return srv
 }
 
-// NewServer requires a finalized Config; the diagnostic panic names the fix
-// instead of nil-dereferencing a tri-state pointer.
 func TestNewServer_PanicsOnUnfinalizedConfig(t *testing.T) {
 	defer func() {
 		r := recover()
@@ -141,9 +129,6 @@ func TestServer_StartTwiceFails(t *testing.T) {
 	}
 }
 
-// TestServer_StartReportsBindFailure is the defect this package exists to fix:
-// binding on the calling goroutine means a taken port fails the caller instead
-// of being logged by a goroutine nobody is watching.
 func TestServer_StartReportsBindFailure(t *testing.T) {
 	occupied, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -215,7 +200,6 @@ func TestServer_ShutdownWaitsForInFlightRequest(t *testing.T) {
 		shutdown <- srv.Shutdown(ctx)
 	}()
 
-	// Shutdown must not return while the request is still being served.
 	select {
 	case err := <-shutdown:
 		t.Fatalf("Shutdown returned (%v) while a request was in flight", err)
@@ -245,8 +229,6 @@ func TestServer_ErrClosesAfterCleanShutdown(t *testing.T) {
 		t.Fatalf("Shutdown: %v", err)
 	}
 
-	// http.ErrServerClosed is the expected end of Serve, so it is swallowed and
-	// the channel simply closes.
 	select {
 	case err, ok := <-srv.Err():
 		if ok {
@@ -267,8 +249,6 @@ func TestServer_ShutdownBeforeStartLeavesServerUsable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), failsafe)
 	defer cancel()
 
-	// A drain after a failed startup passes through a never-started server, so
-	// Shutdown before Start is a no-op, not an error.
 	if err := srv.Shutdown(ctx); err != nil {
 		t.Fatalf("Shutdown before Start = %v, want nil", err)
 	}
@@ -291,8 +271,6 @@ func TestServer_ShutdownBeforeStartLeavesServerUsable(t *testing.T) {
 	}
 }
 
-// getWithHeader sends GET / carrying one header of size bytes and returns
-// the status; net/http answers an oversized header block with a 431.
 func getWithHeader(t *testing.T, addr string, size int) int {
 	t.Helper()
 
@@ -312,8 +290,6 @@ func getWithHeader(t *testing.T, addr string, size int) int {
 }
 
 func TestServer_MaxHeaderBytesBoundsTheHeaderBlock(t *testing.T) {
-	// net/http reads up to MaxHeaderBytes plus a fixed 4 KiB of slack before
-	// it answers 431, so the padding is well past both.
 	const padding = 16 << 10
 
 	bounded := startServer(t, web.Config{Host: "127.0.0.1", Port: new(0), MaxHeaderBytes: new(1024)}, http.NewServeMux())
@@ -321,7 +297,6 @@ func TestServer_MaxHeaderBytesBoundsTheHeaderBlock(t *testing.T) {
 		t.Errorf("status with MaxHeaderBytes 1024 = %d, want 431", got)
 	}
 
-	// Unset, net/http's own default (1 MiB) applies and the same header fits.
 	unbounded := startServer(t, web.Config{Host: "127.0.0.1", Port: new(0)}, http.NewServeMux())
 	if got := getWithHeader(t, unbounded.Addr(), padding); got != http.StatusNotFound {
 		t.Errorf("status with MaxHeaderBytes unset = %d, want 404 (the header fits; the mux has no routes)", got)
@@ -332,8 +307,6 @@ func TestServer_RoutesNetHTTPDiagnosticsThroughSlog(t *testing.T) {
 	var sink lockedBuffer
 	logger := slog.New(slog.NewJSONHandler(&sink, nil))
 
-	// A second WriteHeader is net/http's "superfluous response.WriteHeader"
-	// warning, which it reports through http.Server.ErrorLog.
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /twice", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -378,9 +351,6 @@ func TestNewServer_PanicsOnNilLogger(t *testing.T) {
 	web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), http.NewServeMux(), nil)
 }
 
-// A drain whose deadline passes with a request still in flight closes the
-// connections rather than leaving them to the handler: Shutdown returns the
-// context's error, and the client sees its connection end instead of hanging.
 func TestServer_ShutdownPastItsDeadlineClosesConnections(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -435,8 +405,6 @@ func TestServer_WiresReadHeaderTimeoutFromConfig(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	// Send an unfinished header block and never complete it; the configured
-	// ReadHeaderTimeout must close the connection well before the failsafe.
 	if _, err := conn.Write([]byte("GET / HTTP/1.1\r\nHost: example.test\r\n")); err != nil {
 		t.Fatalf("write partial request: %v", err)
 	}
@@ -444,8 +412,6 @@ func TestServer_WiresReadHeaderTimeoutFromConfig(t *testing.T) {
 		t.Fatalf("set read deadline: %v", err)
 	}
 
-	// EOF or a reset both mean the server closed the connection in time; only
-	// the client-side deadline expiring means the timeout was not enforced.
 	_, err = io.ReadAll(conn)
 	var ne net.Error
 	if errors.As(err, &ne) && ne.Timeout() {

@@ -6,8 +6,6 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// header is one fixed response header, its name canonicalized at
-// construction.
 type header struct {
 	name, value string
 }

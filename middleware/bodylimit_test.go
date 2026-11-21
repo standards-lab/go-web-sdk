@@ -19,7 +19,6 @@ type order struct {
 	Name string `json:"name"`
 }
 
-// post serves one POST of body through handler and returns the recorder.
 func post(handler http.Handler, body string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(body))
@@ -28,7 +27,6 @@ func post(handler http.Handler, body string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// A body under the limit reaches the handler whole.
 func TestBodyLimit_BodyUnderTheLimitPassesThrough(t *testing.T) {
 	var got string
 	handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -50,10 +48,6 @@ func TestBodyLimit_BodyUnderTheLimitPassesThrough(t *testing.T) {
 	}
 }
 
-// The composition the middleware exists for: a handler adapted by web.Handle
-// that decodes through web.DecodeJSON answers an oversized body with a 413
-// problem document, with no mapping of its own. The middleware's limit is
-// the tighter one here, so it is the middleware's reader that overflows.
 func TestBodyLimit_OverflowThroughDecodeJSONIsA413(t *testing.T) {
 	decoded := false
 	handler := web.Chain(web.Handle(func(w http.ResponseWriter, r *http.Request) error {
@@ -94,8 +88,6 @@ func TestBodyLimit_OverflowThroughDecodeJSONIsA413(t *testing.T) {
 	}
 }
 
-// A handler that reads the body itself gets the reader's own error and owns
-// the mapping; the middleware writes nothing.
 func TestBodyLimit_OverflowOnARawReadIsMaxBytesError(t *testing.T) {
 	var err error
 	handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

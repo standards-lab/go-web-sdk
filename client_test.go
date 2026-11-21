@@ -16,13 +16,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
-// viteBuild is a Vite build as NewClient reads it: a manifest whose entry
-// imports a shared chunk statically and a route dynamically, the entry and
-// the shared chunk each pulling in CSS, and a file copied from a public
-// directory, which Vite does not hash. Two more entries stand for modules
-// a shell loads render-blocking: one with CSS of its own, importing the
-// entry's shared chunk and a chunk of their own, and one importing that
-// chunk alone.
 func viteBuild() fstest.MapFS {
 	return fstest.MapFS{
 		web.ManifestPath: {Data: []byte(`{
@@ -54,11 +47,8 @@ func viteBuild() fstest.MapFS {
 	}
 }
 
-// clientEntry is the build's entry key.
 const clientEntry = "src/main.ts"
 
-// clientConfig stands in for the configuration an application writes into
-// the shell.
 type clientConfig struct {
 	APIBase string `json:"apiBase"`
 	Token   string `json:"token"`
@@ -72,8 +62,6 @@ func clientOptions(base string) web.ClientOptions {
 	}
 }
 
-// newClient builds the handler over viteBuild() with opts, failing the test
-// on an error.
 func newClient(t *testing.T, opts web.ClientOptions) http.Handler {
 	t.Helper()
 	h, err := web.NewClient(viteBuild(), clientEntry, opts)
@@ -83,15 +71,11 @@ func newClient(t *testing.T, opts web.ClientOptions) http.Handler {
 	return h
 }
 
-// shellOf is the body the handler answers at its root.
 func shellOf(t *testing.T, opts web.ClientOptions) string {
 	t.Helper()
 	return handlertest.Get(newClient(t, opts), "/").Body.String()
 }
 
-// unreadableFS is a build one of whose files cannot be opened, as a read
-// failure on a real file system would leave it. It implements Open alone,
-// so every read of the build reaches it.
 type unreadableFS struct {
 	build fstest.MapFS
 	name  string
@@ -140,8 +124,6 @@ func TestNewClient_FailsNamingTheProblem(t *testing.T) {
 	}
 }
 
-// A malformed base is a wiring mistake, so it panics, naming the base and
-// the form it must take.
 func TestNewClient_MalformedBasePanics(t *testing.T) {
 	for _, base := range []string{"app", "//", "/app//", "/a/../app", "/app/.", "/app?x=1", "/app#top"} {
 		t.Run(base, func(t *testing.T) {
@@ -156,9 +138,6 @@ func TestNewClient_MalformedBasePanics(t *testing.T) {
 	}
 }
 
-// The shell writes the base with exactly one trailing slash, empty
-// selecting "/", the title escaped as text, the config as JSON in its
-// element, and the entry as a module script.
 func TestNewClient_Shell(t *testing.T) {
 	for base, href := range map[string]string{"": "/", "/": "/", "/app": "/app/", "/app/": "/app/", "/a/b": "/a/b/"} {
 		t.Run(base, func(t *testing.T) {
@@ -177,13 +156,8 @@ func TestNewClient_Shell(t *testing.T) {
 	}
 }
 
-// shellLinks matches the shell's stylesheet links, modulepreload links, and
-// module scripts, in document order: the kind, any blocking attribute, and
-// the URL.
 var shellLinks = regexp.MustCompile(`<link rel="(stylesheet|modulepreload)" href="([^"]*)">|<script type="module"( blocking="render")? src="([^"]*)"></script>`)
 
-// shellOrder lists body's links and module scripts in document order, each
-// as "stylesheet URL", "modulepreload URL", "blocking URL", or "module URL".
 func shellOrder(body string) []string {
 	var order []string
 	for _, m := range shellLinks.FindAllStringSubmatch(body, -1) {
@@ -199,9 +173,6 @@ func shellOrder(body string) []string {
 	return order
 }
 
-// With no RenderBlocking the shell loads the entry alone: the CSS of the
-// entry and of the chunk it imports statically, a modulepreload for that
-// chunk, then the entry. Nothing from the dynamic import appears.
 func TestNewClient_ShellLoadsTheEntry(t *testing.T) {
 	body := shellOf(t, web.ClientOptions{})
 	got := shellOrder(body)
@@ -219,12 +190,6 @@ func TestNewClient_ShellLoadsTheEntry(t *testing.T) {
 	}
 }
 
-// The render-blocking modules load ahead of the entry, in the order
-// RenderBlocking lists them (here against the manifest's own order), each
-// a module script with blocking="render"; the entry follows them,
-// non-blocking. Their CSS comes first, then the entry's, and every chunk
-// any of them imports statically is preloaded once, never a chunk a script
-// loads itself.
 func TestNewClient_ShellLoadsRenderBlockingModules(t *testing.T) {
 	opts := clientOptions("/")
 	opts.RenderBlocking = []string{"src/preferences.ts", "src/register.ts"}
@@ -244,10 +209,8 @@ func TestNewClient_ShellLoadsRenderBlockingModules(t *testing.T) {
 	}
 }
 
-// configElement matches the config element's content.
 var configElement = regexp.MustCompile(`(?s)<script type="application/json" id="app-config">(.*?)</script>`)
 
-// configOf returns the content of body's config element.
 func configOf(t *testing.T, body string) string {
 	t.Helper()
 	m := configElement.FindStringSubmatch(body)
@@ -257,10 +220,6 @@ func configOf(t *testing.T, body string) string {
 	return m[1]
 }
 
-// A config value carrying a closing script tag, a comment opener, and an
-// ampersand cannot end the element early: the first </script> after the
-// element's opening tag is its own, and its content decodes back to the
-// value.
 func TestNewClient_ShellEscapesConfig(t *testing.T) {
 	hostile := "</script><script>alert(1)</script><!-- & \u2028"
 	opts := clientOptions("/")
@@ -280,17 +239,12 @@ func TestNewClient_ShellEscapesConfig(t *testing.T) {
 	}
 }
 
-// A nil config writes null.
 func TestNewClient_ShellWritesNilConfigAsNull(t *testing.T) {
 	if got := configOf(t, shellOf(t, web.ClientOptions{})); got != "null" {
 		t.Errorf("config element = %q, want null", got)
 	}
 }
 
-// Every path that is neither an asset nor a missing asset is a client
-// route, deep links and trailing slashes included, and answers the shell
-// as HTML revalidated on every use; so does a path that climbs with "..",
-// cleaned inside the build.
 func TestNewClient_ClientRoutesAnswerTheShell(t *testing.T) {
 	h := newClient(t, clientOptions("/app"))
 	want := handlertest.Get(h, "/").Body.String()
@@ -310,9 +264,6 @@ func TestNewClient_ClientRoutesAnswerTheShell(t *testing.T) {
 	}
 }
 
-// expectClientProblem fails the test unless rec holds a problem document
-// with status and its title, and the path the browser asked for as
-// instance: the client's answer, never the shell.
 func expectClientProblem(t *testing.T, rec *httptest.ResponseRecorder, status int, instance string) {
 	t.Helper()
 	if rec.Code != status {
@@ -330,10 +281,6 @@ func expectClientProblem(t *testing.T, rec *httptest.ResponseRecorder, status in
 	}
 }
 
-// A build file answers its bytes, typed by its extension. A hashed file,
-// under the manifest's directories, is cached for a year as immutable, with
-// no ETag; a build file Vite does not hash is revalidated on every use
-// against its ETag.
 func TestNewClient_Assets(t *testing.T) {
 	h := newClient(t, clientOptions("/app"))
 	cases := []struct {
@@ -363,12 +310,8 @@ func TestNewClient_Assets(t *testing.T) {
 	}
 }
 
-// strongETag matches a strong entity tag: quoted, with no W/ prefix.
 var strongETag = regexp.MustCompile(`^"[^"]+"$`)
 
-// The shell and a no-cache build file each carry a strong ETag, the same on
-// every request and distinct from each other; an If-None-Match naming it
-// answers 304 with no body, and one naming another tag answers the bytes.
 func TestNewClient_RevalidatedFilesAnswerConditionalRequests(t *testing.T) {
 	h := newClient(t, clientOptions("/"))
 	seen := map[string]string{}
@@ -405,7 +348,6 @@ func TestNewClient_RevalidatedFilesAnswerConditionalRequests(t *testing.T) {
 	}
 }
 
-// conditionalGet serves a GET of path through h with If-None-Match tag.
 func conditionalGet(h http.Handler, path, tag string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Header.Set("If-None-Match", tag)
@@ -414,8 +356,6 @@ func conditionalGet(h http.Handler, path, tag string) *httptest.ResponseRecorder
 	return rec
 }
 
-// An ETag follows content: a build whose file or shell changes gives each a
-// new one, so a browser holding the old tag gets the new bytes.
 func TestNewClient_ETagFollowsContent(t *testing.T) {
 	changed := viteBuild()
 	changed["favicon.svg"] = &fstest.MapFile{Data: []byte("<svg></svg>")}
@@ -443,10 +383,6 @@ func TestNewClient_ETagFollowsContent(t *testing.T) {
 	}
 }
 
-// A missing asset is a 404 problem, never the shell: a path under the
-// hashed directory, a path with an extension, the manifest and every other
-// dotfile, which exist but are never served. The instance names the path
-// the browser asked for, the base included.
 func TestNewClient_MissingAssetIsNotFound(t *testing.T) {
 	for _, base := range []string{"/", "/app"} {
 		h := newClient(t, clientOptions(base))
@@ -467,8 +403,6 @@ func TestNewClient_MissingAssetIsNotFound(t *testing.T) {
 	}
 }
 
-// HEAD answers the GET's status, Content-Type, Content-Length,
-// Cache-Control and ETag with no body, for the shell and an asset alike.
 func TestNewClient_Head(t *testing.T) {
 	h := newClient(t, clientOptions("/app"))
 	for _, path := range []string{"/about", "/assets/main-abc.js", "/favicon.svg"} {
@@ -487,8 +421,6 @@ func TestNewClient_Head(t *testing.T) {
 	}
 }
 
-// Any method but GET and HEAD is a 405 problem naming the two it takes,
-// on an asset and a client route alike.
 func TestNewClient_OtherMethodsAreNotAllowed(t *testing.T) {
 	h := newClient(t, clientOptions("/app"))
 	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions} {
@@ -504,10 +436,6 @@ func TestNewClient_OtherMethodsAreNotAllowed(t *testing.T) {
 	}
 }
 
-// Set as the router's not-found handler at the root, the client answers
-// only what no module and no native route claims: the module's routes, its
-// misses, the native routes, and the probes answer as before, and every
-// other path is the client's.
 func TestNewClient_AsTheRoutersNotFound(t *testing.T) {
 	r := web.NewRouter()
 	r.Mount(module("/api", "/things"))
@@ -537,10 +465,6 @@ func TestNewClient_AsTheRoutersNotFound(t *testing.T) {
 	expectClientProblem(t, handlertest.Get(r, "/assets/gone.js"), http.StatusNotFound, "/assets/gone.js")
 }
 
-// Mounted with NewHandlerModule under a prefix, the client sees the
-// stripped path: the bare prefix redirects to the base with its query kept,
-// and every path beneath it answers as at the root, a problem's instance
-// naming the full path the browser asked for.
 func TestNewClient_UnderAPrefix(t *testing.T) {
 	r := web.NewRouter()
 	r.Mount(module("/api", "/things"))

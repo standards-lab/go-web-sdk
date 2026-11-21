@@ -122,8 +122,6 @@ func (t Transfer) WidenDownload(w http.ResponseWriter, size int64) error {
 	return nil
 }
 
-// deadline returns the time d from now, or the zero time (no deadline) when
-// d is saturated.
 func deadline(d time.Duration) time.Time {
 	if d == math.MaxInt64 {
 		return time.Time{}

@@ -13,9 +13,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/webtest"
 )
 
-// The client reads a problem the way the web package writes one, sends a
-// JSON body with the precondition IfMatch quotes, and Decode reads the
-// common response.
 func TestClient_ProblemsAndDecode(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("PUT /things/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -51,9 +48,6 @@ func TestClient_ProblemsAndDecode(t *testing.T) {
 	}
 }
 
-// A Raw body is sent under its own media type with its length, as
-// ReadUpload requires; a Raw body with no media type is refused; and a read
-// returns the proxied bytes and their headers whole.
 func TestClient_RawUploadAndObjectRead(t *testing.T) {
 	var stored []byte
 	var storedType string
@@ -96,7 +90,6 @@ func TestClient_RawUploadAndObjectRead(t *testing.T) {
 	c.Get(t, "/files/logo.png", webtest.Header{Name: "If-None-Match", Value: `"1"`}).Expect(t, http.StatusNotModified)
 }
 
-// Live is true only for a server answering the liveness probe with 200.
 func TestLive_ObservesTheProbe(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("GET "+web.HealthPath, web.Liveness())

@@ -15,7 +15,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
-// mustPanic runs fn and fails the test unless it panics.
 func mustPanic(t *testing.T, name string, fn func()) {
 	t.Helper()
 	defer func() {
@@ -26,8 +25,6 @@ func mustPanic(t *testing.T, name string, fn func()) {
 	fn()
 }
 
-// recovered serves one GET through the recoverer and returns the response
-// and whatever the recoverer logged, one map per JSON line.
 func recovered(t *testing.T, handler http.Handler) (*httptest.ResponseRecorder, []map[string]any) {
 	t.Helper()
 
@@ -37,7 +34,6 @@ func recovered(t *testing.T, handler http.Handler) (*httptest.ResponseRecorder, 
 	return rec, records(t, buf.String())
 }
 
-// records parses newline-delimited JSON log output.
 func records(t *testing.T, out string) []map[string]any {
 	t.Helper()
 
@@ -126,11 +122,6 @@ func TestRecoverer_LeavesANonPanickingRequestAlone(t *testing.T) {
 	}
 }
 
-// A response already committed before the panic cannot be answered with a
-// problem document, so Recoverer logs the committed status and re-raises
-// the panic as http.ErrAbortHandler instead of returning normally: net/http
-// ends the connection rather than completing a truncated body as if it
-// were a clean response.
 func TestRecoverer_PanicAfterCommitReRaisesErrAbortHandler(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -173,8 +164,6 @@ func TestRecoverer_PanicAfterCommitReRaisesErrAbortHandler(t *testing.T) {
 	}
 }
 
-// brokenWriter is a ResponseWriter whose Write fails as a dropped client
-// connection does: headers and status go through, the body does not.
 type brokenWriter struct {
 	http.ResponseWriter
 	err error
@@ -182,9 +171,6 @@ type brokenWriter struct {
 
 func (w brokenWriter) Write([]byte) (int, error) { return 0, w.err }
 
-// When the 500 problem cannot be written, the recoverer logs that failure
-// as a second record after the panic, so the dropped response is visible
-// alongside its cause.
 func TestRecoverer_LogsAProblemWriteFailure(t *testing.T) {
 	broken := errors.New("write tcp: connection reset by peer")
 	var buf bytes.Buffer
@@ -231,8 +217,6 @@ func TestRecoverer_NilLoggerPanics(t *testing.T) {
 	})
 }
 
-// http.ErrAbortHandler is net/http's own way to abort a response silently;
-// the recoverer passes it through rather than answering it with a problem.
 func TestRecoverer_ErrAbortHandlerPropagates(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
@@ -254,13 +238,11 @@ func TestRecoverer_ErrAbortHandlerPropagates(t *testing.T) {
 	}
 }
 
-// Both of Recoverer's records — the panic and a failed problem write — carry
-// request_id when the request's context holds one, and omit it otherwise.
 func TestRecoverer_RequestIDOnBothRecords(t *testing.T) {
 	tests := []struct {
 		name string
 		req  *http.Request
-		id   any // nil means the attribute must be absent
+		id   any
 	}{
 		{"with an id", withID("/orders/7", "abc123"), "abc123"},
 		{"without an id", httptest.NewRequest(http.MethodGet, "/orders/7", nil), nil},

@@ -79,8 +79,6 @@ func Attachment(name string) string {
 	return header + "; filename*=UTF-8''" + encoded.String()
 }
 
-// attrChar reports whether b is an RFC 8187 attr-char, the bytes an
-// extended value carries unencoded.
 func attrChar(b byte) bool {
 	switch {
 	case 'a' <= b && b <= 'z', 'A' <= b && b <= 'Z', '0' <= b && b <= '9':
@@ -119,8 +117,6 @@ func WriteObject(w http.ResponseWriter, r *http.Request, o Object, open func() (
 			for _, name := range representation {
 				h.Del(name)
 			}
-			// A 404 is heuristically cacheable, so the problem must not be
-			// stored in the object's place.
 			h.Set("Cache-Control", "no-store")
 			return err
 		}
@@ -144,9 +140,6 @@ func WriteObject(w http.ResponseWriter, r *http.Request, o Object, open func() (
 	return err
 }
 
-// representation names the headers that describe the object's bytes or
-// how long to keep them, set by WriteObject or by its caller for the object,
-// which a problem answering a failed open must not carry.
 var representation = [...]string{
 	"Cache-Control",
 	"Content-Disposition",
@@ -158,10 +151,6 @@ var representation = [...]string{
 	"Last-Modified",
 }
 
-// notModified evaluates a GET or HEAD request's cache preconditions against
-// o, in RFC 9110 §13.2.2's order: If-None-Match when present, and
-// If-Modified-Since only in its absence. A date that does not parse is
-// ignored, as the RFC requires, and so is either header on another method.
 func notModified(r *http.Request, o Object) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
@@ -180,11 +169,6 @@ func notModified(r *http.Request, o Object) bool {
 	return !o.ModifiedAt.Truncate(time.Second).After(since)
 }
 
-// noneMatch reports whether an If-None-Match header value matches etag by
-// weak comparison: the * form matches any current object, and otherwise
-// one of the listed entity tags must equal etag once a W/ prefix is set
-// aside on either side. The list is scanned tag by tag, since a quoted tag
-// may itself contain a comma; a malformed remainder ends the scan.
 func noneMatch(header, etag string) bool {
 	header = strings.TrimSpace(header)
 	if header == "*" {

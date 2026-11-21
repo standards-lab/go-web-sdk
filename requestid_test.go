@@ -9,7 +9,6 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// requestWithID builds a GET request for path whose context carries id.
 func requestWithID(path, id string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, path, nil)
 	return r.WithContext(web.WithRequestID(r.Context(), id))
@@ -54,7 +53,6 @@ func TestProblem_WriteForCarriesRequestID(t *testing.T) {
 	if got := body["request_id"]; got != "req-42" {
 		t.Errorf("request_id = %v, want req-42", got)
 	}
-	// The id lives in its own member; instance stays the request path.
 	if got := body["instance"]; got != "/orders/42" {
 		t.Errorf("instance = %v, want /orders/42", got)
 	}
@@ -81,8 +79,6 @@ func TestProblem_WriteForCarriesRequestIDBesideExtras(t *testing.T) {
 	}
 }
 
-// A consumer with no correlation id configured must see the document shape it
-// had before: no request_id member at all, not an empty one.
 func TestProblem_WriteForWithoutRequestIDOmitsMember(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/orders/42", nil)
@@ -113,8 +109,6 @@ func TestProblem_WriteForEmptyRequestIDOmitsMember(t *testing.T) {
 	}
 }
 
-// The id from the context is the SDK's assertion of which request the
-// document answers, so it wins over a request_id the caller put in Extras.
 func TestProblem_WriteForContextRequestIDOverridesExtras(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r := requestWithID("/orders/42", "from-context")
@@ -133,8 +127,6 @@ func TestProblem_WriteForContextRequestIDOverridesExtras(t *testing.T) {
 	}
 }
 
-// A Problem value is reused across requests (a matcher's fixed problem, the
-// readiness notReady), so merging the id must not write the caller's map.
 func TestProblem_WriteForDoesNotMutateExtras(t *testing.T) {
 	extras := map[string]any{"balance": 0}
 	p := web.Problem{Status: http.StatusForbidden, Extras: extras}

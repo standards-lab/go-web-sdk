@@ -21,8 +21,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
-// staticChecker reports a fixed readiness, standing in for a subsystem that
-// satisfies lifecycle.ReadinessChecker.
 type staticChecker bool
 
 func (c staticChecker) Ready() bool { return bool(c) }
@@ -41,8 +39,6 @@ func TestLiveness_ReportsOK(t *testing.T) {
 	}
 }
 
-// A probe's answer is the state of this moment: no cache may keep it, the
-// 503 included, or a recovered service would read as down.
 func TestProbes_SendNoStore(t *testing.T) {
 	for name, h := range map[string]http.Handler{
 		"liveness":  web.Liveness(),
@@ -120,8 +116,6 @@ func TestReadiness_NotReadyEmitsProblem(t *testing.T) {
 	if !ok || len(checks) != 2 {
 		t.Fatalf("checks = %v, want two entries", body["checks"])
 	}
-	// The failing participant has to be identifiable, which is the reason the
-	// extension carries names at all.
 	failing, ok := checks[1].(map[string]any)
 	if !ok {
 		t.Fatalf("checks[1] = %v, want an object", checks[1])
@@ -131,7 +125,6 @@ func TestReadiness_NotReadyEmitsProblem(t *testing.T) {
 	}
 }
 
-// A consumer's own problem reaches the wire: the type hook this step adds.
 func TestReadiness_NotReadyConsumerProblemReachesTheWire(t *testing.T) {
 	const problemType = "https://example.test/probs/not-ready"
 	handler := web.Readiness(
@@ -159,8 +152,6 @@ func TestReadiness_NotReadyConsumerProblemReachesTheWire(t *testing.T) {
 	}
 }
 
-// The checks member is always the probe's own: a consumer's Extras cannot
-// shadow it.
 func TestReadiness_NotReadyChecksCannotBeOverriddenByExtras(t *testing.T) {
 	handler := web.Readiness(
 		web.Problem{Extras: map[string]any{"checks": "not the real checks"}},
@@ -175,7 +166,6 @@ func TestReadiness_NotReadyChecksCannotBeOverriddenByExtras(t *testing.T) {
 	}
 }
 
-// The status is always the probe's own: a consumer's Status is ignored.
 func TestReadiness_NotReadyStatusIsAlwaysServiceUnavailable(t *testing.T) {
 	handler := web.Readiness(
 		web.Problem{Status: http.StatusTeapot},
@@ -188,19 +178,12 @@ func TestReadiness_NotReadyStatusIsAlwaysServiceUnavailable(t *testing.T) {
 	}
 }
 
-// notReady.Extras is read, never written: several requests probing the same
-// handler concurrently must not race on it (run under -race), and each
-// must see its own "checks" entry rather than one leaking into another's
-// document.
 func TestReadiness_ConcurrentRequestsDoNotShareExtras(t *testing.T) {
 	handler := web.Readiness(
 		web.Problem{Extras: map[string]any{"tenant": "acme"}},
 		lifecycle.Check{Name: "database", Checker: staticChecker(false)},
 	)
 
-	// t.Fatalf (inside the decodeBody helper) must only run on the test's
-	// own goroutine, so each worker decodes inline and reports with
-	// Errorf, which is safe to call concurrently.
 	const n = 50
 	var wg sync.WaitGroup
 	wg.Add(n)
@@ -235,10 +218,6 @@ func TestReadiness_NilCheckerIsNotReady(t *testing.T) {
 	}
 }
 
-// TestReadiness_TracksCoordinator walks the readiness signal through a whole
-// graph Run: warming up while a Starter blocks, ready once OnReady fires,
-// and stopped once Run returns. The middle and last transitions are what make
-// /readyz useful to an orchestrator; /healthz answers 200 throughout.
 func TestReadiness_TracksCoordinator(t *testing.T) {
 	g := graph.New()
 	warmup := g.Define("warmup", func(*graph.Scope) (*blockingStarter, error) {
@@ -273,12 +252,6 @@ func TestReadiness_TracksCoordinator(t *testing.T) {
 	expectProbes(t, mux, "after Run returned", http.StatusServiceUnavailable)
 }
 
-// TestReadiness_TracksReadinessNode walks the same Run as
-// TestReadiness_TracksCoordinator, but with the probes mounted inside a node
-// constructor over a lifecycle.Readiness node, the wiring a graph uses since
-// the Coordinator does not exist while the graph builds. /readyz follows the
-// Coordinator New bound the Readiness to: 503 while a Starter blocks, 200
-// once OnReady fires, 503 after Run returns; /healthz answers 200 throughout.
 func TestReadiness_TracksReadinessNode(t *testing.T) {
 	g := graph.New()
 	readiness := g.Fresh[lifecycle.Readiness]("readiness")
@@ -324,8 +297,6 @@ func TestRegisterHealth_MountsBothPaths(t *testing.T) {
 	if got := handlertest.Get(mux, web.HealthPath).Code; got != http.StatusOK {
 		t.Errorf("GET %s = %d, want 200", web.HealthPath, got)
 	}
-	// The coordinator never ran, so it reports not ready; readyz still has to
-	// be mounted and answer, just not with 200.
 	if got := handlertest.Get(mux, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
 		t.Errorf("GET %s = %d, want 503 before the coordinator runs", web.ReadyPath, got)
 	}
@@ -343,10 +314,6 @@ func TestRegisterHealth_RejectsOtherMethods(t *testing.T) {
 	}
 }
 
-// TestRegisterHealth_QueriesCoordinatorLive pins that a Starter with Ready
-// defined in the graph appears on /readyz once New runs, after the
-// coordinator's own "lifecycle" check, and that its state is read on every
-// request rather than snapshotted when RegisterHealth mounts the probe.
 func TestRegisterHealth_QueriesCoordinatorLive(t *testing.T) {
 	g := graph.New()
 	database := g.Fresh[toggleStarter]("database")
@@ -364,8 +331,6 @@ func TestRegisterHealth_QueriesCoordinatorLive(t *testing.T) {
 	}
 }
 
-// A nil Doctor is a wiring mistake: RegisterHealth panics naming the fix
-// rather than mounting a probe that nil-dereferences on its first request.
 func TestRegisterHealth_PanicsOnNilDoctor(t *testing.T) {
 	defer func() {
 		const want = "web: RegisterHealth requires a Doctor; pass the *lifecycle.Coordinator or a *lifecycle.Readiness node's value"
@@ -376,13 +341,6 @@ func TestRegisterHealth_PanicsOnNilDoctor(t *testing.T) {
 	web.RegisterHealth(http.NewServeMux(), nil, web.Problem{})
 }
 
-// TestRegisterHealth_ReadsAReadinessNodeLive mounts the probes inside a node
-// constructor, over a lifecycle.Readiness the Coordinator does not exist yet
-// to bind. Until New binds it, /readyz reports "lifecycle" alone, not ready;
-// once New has, the same probe reports "lifecycle" then the System's
-// Starter nodes with Ready, layer 0 before layer 1 and, within a layer, in
-// definition order rather than the order the constructors reached them.
-// Nothing else registers a check.
 func TestRegisterHealth_ReadsAReadinessNodeLive(t *testing.T) {
 	g := graph.New()
 	readiness := g.Fresh[lifecycle.Readiness]("readiness")
@@ -396,8 +354,6 @@ func TestRegisterHealth_ReadsAReadinessNodeLive(t *testing.T) {
 	mux := g.Define("mux", func(s *graph.Scope) (*http.ServeMux, error) {
 		m := http.NewServeMux()
 		web.RegisterHealth(m, s.Use(readiness), web.Problem{})
-		// search reaches database before queue is used, so discovery order
-		// differs from definition order within layer 0.
 		s.Use(search)
 		s.Use(queue)
 		duringBuild = handlertest.Get(m, web.ReadyPath)
@@ -421,18 +377,9 @@ func TestRegisterHealth_ReadsAReadinessNodeLive(t *testing.T) {
 	}
 }
 
-// TestRegisterHealth_ListsOnlyStarterChecks runs a System holding a Starter
-// with Ready ("database") and a value with Ready but no Start ("view"),
-// with the probes over the Coordinator and over a Readiness bound to it.
-// Either way /readyz lists "lifecycle" first, then "database"; "view" is
-// absent from the 200 once everything is ready and from the 503 once the
-// Starter is not, though view's own Ready would fail it.
 func TestRegisterHealth_ListsOnlyStarterChecks(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		// mount returns the mux serving the probes over the Doctor under
-		// test, given the System, its Coordinator, and the mux node that
-		// mounted the probes over the Readiness node.
+		name  string
 		mount func(*graph.System, *lifecycle.Coordinator, *graph.Node[*http.ServeMux]) http.Handler
 	}{
 		{"coordinator", func(_ *graph.System, lc *lifecycle.Coordinator, _ *graph.Node[*http.ServeMux]) http.Handler {
@@ -494,10 +441,6 @@ func TestRegisterHealth_ListsOnlyStarterChecks(t *testing.T) {
 	}
 }
 
-// TestRegisterHealth_ServerNodeAddsNoCheck runs a System whose server node
-// serves the probes over a Readiness node: the Coordinator starts the
-// Server, so /readyz answers over the network, ready, with "lifecycle" as
-// its only check, and shuts it down when Run ends.
 func TestRegisterHealth_ServerNodeAddsNoCheck(t *testing.T) {
 	g := graph.New()
 	readiness := g.Fresh[lifecycle.Readiness]("readiness")
@@ -538,16 +481,12 @@ func TestRegisterHealth_ServerNodeAddsNoCheck(t *testing.T) {
 	if err := recvOrFail(t, done, "Run to return"); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	// The Coordinator shut the Server down: its listener is closed, so a
-	// fresh connection is refused.
 	if conn, err := net.Dial("tcp", sys.Get(server).Addr()); err == nil {
 		_ = conn.Close()
 		t.Errorf("dial %s after Run returned succeeded, want the Server shut down", sys.Get(server).Addr())
 	}
 }
 
-// readyChecks returns the checks a /readyz response body carries, each as
-// "name=ready", in the order the probe reported them.
 func readyChecks(t *testing.T, body []byte) []string {
 	t.Helper()
 	var decoded struct {
@@ -566,11 +505,8 @@ func readyChecks(t *testing.T, body []byte) []string {
 	return out
 }
 
-// coordinatorConfig is a finalized lifecycle.Config, whose positive
-// ShutdownTimeout lifecycle.New requires.
 var coordinatorConfig = lifecycle.Config{ShutdownTimeout: config.Duration(2 * time.Second)}
 
-// build builds g from roots, failing the test on a constructor error.
 func build(t *testing.T, g *graph.Graph, roots ...graph.Ref) *graph.System {
 	t.Helper()
 	sys, err := g.Build(roots...)
@@ -580,16 +516,11 @@ func build(t *testing.T, g *graph.Graph, roots ...graph.Ref) *graph.System {
 	return sys
 }
 
-// idleCoordinator returns a coordinator over an empty System that never
-// runs, so it reports not ready.
 func idleCoordinator(t *testing.T) *lifecycle.Coordinator {
 	t.Helper()
 	return lifecycle.New(build(t, graph.New()), coordinatorConfig)
 }
 
-// expectProbes fails the test unless /readyz answers readyz and /healthz
-// answers 200: liveness is independent of readiness, since the process is
-// serving either way.
 func expectProbes(t *testing.T, h http.Handler, when string, readyz int) {
 	t.Helper()
 	if got := handlertest.Get(h, web.ReadyPath).Code; got != readyz {
@@ -600,8 +531,6 @@ func expectProbes(t *testing.T, h http.Handler, when string, readyz int) {
 	}
 }
 
-// blockingStarter is a lifecycle.Starter whose Start closes started, then
-// blocks until release is closed, holding the coordinator in startup.
 type blockingStarter struct {
 	started, release chan struct{}
 }
@@ -612,17 +541,12 @@ func (s *blockingStarter) Start(context.Context) error {
 	return nil
 }
 
-// toggleChecker is a lifecycle.ReadinessChecker whose state a test flips.
-// It has no Start, so go-core infers no lifecycle.Check from it.
 type toggleChecker struct {
 	ready atomic.Bool
 }
 
 func (c *toggleChecker) Ready() bool { return c.ready.Load() }
 
-// toggleStarter is a toggleChecker that is also a lifecycle.Starter, whose
-// Start returns at once: the least a node value needs for go-core to infer
-// a lifecycle.Check from it.
 type toggleStarter struct {
 	toggleChecker
 }

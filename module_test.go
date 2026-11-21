@@ -8,8 +8,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
-// Every route registers under its full pattern: the parent's prefix, the
-// child's, and the route's own, joined at compile time.
 func TestNewModule_RegistersFullPatterns(t *testing.T) {
 	child := web.NewGroup("/orders")
 	child.Handle(http.MethodGet, "/recent", ok())
@@ -29,8 +27,6 @@ func TestNewModule_RegistersFullPatterns(t *testing.T) {
 	}
 }
 
-// Group middleware wraps outermost, ordered root to leaf, with per-route
-// middleware innermost — the effective order a request passes through.
 func TestNewModule_MiddlewareOrderIsRootToLeafThenRoute(t *testing.T) {
 	var order []string
 
@@ -58,8 +54,6 @@ func TestNewModule_MiddlewareOrderIsRootToLeafThenRoute(t *testing.T) {
 	}
 }
 
-// Composition happens once, at NewModule: the middleware's wrapping function
-// runs at compile time and never again per request.
 func TestNewModule_ComposesOnce(t *testing.T) {
 	var composed int
 	counting := func(next http.Handler) http.Handler {
@@ -90,8 +84,6 @@ func TestNewModule_DuplicatePatternPanics(t *testing.T) {
 	})
 }
 
-// NewHandlerModule is the one place a module rewrites the request path; a
-// compiled group's handler sees the full path unchanged.
 func TestNewHandlerModule_StripsThePrefix(t *testing.T) {
 	var stripped, full string
 
@@ -115,8 +107,6 @@ func TestNewHandlerModule_StripsThePrefix(t *testing.T) {
 	}
 }
 
-// A miss inside a module is a problem document, with the mux's Allow header
-// preserved on a 405.
 func TestModule_MissIsAProblem(t *testing.T) {
 	g := web.NewGroup("/api")
 	g.Handle(http.MethodGet, "/things", ok())
@@ -131,8 +121,6 @@ func TestModule_MissIsAProblem(t *testing.T) {
 	}
 }
 
-// The mux's path-cleaning redirect inside a module is served, not turned
-// into a 404.
 func TestModule_RedirectsStillRedirect(t *testing.T) {
 	m := module("/api", "/things")
 
@@ -162,8 +150,6 @@ func TestModule_GroupSettersOverrideTheDefaults(t *testing.T) {
 	}
 }
 
-// A miss reaches no route, so no group middleware runs on it; router
-// middleware, which wraps the whole dispatch, still does.
 func TestModule_MissRunsNoGroupMiddleware(t *testing.T) {
 	var order []string
 
@@ -189,8 +175,6 @@ func TestModule_MissRunsNoGroupMiddleware(t *testing.T) {
 	}
 }
 
-// The miss handlers are the module's, read from the root group; one set on
-// a nested group would be dead wiring, so NewModule panics instead.
 func TestNewModule_MissHandlerOnNestedGroupPanics(t *testing.T) {
 	for name, set := range map[string]func(*web.Group){
 		"SetNotFound":         func(g *web.Group) { g.SetNotFound(ok()) },

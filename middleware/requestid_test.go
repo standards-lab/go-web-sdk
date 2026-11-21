@@ -17,13 +17,8 @@ import (
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
-// generatedID matches the shape RequestID generates: 16 bytes as 32
-// lowercase hex characters.
 var generatedID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
-// identified serves one GET through RequestID built with opts, with inbound
-// carrying any request headers to send, and returns the recorder and the id
-// the downstream handler read from its context.
 func identified(t *testing.T, inbound http.Header, opts middleware.RequestIDOptions) (*httptest.ResponseRecorder, string) {
 	t.Helper()
 
@@ -44,7 +39,6 @@ func identified(t *testing.T, inbound http.Header, opts middleware.RequestIDOpti
 	return rec, seen
 }
 
-// fixedSource is an id source that returns id for every request.
 func fixedSource(id string) func(*http.Request) string {
 	return func(*http.Request) string { return id }
 }
@@ -70,8 +64,6 @@ func TestRequestID_GeneratedIDsDiffer(t *testing.T) {
 	}
 }
 
-// An inbound X-Request-Id is not echoed unless the caller opted in through
-// TrustedHeader: any client can send one.
 func TestRequestID_IgnoresAnUntrustedInboundHeader(t *testing.T) {
 	rec, seen := identified(t, http.Header{middleware.RequestIDHeader: {"client-chosen"}}, middleware.RequestIDOptions{})
 
@@ -98,10 +90,6 @@ func TestRequestID_EchoesATrustedHeader(t *testing.T) {
 	}
 }
 
-// A trusted header's value is echoed only when it reads as an id: 1 to 128
-// visible ASCII characters. Anything else, a proxy's misconfiguration or a
-// client's forgery passing through it, is replaced by a generated id rather
-// than written into every log record and response.
 func TestRequestID_TrustedHeaderOutOfShapeIsReplaced(t *testing.T) {
 	longest := strings.Repeat("a", 128)
 	if _, seen := identified(t, http.Header{"X-Proxy-Id": {longest}}, middleware.RequestIDOptions{TrustedHeader: "X-Proxy-Id"}); seen != longest {
@@ -169,15 +157,13 @@ func TestRequestID_SourceSeesTheRequest(t *testing.T) {
 	}
 }
 
-// The precedence chain: the source first, the trusted header second,
-// generation last. Each step is skipped when it is unset or yields nothing.
 func TestRequestID_Precedence(t *testing.T) {
 	inbound := http.Header{"X-Proxy-Id": {"proxy-42"}}
 	tests := []struct {
 		name    string
 		inbound http.Header
 		opts    middleware.RequestIDOptions
-		want    string // "" means a generated id
+		want    string
 	}{
 		{
 			"source wins over a present trusted header",
@@ -245,8 +231,6 @@ func TestRequestID_Precedence(t *testing.T) {
 	}
 }
 
-// A problem document written downstream carries the id as its request_id
-// member, the same value the response header shows.
 func TestRequestID_ProblemDocumentCarriesTheID(t *testing.T) {
 	handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = web.Problem{Status: http.StatusNotFound}.WriteFor(w, r)
@@ -267,12 +251,6 @@ func TestRequestID_ProblemDocumentCarriesTheID(t *testing.T) {
 	}
 }
 
-// The response header is set before the handler runs, so it is on the wire
-// whoever writes the response: here a Recoverer answering a panic, in
-// either chain order. The context id is a different matter: a middleware
-// outside RequestID holds the original request, whose context never got
-// the id, so the recovered 500's problem document carries request_id only
-// when RequestID is the outer of the two.
 func TestRequestID_HeaderSurvivesARecoveredPanic(t *testing.T) {
 	panicking := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
@@ -320,8 +298,6 @@ func TestRequestID_HeaderSurvivesARecoveredPanic(t *testing.T) {
 	}
 }
 
-// RequestID does not wrap the writer, so a handler's body reaches the
-// client as written.
 func TestRequestID_PassesTheResponseThrough(t *testing.T) {
 	handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = web.WriteJSON(w, http.StatusCreated, map[string]string{"id": "7"})

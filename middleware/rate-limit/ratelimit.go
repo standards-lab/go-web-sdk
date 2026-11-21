@@ -84,10 +84,6 @@ func (c *Config) applyEnv() error {
 	return config.SetDurationFromEnv(&c.Window, c.Env.Window)
 }
 
-// validate rejects a non-positive request count and a window under one
-// second: httprate reports the window to the client in whole seconds
-// (Retry-After, X-RateLimit-Reset), so a shorter one cannot be expressed
-// there.
 func (c *Config) validate() error {
 	if *c.Requests <= 0 {
 		return fmt.Errorf("invalid requests: %d", *c.Requests)
@@ -128,10 +124,6 @@ func New(cfg Config) web.Middleware {
 		httprate.WithLimitHandler(limited), httprate.WithErrorHandler(failed))
 }
 
-// keyByRemoteAddr keys a request by the host part of its remote address,
-// canonicalized through [httprate.CanonicalizeIP]. A RemoteAddr with no port
-// (some test setups) is used as it is. The error return is httprate's
-// signature; nothing here can fail.
 func keyByRemoteAddr(r *http.Request) (string, error) {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -140,8 +132,6 @@ func keyByRemoteAddr(r *http.Request) (string, error) {
 	return httprate.CanonicalizeIP(host), nil
 }
 
-// failed answers httprate's error path, which neither the key function nor
-// the in-memory counter reaches, with a fixed 500 problem.
 func failed(w http.ResponseWriter, r *http.Request, _ error) {
 	_ = web.Problem{
 		Status: http.StatusInternalServerError,

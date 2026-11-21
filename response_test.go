@@ -112,7 +112,6 @@ var logo = web.Object{
 	ModifiedAt:  time.Date(2026, 9, 24, 12, 0, 0, 0, time.FixedZone("EDT", -4*3600)),
 }
 
-// opener counts its calls and records whether what it opened was closed.
 type opener struct {
 	body   string
 	err    error
@@ -272,9 +271,6 @@ func TestWriteObject_OpenErrorIsReturnedUncommitted(t *testing.T) {
 	missing := errors.New("object not found")
 	rec := httptest.NewRecorder()
 	o := &opener{err: missing}
-	// The representation headers a handler sets for the object before the
-	// call describe bytes the problem is not: a browser would save a JSON
-	// 404 under the object's name and cache it for the object's lifetime.
 	rec.Header().Set("Content-Disposition", web.Attachment("logo.png"))
 	rec.Header().Set("Cache-Control", "private, max-age=3600")
 	rec.Header().Set("Content-Encoding", "gzip")
@@ -356,8 +352,6 @@ func TestWriteObject_Defaults(t *testing.T) {
 	}
 }
 
-// A read that did not set Total emits no total: the zero Paging is an
-// uncounted read, never a counted, empty one.
 func TestPaging_ZeroValueIsUncounted(t *testing.T) {
 	p := web.NewPage([]string{"a"}, web.Query{Page: 1, Size: 1}, web.Paging{})
 
@@ -366,8 +360,6 @@ func TestPaging_ZeroValueIsUncounted(t *testing.T) {
 	}
 }
 
-// The envelope's total is its own: a later change to the read's count does
-// not reach a page already assembled.
 func TestNewPage_CopiesTheTotal(t *testing.T) {
 	total := 3
 	p := web.NewPage([]string{"a"}, web.Query{Page: 1, Size: 1}, web.Paging{Total: &total})

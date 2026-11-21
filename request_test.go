@@ -78,7 +78,6 @@ func TestIfMatch_RejectsMalformedTags(t *testing.T) {
 	}
 }
 
-// Two If-Match field lines are a list, however each line reads alone.
 func TestIfMatch_RejectsRepeatedHeaders(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPatch, "/", nil)
 	r.Header.Add("If-Match", `"1"`)
@@ -149,8 +148,6 @@ func TestDecodeJSON_RejectsWithReason(t *testing.T) {
 	}
 }
 
-// Whatever follows the value, a second value or stray text, the reason is
-// the same one sentence rather than the tokenizer's view of the extra bytes.
 func TestDecodeJSON_TrailingDataHasOneReason(t *testing.T) {
 	for _, body := range []string{`{"name": "widget"} {"name": "gadget"}`, `{"name": "widget"} extra`, `{"name": "widget"}]`} {
 		_, _, err := decode(t, body, 1<<10)
@@ -165,7 +162,6 @@ func TestDecodeJSON_TrailingDataHasOneReason(t *testing.T) {
 	}
 }
 
-// A read that fails after the value is the read's error, not trailing data.
 func TestDecodeJSON_ReadErrorAfterTheValueIsReported(t *testing.T) {
 	broken := errors.New("connection reset")
 	body := io.MultiReader(strings.NewReader(`{"name": "widget"}`), iotest.ErrReader(broken))
@@ -344,8 +340,6 @@ func TestReadUpload_Refusals(t *testing.T) {
 }
 
 func TestReadUpload_BodyIsBoundedAtTheLimit(t *testing.T) {
-	// The body overruns its declared length: the bound holds even where
-	// net/http's own length enforcement does not apply.
 	u, _, err := upload(t, strings.NewReader(strings.Repeat("x", 100)), "text/plain", 8, 8)
 	if err != nil {
 		t.Fatalf("ReadUpload: %v", err)
@@ -357,9 +351,6 @@ func TestReadUpload_BodyIsBoundedAtTheLimit(t *testing.T) {
 	}
 }
 
-// On a live server, a request with neither a length nor chunked encoding
-// has no body and arrives as a 0-byte upload; a chunked one is refused
-// with a 411.
 func TestReadUpload_OnTheWire(t *testing.T) {
 	srv := httptest.NewServer(web.Handle(func(w http.ResponseWriter, r *http.Request) error {
 		u, err := web.ReadUpload(w, r, 64)

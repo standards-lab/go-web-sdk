@@ -39,8 +39,6 @@ func IfMatch(r *http.Request) (int64, error) {
 	return version, nil
 }
 
-// integer reports whether s is base-10 digits with an optional leading '-':
-// ParseInt's syntax without the '+' it also takes.
 func integer(s string) bool {
 	s = strings.TrimPrefix(s, "-")
 	if s == "" {
@@ -82,8 +80,6 @@ func DecodeJSON[T any](w http.ResponseWriter, r *http.Request, limit int64) (T, 
 	if errors.Is(err, io.EOF) {
 		return v, nil
 	}
-	// A token, or bytes that are not one, is trailing data; any other error
-	// is the read failing, an overflow included, and is reported as itself.
 	if _, syntax := errors.AsType[*json.SyntaxError](err); err != nil && !syntax {
 		return v, bodyError(err)
 	}
@@ -135,8 +131,6 @@ func ReadUpload(w http.ResponseWriter, r *http.Request, limit int64) (Upload, er
 	}, nil
 }
 
-// bodyError classifies a decoder failure; an overflow names the limit the
-// read hit, the tighter of DecodeJSON's and an outer middleware.BodyLimit's.
 func bodyError(err error) *BodyError {
 	if mbe, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		return &BodyError{TooLarge: true, Reason: fmt.Sprintf("exceeds the %d-byte limit", mbe.Limit)}
