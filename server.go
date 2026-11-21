@@ -12,6 +12,8 @@ import (
 	"github.com/standards-lab/go-core/lifecycle"
 )
 
+// See docs/server.md
+
 // Server wraps an http.Server whose bind and serve phases are split. As a
 // graph node's value it is a lifecycle.Subsystem and a lifecycle.Monitored:
 // the Coordinator starts it with [Server.Start], shuts it down with

@@ -7,6 +7,8 @@ import (
 	"net/http"
 )
 
+// See docs/problems.md
+
 // ProblemMatcher maps an error to the problem that reports it, or reports
 // false to pass it to the next matcher. A Problem with only Status set takes
 // [Problem.WriteFor]'s defaults for the rest.

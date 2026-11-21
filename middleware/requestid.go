@@ -8,6 +8,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
+// See docs/middleware.md
+
 // RequestIDHeader is the response header [RequestID] sets to the request's
 // correlation id.
 const RequestIDHeader = "X-Request-Id"

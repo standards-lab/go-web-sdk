@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+// See docs/problems.md
+
 const (
 	// ProblemMediaType is the RFC 9457 problem document media type.
 	ProblemMediaType = "application/problem+json"

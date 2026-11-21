@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+// See docs/problems.md
+
 type statusError interface {
 	error
 	status() int

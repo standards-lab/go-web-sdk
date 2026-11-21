@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+// See docs/requests-and-responses.md
+
 var reserved = map[string]struct{}{
 	"page":   {},
 	"size":   {},

@@ -6,6 +6,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
+// See docs/middleware.md
+
 type header struct {
 	name, value string
 }

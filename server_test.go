@@ -290,15 +290,15 @@ func getWithHeader(t *testing.T, addr string, size int) int {
 }
 
 func TestServer_MaxHeaderBytesBoundsTheHeaderBlock(t *testing.T) {
-	const padding = 16 << 10
+	const pastLimitAndNetHTTPSlack = 16 << 10
 
 	bounded := startServer(t, web.Config{Host: "127.0.0.1", Port: new(0), MaxHeaderBytes: new(1024)}, http.NewServeMux())
-	if got := getWithHeader(t, bounded.Addr(), padding); got != http.StatusRequestHeaderFieldsTooLarge {
+	if got := getWithHeader(t, bounded.Addr(), pastLimitAndNetHTTPSlack); got != http.StatusRequestHeaderFieldsTooLarge {
 		t.Errorf("status with MaxHeaderBytes 1024 = %d, want 431", got)
 	}
 
 	unbounded := startServer(t, web.Config{Host: "127.0.0.1", Port: new(0)}, http.NewServeMux())
-	if got := getWithHeader(t, unbounded.Addr(), padding); got != http.StatusNotFound {
+	if got := getWithHeader(t, unbounded.Addr(), pastLimitAndNetHTTPSlack); got != http.StatusNotFound {
 		t.Errorf("status with MaxHeaderBytes unset = %d, want 404 (the header fits; the mux has no routes)", got)
 	}
 }

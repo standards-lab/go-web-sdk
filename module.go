@@ -2,6 +2,8 @@ package web
 
 import "net/http"
 
+// See docs/routing.md
+
 // Module is a compiled, prefix-mounted handler with its middleware baked in,
 // dispatched by a [Router].
 type Module struct {

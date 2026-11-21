@@ -9,6 +9,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
+// See docs/middleware.md
+
 // RequestLogger emits one info record per request, with the message
 // "request" and the attributes http.request.method, url.path, http.route
 // (the matched pattern without its method, when one matched),

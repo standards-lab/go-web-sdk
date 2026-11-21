@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+// See docs/requests-and-responses.md
+
 // JSONMediaType is the media type [WriteJSON] sets.
 const JSONMediaType = "application/json"
 

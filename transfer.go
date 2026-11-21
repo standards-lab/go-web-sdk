@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// See docs/requests-and-responses.md
+
 // Transfer sets the connection deadlines of a route that moves a large
 // body. A server's read and write timeouts are sized for a request that
 // moves no large body, so an upload or a download sets its own deadlines

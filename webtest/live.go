@@ -7,6 +7,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
+// See docs/server.md
+
 var probe = newHTTPClient(time.Second)
 
 // Live reports whether the service at base answers its liveness probe with

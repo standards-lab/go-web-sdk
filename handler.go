@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+// See docs/problems.md
+
 // HandlerFunc is an http.HandlerFunc that reports failure by returning an
 // error instead of writing it. A nil return means the handler wrote the
 // response itself; a non-nil return is written as a problem by the

@@ -12,6 +12,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
+// See docs/middleware.md
+
 const (
 	defaultRequests = 300
 	defaultWindow   = time.Minute

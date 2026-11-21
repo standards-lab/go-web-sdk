@@ -12,6 +12,8 @@ import (
 	"uuid"
 )
 
+// See docs/requests-and-responses.md
+
 // IfMatch reads the request's version precondition (RFC 9110 §13.1.1):
 // exactly one strong entity-tag whose opaque value is a base-10 integer,
 // If-Match: "3". Anything else is a *[PreconditionError]: a 428 for a

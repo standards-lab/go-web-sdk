@@ -10,6 +10,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
+// See docs/middleware.md
+
 // ContentType answers a 415 problem, naming allowed, to a request of any
 // method whose media type is not one of them. It panics on no types or one
 // that is not a bare type/subtype. [Maybe] scopes it to writes:

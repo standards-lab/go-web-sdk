@@ -11,6 +11,8 @@ import (
 	"github.com/standards-lab/go-core/process"
 )
 
+// See docs/server.md
+
 // Service is a web service's composition root as [Service.Run] runs it:
 // the graph, the nodes Run reads by role, and the roots that select what
 // the service builds. Every field is required.

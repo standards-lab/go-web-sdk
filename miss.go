@@ -2,6 +2,8 @@ package web
 
 import "net/http"
 
+// See docs/routing.md
+
 func serveMux(
 	w http.ResponseWriter,
 	req *http.Request,

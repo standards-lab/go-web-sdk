@@ -7,6 +7,8 @@ import (
 	"github.com/standards-lab/go-core/lifecycle"
 )
 
+// See docs/server.md
+
 // The probe endpoints [RegisterHealth] mounts.
 const (
 	HealthPath = "/healthz"

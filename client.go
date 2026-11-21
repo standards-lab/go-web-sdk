@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+// See docs/client.md
+
 // ManifestPath is where Vite writes its build manifest (build.manifest:
 // true) inside the build's output directory.
 const ManifestPath = ".vite/manifest.json"
