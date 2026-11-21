@@ -11,6 +11,6 @@ The judgement calls the standards-reviewer applies to go-web-sdk, beyond what `m
 - `architecture/standards/go-elemental/principles/timeouts.md`: `Config`'s server timeouts and `TransferRate`, `Transfer`, and `middleware.Timeout`.
 - `architecture/standards/go-elemental/principles/baseline-standards.md`: `ParseQuery`'s `Limits` and `BodyLimit`'s limit, which the caller supplies, and the defaults of `Config` and of `middleware/rate-limit`'s `Config`.
 - `architecture/standards/go-elemental/principles/construction-and-execution.md`: `Service`, whose `Run` panics naming a nil field; `middleware.RequestIDOptions`, the one options value `RequestID` takes; `Problem.WriteFor`, the struct-with-method form a problem is written with; and `webtest`'s exported functions and constructors.
-- `architecture/principles/comments.md`: every comment in the repository.
+- `architecture/principles/comments.md`: every comment.
 - `architecture/principles/validation-first.md`: `Config.Finalize` and `ParseQuery`.
 - `architecture/principles/context-architecture.md`: the pages under `docs/`, which hold the reasoning behind the unexported machinery.
