@@ -15,6 +15,7 @@ import (
 	"time"
 )
 
+// Adapted from JaimeStill/spike-html-apps sdk/web.go (2883d78): a positional manifest key, a panic on a malformed Base, import validation, and content-hash ETags.
 // See docs/client.md
 
 // ManifestPath is where Vite writes its build manifest (build.manifest:
