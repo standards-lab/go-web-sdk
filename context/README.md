@@ -21,9 +21,7 @@ about to build it.
   `DecodeJSON`, `ReadUpload`, `PathUUID`), the object proxy (`WriteObject`, `Attachment`), the
   client handler (`NewClient`, `ClientOptions`, `ManifestPath`, `ConfigElementID`), the probes
   (`RegisterHealth`, `Doctor`), `Recorder`, the `Middleware` type with `Chain`, and the service
-  runner (`Service`). The client handler is ported from spike-html-apps' `sdk/web.go` (2883d78)
-  ([github.com/JaimeStill/spike-html-apps](https://github.com/JaimeStill/spike-html-apps),
-  archived); the v0.18.0 CHANGELOG entry says how it differs.
+  runner (`Service`).
 - **middleware** (built): the hand-rolled middleware, written in this repository, and their chain
   order ([`middleware/doc.go`](../middleware/doc.go)). `middleware/rate-limit`, built over a
   third-party library, is the first sourced sub-module.

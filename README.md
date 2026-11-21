@@ -17,9 +17,8 @@ use it never compiles its dependencies.
 
 ## Standard
 
-`go-web-sdk` is the Application SDK for web services of
-[Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md), the
-minimal-dependency Go standard. This README and each package's `doc.go` document the
+[Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md)
+is the minimal-dependency Go standard. This README and each package's `doc.go` document the
 repository. The pages under `docs/` hold the reasoning behind the unexported machinery: the
 [client handler](docs/client.md), [routing misses](docs/routing.md),
 [problems](docs/problems.md), [requests and responses](docs/requests-and-responses.md), the
@@ -80,7 +79,7 @@ The repository-level principles below enhance the standard's:
 Tasks run through [mise](https://mise.jdx.dev):
 
 ```
-mise run check      # build, vet, format, fix, tidy, test, and lint every module; writes nothing
+mise run check      # build, vet, format, fix, tidy, test, and lint every module, then lint-context and lint-references; writes nothing
 mise run currency   # report requirements, Go, tools, and actions behind their latest
 mise run upgrade    # upgrade every module's go directive and requirements, and the tools, to their latest
 ```
