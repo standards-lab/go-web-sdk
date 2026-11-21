@@ -9,8 +9,6 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// decodeBody reads a recorded JSON response into a generic map so a test can
-// assert on members the response type doesn't declare.
 func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
 	var body map[string]any
@@ -46,8 +44,6 @@ func TestProblem_WriteAppliesDefaults(t *testing.T) {
 }
 
 func TestProblem_WriteKeepsConsumerType(t *testing.T) {
-	// The library defines no problem types of its own; a consumer supplies its
-	// own URI and it must survive untouched.
 	const consumerType = "https://example.test/probs/out-of-credit"
 
 	rec := httptest.NewRecorder()
@@ -193,9 +189,6 @@ func TestProblem_WriteDefaultsTitleForConsumerType(t *testing.T) {
 	}
 }
 
-// The status member can never desync from Status, even when Extras tries
-// to override it — checked at the marshal level, since that's the one code
-// path every caller (Write, WriteFor, a bare json.Marshal) goes through.
 func TestProblem_MarshalExtrasCannotDesyncStatus(t *testing.T) {
 	p := web.Problem{
 		Status: http.StatusServiceUnavailable,
@@ -232,8 +225,6 @@ func TestProblem_WriteForUnknownStatusOmitsTitle(t *testing.T) {
 	}
 }
 
-// A document written with extension members must read them back: webtest's
-// Response.Problem unmarshals into Problem for exactly this reason.
 func TestProblem_MarshalUnmarshalRoundTripsExtras(t *testing.T) {
 	want := web.Problem{
 		Type:     "https://example.test/probs/out-of-credit",
@@ -262,9 +253,6 @@ func TestProblem_MarshalUnmarshalRoundTripsExtras(t *testing.T) {
 	}
 }
 
-// A document with no extension members round-trips with a nil Extras, not
-// an empty map: a bare RFC 9457 document should not gain a spurious member
-// list.
 func TestProblem_UnmarshalWithNoExtrasLeavesItNil(t *testing.T) {
 	var p web.Problem
 	if err := json.Unmarshal([]byte(`{"type":"about:blank","status":404}`), &p); err != nil {

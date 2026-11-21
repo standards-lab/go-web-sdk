@@ -9,7 +9,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
-// mustPanic runs fn and fails the test unless it panics.
 func mustPanic(t *testing.T, name string, fn func()) {
 	t.Helper()
 	defer func() {
@@ -20,7 +19,6 @@ func mustPanic(t *testing.T, name string, fn func()) {
 	fn()
 }
 
-// ok is a handler that answers 200 with no body.
 func ok() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -45,8 +43,6 @@ func TestNewGroup_MalformedPrefixPanics(t *testing.T) {
 	}
 }
 
-// An empty pattern binds the prefix itself, so a group can answer at its own
-// root without inventing a sub-path.
 func TestGroup_EmptyPatternBindsThePrefix(t *testing.T) {
 	g := web.NewGroup("/api/v1")
 	g.Handle(http.MethodGet, "", ok())
@@ -71,8 +67,6 @@ func TestGroup_EmptyMethodMatchesAllMethods(t *testing.T) {
 	}
 }
 
-// Compilation seals the whole tree, children included: a route registered
-// after NewModule would be silently dead, so the mutation panics instead.
 func TestGroup_SealedMutationPanics(t *testing.T) {
 	parent := web.NewGroup("/api")
 	child := web.NewGroup("/orders")

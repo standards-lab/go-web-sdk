@@ -7,6 +7,8 @@ import (
 	"net/http"
 )
 
+// See docs/problems.md
+
 // ProblemMatcher maps an error to the problem that reports it, or reports
 // false to pass it to the next matcher. A Problem with only Status set takes
 // [Problem.WriteFor]'s defaults for the rest.
@@ -67,8 +69,6 @@ func (ew *ErrorWriter) Problem(err error) Problem {
 	return p
 }
 
-// problem is [ErrorWriter.Problem], also reporting whether the problem was
-// returned whole, which Write sends without adding the error text.
 func (ew *ErrorWriter) problem(err error) (p Problem, whole bool) {
 	if own, ok := errors.AsType[statusError](err); ok {
 		return Problem{Status: own.status()}, false

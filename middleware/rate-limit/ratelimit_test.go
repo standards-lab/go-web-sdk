@@ -15,16 +15,12 @@ import (
 	"github.com/standards-lab/go-web-sdk/middleware/rate-limit"
 )
 
-// testPrefix is the env prefix override tests finalize with; the names below
-// are what Finalize composes from it under the "rate_limit" block.
 const (
 	testPrefix  = "test"
 	envRequests = "TEST_RATE_LIMIT_REQUESTS"
 	envWindow   = "TEST_RATE_LIMIT_WINDOW"
 )
 
-// testBlock is the non-default block FinalizeBlock tests finalize with; the
-// names below are what it composes from testPrefix and testBlock.
 const (
 	testBlock        = "login"
 	envLoginRequests = "TEST_LOGIN_REQUESTS"
@@ -46,8 +42,6 @@ func mustPanic(t *testing.T, name string, fn func()) {
 	fn()
 }
 
-// limited composes a handler answering 204 under a finalized limit of two
-// requests per minute: long enough that no test crosses a window boundary.
 func limited(t *testing.T) http.Handler {
 	t.Helper()
 	cfg := ratelimit.Config{Requests: new(2), Window: dur(time.Minute)}
@@ -59,9 +53,6 @@ func limited(t *testing.T) http.Handler {
 	}), ratelimit.New(cfg))
 }
 
-// get serves one GET from remoteAddr through handler and returns the
-// recorder. httptest.NewRequest sets its own RemoteAddr, so the test's is
-// set on top.
 func get(handler http.Handler, remoteAddr string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/orders", nil)
@@ -70,9 +61,6 @@ func get(handler http.Handler, remoteAddr string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// Requests within the limit reach the handler with the X-RateLimit headers;
-// the one past it is answered with a 429 problem document carrying
-// httprate's Retry-After.
 func TestNew_RequestOverTheLimitIsA429(t *testing.T) {
 	handler := limited(t)
 
@@ -119,8 +107,6 @@ func TestNew_RequestOverTheLimitIsA429(t *testing.T) {
 	}
 }
 
-// The limit is per client: a second address is untouched by the first's
-// exhausted budget.
 func TestNew_LimitIsPerRemoteAddr(t *testing.T) {
 	handler := limited(t)
 
@@ -135,8 +121,6 @@ func TestNew_LimitIsPerRemoteAddr(t *testing.T) {
 	}
 }
 
-// The port is not part of the key: one client on two source ports is one
-// client.
 func TestNew_PortIsNotPartOfTheKey(t *testing.T) {
 	handler := limited(t)
 
@@ -147,8 +131,6 @@ func TestNew_PortIsNotPartOfTheKey(t *testing.T) {
 	}
 }
 
-// Two IPv6 addresses in the same /64 share one budget: the key is the
-// canonicalized prefix, not the full address.
 func TestNew_IPv6ClientsShareTheirSlash64(t *testing.T) {
 	handler := limited(t)
 
@@ -162,8 +144,6 @@ func TestNew_IPv6ClientsShareTheirSlash64(t *testing.T) {
 	}
 }
 
-// An IPv4-mapped IPv6 address is the IPv4 client it maps: it shares that
-// client's budget, and not one with every other mapped address.
 func TestNew_IPv4MappedClientSharesItsIPv4Budget(t *testing.T) {
 	handler := limited(t)
 
@@ -177,7 +157,6 @@ func TestNew_IPv4MappedClientSharesItsIPv4Budget(t *testing.T) {
 	}
 }
 
-// A RemoteAddr with no port is keyed as it is rather than rejected.
 func TestNew_RemoteAddrWithoutPortIsKeyed(t *testing.T) {
 	handler := limited(t)
 
@@ -289,7 +268,6 @@ func TestConfig_FinalizeEnvOverridesFiles(t *testing.T) {
 }
 
 func TestConfig_FinalizeEmptyEnvValueLeavesConfigured(t *testing.T) {
-	// An empty variable reads as unset, not as a request to clear the value.
 	t.Setenv(envRequests, "")
 	t.Setenv(envWindow, "")
 
@@ -306,8 +284,6 @@ func TestConfig_FinalizeEmptyEnvValueLeavesConfigured(t *testing.T) {
 }
 
 func TestConfig_FinalizeEmptyPrefixSkipsOverrides(t *testing.T) {
-	// An empty prefix composes no variable names, so nothing in the
-	// environment applies: the hermetic form.
 	t.Setenv(envRequests, "42")
 	t.Setenv(envWindow, "45s")
 
@@ -399,7 +375,6 @@ func TestConfig_FinalizeBlockComposesNamesFromBlock(t *testing.T) {
 	}
 }
 
-// An empty prefix composes no names, so no override is read.
 func TestConfig_FinalizeEmptyPrefixComposesNoNames(t *testing.T) {
 	var cfg ratelimit.Config
 	if err := cfg.Finalize(""); err != nil {
@@ -422,8 +397,6 @@ func TestConfig_FinalizeUsesRateLimitBlock(t *testing.T) {
 }
 
 func TestConfig_FinalizeBlockEnvOverridesOnlyItsOwnBlock(t *testing.T) {
-	// The primary limit's variables are set alongside the login block's, so
-	// a value leaking across blocks would show up as the wrong count.
 	t.Setenv(envRequests, "200")
 	t.Setenv(envLoginRequests, "5")
 	t.Setenv(envLoginWindow, "10m")

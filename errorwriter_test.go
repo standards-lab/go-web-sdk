@@ -15,12 +15,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// discard is the logger a test that does not read the writer's records
-// wires it with.
 var discard = slog.New(slog.DiscardHandler)
 
-// matcherFor is the consumer-matcher shape: claim errors matching a sentinel
-// with a status-only Problem, pass on everything else.
 func matcherFor(sentinel error, status int) web.ProblemMatcher {
 	return func(err error) (web.Problem, bool) {
 		if errors.Is(err, sentinel) {
@@ -63,10 +59,6 @@ func TestErrorWriter_PreconditionErrorIsBuiltIn(t *testing.T) {
 	}
 }
 
-// A handler that returns a Problem has decided the response itself: it is
-// sent as is, members and all, rather than as an unclaimed 500, and no
-// error text is added to it. A matcher that claims every error is not
-// consulted.
 func TestErrorWriter_ReturnedProblemIsSentAsIs(t *testing.T) {
 	claimAll := func(error) (web.Problem, bool) { return web.Problem{Status: http.StatusTeapot}, true }
 	ew := web.NewErrorWriter(discard, claimAll)
@@ -108,8 +100,6 @@ func TestErrorWriter_ReturnedProblemPointerIsSentAsIs(t *testing.T) {
 	}
 }
 
-// Only a Problem that is the returned error maps itself; one wrapped inside
-// another error is an error like any other, for the matchers to claim.
 func TestErrorWriter_WrappedProblemGoesToTheMatchers(t *testing.T) {
 	claimAll := func(error) (web.Problem, bool) { return web.Problem{Status: http.StatusTeapot}, true }
 	wrapped := fmt.Errorf("upload: %w", web.Problem{Status: http.StatusConflict})
@@ -280,8 +270,6 @@ func TestErrorWriter_DetailAddsStatusesThatCarryTheErrorText(t *testing.T) {
 	}
 }
 
-// A matcher's own type, title, and extension members reach the wire
-// untouched: the vocabulary this step adds.
 func TestErrorWriter_Write_MatcherSuppliedProblemReachesTheWire(t *testing.T) {
 	const problemType = "https://example.test/probs/out-of-credit"
 	sentinel := errors.New("insufficient balance")
@@ -321,9 +309,6 @@ func TestErrorWriter_Write_MatcherSuppliedProblemReachesTheWire(t *testing.T) {
 	}
 }
 
-// A matcher's own Detail always ships, regardless of the writer's detail
-// set: a consumer that writes a detail by hand into its matcher did so on
-// purpose, and Detail's set only governs the fallback to the error's text.
 func TestErrorWriter_Write_MatcherDetailShipsOutsideTheDetailSet(t *testing.T) {
 	sentinel := errors.New("dirty at version 7")
 	ew := web.NewErrorWriter(discard, func(err error) (web.Problem, bool) {
@@ -348,8 +333,6 @@ func TestErrorWriter_Write_MatcherDetailShipsOutsideTheDetailSet(t *testing.T) {
 	}
 }
 
-// A matcher that claims an error without naming a status resolves to 500,
-// the same as an error no matcher claims at all.
 func TestErrorWriter_Problem_MatcherWithZeroStatusIs500(t *testing.T) {
 	sentinel := errors.New("unnamed")
 	ew := web.NewErrorWriter(discard, func(err error) (web.Problem, bool) {
@@ -403,9 +386,6 @@ func TestErrorWriter_WriteAboveA400SendsNoErrorText(t *testing.T) {
 	}
 }
 
-// A 5xx carries no detail on the wire, so its cause goes to the log with
-// the request, its status, and its correlation id: a 503 at warn, any
-// other 5xx at error, a client's hang-up at debug. A 4xx is not logged.
 func TestErrorWriter_Write5xxLogsTheCause(t *testing.T) {
 	errDown := errors.New("store: connection refused")
 	cases := map[string]struct {
@@ -475,8 +455,6 @@ func TestErrorWriter_Write5xxLogsTheCause(t *testing.T) {
 	}
 }
 
-// A 500 through Handle is one error record, the writer's: Handle logs only
-// what it could not write.
 func TestHandle_500IsLoggedOnce(t *testing.T) {
 	var buf bytes.Buffer
 	ew := web.NewErrorWriter(slog.New(slog.NewJSONHandler(&buf, nil)))

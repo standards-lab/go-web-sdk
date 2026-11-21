@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+// See docs/problems.md
+
 const (
 	// ProblemMediaType is the RFC 9457 problem document media type.
 	ProblemMediaType = "application/problem+json"
@@ -28,8 +30,6 @@ type Problem struct {
 	Extras   map[string]any
 }
 
-// problemMembers marshals Problem's five standard members under their json
-// tags, without re-entering Problem's own MarshalJSON.
 type problemMembers struct {
 	Type     string `json:"type"`
 	Title    string `json:"title,omitempty"`
@@ -72,10 +72,6 @@ func (p *Problem) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return err
 	}
-	// encoding/json matches problemMembers' fields case-insensitively, so
-	// the strip has to as well - otherwise a non-conforming document (a
-	// capitalized "Status") both populates the typed field above and
-	// leaks the same member into Extras.
 	for k := range doc {
 		for _, standard := range [...]string{"type", "title", "status", "detail", "instance"} {
 			if strings.EqualFold(k, standard) {

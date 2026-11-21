@@ -16,9 +16,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
-// record serves one GET through the request logger and returns the single log
-// record it emitted. The logger is a plain slog value: the middleware takes the
-// standard library's type, not a logging package one.
 func record(t *testing.T, handler http.Handler) map[string]any {
 	t.Helper()
 
@@ -59,8 +56,6 @@ func TestRequestLogger_DescribesTheRequest(t *testing.T) {
 	}
 }
 
-// A handler that writes a body without calling WriteHeader sends 200
-// implicitly, and the recorder is seeded with that same status.
 func TestRequestLogger_ImplicitStatusIsOK(t *testing.T) {
 	out := record(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("hello"))
@@ -71,10 +66,6 @@ func TestRequestLogger_ImplicitStatusIsOK(t *testing.T) {
 	}
 }
 
-// A handler that writes a body and only then calls WriteHeader has already
-// committed the response — net/http sent the implicit 200 on that first
-// Write — so the later WriteHeader call is superfluous and has no effect on
-// the wire. The recorded status must be the one the client actually got.
 func TestRequestLogger_WriteThenWriteHeaderRecordsTheCommittedStatus(t *testing.T) {
 	out := record(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("partial"))
@@ -96,8 +87,6 @@ func TestRequestLogger_RecordsProblemStatus(t *testing.T) {
 	}
 }
 
-// The status a client sees is the first one written; a superfluous second call
-// must not rewrite what was logged.
 func TestRequestLogger_FirstStatusWins(t *testing.T) {
 	out := record(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
@@ -109,8 +98,6 @@ func TestRequestLogger_FirstStatusWins(t *testing.T) {
 	}
 }
 
-// Wrapping the ResponseWriter must not cost a handler the capabilities the
-// underlying writer has; http.ResponseController finds them through Unwrap.
 func TestRequestLogger_ResponseControllerReachesTheWriter(t *testing.T) {
 	var flushErr error
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -155,8 +142,6 @@ func TestRequestLogger_WriterSupportsReadFrom(t *testing.T) {
 	}
 }
 
-// A successful probe request is orchestrator heartbeat, not traffic: it logs
-// at debug, so a production logger at info stays quiet.
 func TestRequestLogger_ProbeSuccessLogsAtDebug(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -184,7 +169,6 @@ func TestRequestLogger_ProbeSuccessSilentAtInfoLevel(t *testing.T) {
 	}
 }
 
-// A failing probe is signal — readiness flapping must stay visible at info.
 func TestRequestLogger_ProbeFailureLogsAtInfo(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
@@ -206,10 +190,6 @@ func TestRequestLogger_ProbeFailureLogsAtInfo(t *testing.T) {
 	}
 }
 
-// The logger is not a recovery point. Without a Recoverer the panic
-// continues to net/http, which drops the connection; the record says 500,
-// the failure the client saw, and carries no panic value — that belongs to
-// whichever recovery point catches it.
 func TestRequestLogger_PanicWithoutRecovererPropagatesAndLogsAFailure(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
@@ -249,8 +229,6 @@ func TestRequestLogger_PanicWithoutRecovererPropagatesAndLogsAFailure(t *testing
 	}
 }
 
-// A panic committed by the handler before it unwinds is still the status
-// the client got, so the record keeps it regardless of the panic.
 func TestRequestLogger_PanicAfterCommitKeepsTheCommittedStatus(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
@@ -273,16 +251,11 @@ func TestRequestLogger_PanicAfterCommitKeepsTheCommittedStatus(t *testing.T) {
 	}
 }
 
-// Recoverer and RequestLogger compose in either order. In Chain(h, a, b),
-// a is outermost: its deferred work runs last, so both records into one
-// buffer land in the order the middleware unwound, and that order pins
-// which one was outermost. In both orders the client gets a 500 problem,
-// the request record says 500, and the recoverer's record has the panic.
 func TestRequestLogger_WithRecovererInEitherOrder(t *testing.T) {
 	tests := []struct {
 		name  string
 		chain func(h http.Handler, recoverer, logger web.Middleware) http.Handler
-		order []string // messages in emission order
+		order []string
 	}{
 		{
 			"recoverer outermost",
@@ -371,8 +344,6 @@ func TestRequestLogger_HijackThroughWrapper(t *testing.T) {
 	}
 }
 
-// logged serves req through h and returns the one record the request logger
-// wrote to buf.
 func logged(t *testing.T, h http.Handler, buf *bytes.Buffer, req *http.Request) map[string]any {
 	t.Helper()
 	h.ServeHTTP(httptest.NewRecorder(), req)
@@ -383,16 +354,11 @@ func logged(t *testing.T, h http.Handler, buf *bytes.Buffer, req *http.Request) 
 	return logs[0]
 }
 
-// withID returns a GET for path whose context carries id as the request id,
-// as RequestID would have set it.
 func withID(path, id string) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	return req.WithContext(web.WithRequestID(req.Context(), id))
 }
 
-// http.route is the matched ServeMux pattern without its method token, for
-// a module route and a native-mux route alike, whether the logger wraps the
-// whole dispatch (Router.Use) or runs inside the route's own chain.
 func TestRequestLogger_RouteIsTheMatchedPattern(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -455,9 +421,6 @@ func TestRequestLogger_RouteIsTheMatchedPattern(t *testing.T) {
 	}
 }
 
-// A request that matched no pattern has no route: a bare request that never
-// went through a mux, and a router miss answered by the not-found handler.
-// The attribute is omitted, not logged empty.
 func TestRequestLogger_RouteOmittedWithoutAMatch(t *testing.T) {
 	t.Run("bare request", func(t *testing.T) {
 		out := record(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
@@ -482,11 +445,6 @@ func TestRequestLogger_RouteOmittedWithoutAMatch(t *testing.T) {
 	})
 }
 
-// ServeMux sets Pattern on the request it is handed, and RequestLogger reads
-// it from the request it passed down. RequestID forwards a derived request,
-// so with RequestID between the logger and the mux the logger's request
-// never sees the pattern (or the id): http.route and request_id are both
-// omitted. With RequestID outside the logger, both are present.
 func TestRequestLogger_RouteAndIDNeedRequestIDOutside(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -531,8 +489,6 @@ func TestRequestLogger_RouteAndIDNeedRequestIDOutside(t *testing.T) {
 	}
 }
 
-// request_id is the correlation id from the request's context, present only
-// when one is set; a chain with no RequestID logs no empty id.
 func TestRequestLogger_RequestIDFromContext(t *testing.T) {
 	var buf bytes.Buffer
 	h := web.Chain(

@@ -11,6 +11,8 @@ import (
 	"github.com/standards-lab/go-core/process"
 )
 
+// See docs/server.md
+
 // Service is a web service's composition root as [Service.Run] runs it:
 // the graph, the nodes Run reads by role, and the roots that select what
 // the service builds. Every field is required.
@@ -66,7 +68,6 @@ func (s Service) Run(ctx context.Context, stderr io.Writer) int {
 		panic("web: Service.Run requires at least one of Roots")
 	}
 
-	// Clip so the appends never write into the caller's backing array.
 	sys, err := s.Graph.Build(append(slices.Clip(s.Roots), s.Server, s.LifecycleConfig)...)
 	if err != nil {
 		return process.Fail(stderr, "service failed", err)

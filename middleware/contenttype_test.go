@@ -11,9 +11,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
-// send serves one request of the given method through handler, with the
-// Content-Type header set when contentType is non-empty and absent
-// otherwise, and returns the recorder.
 func send(handler http.Handler, method, contentType string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(method, "/orders", strings.NewReader("{}"))
@@ -24,8 +21,6 @@ func send(handler http.Handler, method, contentType string) *httptest.ResponseRe
 	return rec
 }
 
-// problem415 fails the test unless rec holds a 415 problem document, and
-// returns the document.
 func problem415(t *testing.T, rec *httptest.ResponseRecorder) web.Problem {
 	t.Helper()
 	if rec.Code != http.StatusUnsupportedMediaType {
@@ -67,8 +62,6 @@ func TestContentType_AllowedTypePasses(t *testing.T) {
 	}
 }
 
-// A disallowed type is a 415 problem document whose detail names the type
-// received and the types accepted.
 func TestContentType_DisallowedTypeIsA415(t *testing.T) {
 	handler := web.Chain(noContent, middleware.ContentType("application/json"))
 
@@ -82,8 +75,6 @@ func TestContentType_DisallowedTypeIsA415(t *testing.T) {
 	}
 }
 
-// Only the media type is compared: a parameter does not defeat the match,
-// and neither does case.
 func TestContentType_ParametersAndCaseDoNotMatter(t *testing.T) {
 	handler := web.Chain(noContent, middleware.ContentType("application/json"))
 
@@ -103,8 +94,6 @@ func TestContentType_ParametersAndCaseDoNotMatter(t *testing.T) {
 	}
 }
 
-// The allowlist is normalized too, so the wiring may spell a type as it
-// likes.
 func TestContentType_AllowedTypeIsNormalized(t *testing.T) {
 	handler := web.Chain(noContent, middleware.ContentType(" Application/JSON "))
 
@@ -125,8 +114,6 @@ func TestContentType_MissingHeaderIsA415(t *testing.T) {
 	}
 }
 
-// A header mime.ParseMediaType rejects is not in the allowlist, and the
-// detail describes it without echoing it.
 func TestContentType_MalformedHeaderIsA415(t *testing.T) {
 	handler := web.Chain(noContent, middleware.ContentType("application/json"))
 
@@ -134,9 +121,6 @@ func TestContentType_MalformedHeaderIsA415(t *testing.T) {
 		t.Run(ct, func(t *testing.T) {
 			p := problem415(t, send(handler, http.MethodPost, ct))
 
-			// The detail is "<why>; accepted: <types>"; the accepted list
-			// legitimately contains fragments like "application/" and
-			// "/json", so only the why clause is checked for an echo.
 			why, _, found := strings.Cut(p.Detail, "; accepted: ")
 			if !found {
 				t.Fatalf("detail = %q, want the why; accepted: types form", p.Detail)
@@ -151,9 +135,6 @@ func TestContentType_MalformedHeaderIsA415(t *testing.T) {
 	}
 }
 
-// The gate is method-agnostic on its own; scoping it to the requests that
-// carry a body is Maybe's job. Under Maybe, writes are judged by their
-// Content-Type and reads pass whatever they carry, including nothing.
 func TestContentType_ScopedToWritesThroughMaybe(t *testing.T) {
 	isWrite := func(r *http.Request) bool {
 		return r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch
@@ -186,8 +167,6 @@ func TestContentType_ScopedToWritesThroughMaybe(t *testing.T) {
 	}
 }
 
-// Unscoped, the same gate rejects a GET without a Content-Type: the
-// middleware does not know about methods.
 func TestContentType_UnscopedGateRejectsABodylessRead(t *testing.T) {
 	handler := web.Chain(noContent, middleware.ContentType("application/json"))
 
@@ -200,8 +179,6 @@ func TestContentType_NoAllowedTypesPanics(t *testing.T) {
 	})
 }
 
-// An allowed entry that is not a bare type/subtype could never match, or
-// would match something other than what it says; both are wiring mistakes.
 func TestContentType_MalformedAllowedTypePanics(t *testing.T) {
 	for _, a := range []string{"", "json", "application/", "application/json; charset=utf-8"} {
 		mustPanic(t, "ContentType("+strings.TrimSpace(a)+")", func() {

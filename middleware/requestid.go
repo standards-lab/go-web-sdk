@@ -8,6 +8,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
+// See docs/middleware.md
+
 // RequestIDHeader is the response header [RequestID] sets to the request's
 // correlation id.
 const RequestIDHeader = "X-Request-Id"
@@ -49,7 +51,6 @@ func RequestID(opts RequestIDOptions) web.Middleware {
 	}
 }
 
-// id resolves r's correlation id by the precedence RequestID documents.
 func (o RequestIDOptions) id(r *http.Request) string {
 	if o.Source != nil {
 		if id := o.Source(r); id != "" {
@@ -64,8 +65,6 @@ func (o RequestIDOptions) id(r *http.Request) string {
 	return generateID()
 }
 
-// validID reports whether an inbound id is 1 to 128 visible ASCII
-// characters, a shape safe to echo into a log record and a response header.
 func validID(id string) bool {
 	if id == "" || len(id) > 128 {
 		return false
@@ -78,9 +77,6 @@ func validID(id string) bool {
 	return true
 }
 
-// generateID returns 32 lowercase hex characters from 16 random bytes.
-// crypto/rand.Read never returns an error: it crashes the program
-// irrecoverably if the operating system's source fails.
 func generateID() string {
 	var b [16]byte
 	_, _ = rand.Read(b[:])

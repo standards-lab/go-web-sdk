@@ -12,8 +12,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
-// A handler that waits on its context sees the deadline expire as
-// context.DeadlineExceeded.
 func TestTimeout_HandlerObservesTheDeadline(t *testing.T) {
 	var err error
 	handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -32,8 +30,6 @@ func TestTimeout_HandlerObservesTheDeadline(t *testing.T) {
 	}
 }
 
-// A handler that finishes in time runs under a live context that carries
-// the deadline, and its response passes through untouched.
 func TestTimeout_HandlerWithinTheDeadlineIsUnaffected(t *testing.T) {
 	var (
 		err         error
@@ -58,8 +54,6 @@ func TestTimeout_HandlerWithinTheDeadlineIsUnaffected(t *testing.T) {
 	}
 }
 
-// The timer is cancelled once the handler returns, so a request that
-// finished in time does not hold its timer until the deadline.
 func TestTimeout_CancelsAfterTheHandlerReturns(t *testing.T) {
 	var ctx context.Context
 	handler := web.Chain(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -73,9 +67,6 @@ func TestTimeout_CancelsAfterTheHandlerReturns(t *testing.T) {
 	}
 }
 
-// Timeout is not http.TimeoutHandler: it writes no response of its own and
-// does not race the handler, so a handler that runs past the deadline and
-// answers anyway is the one the client hears from.
 func TestTimeout_DoesNotWriteAResponse(t *testing.T) {
 	handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()

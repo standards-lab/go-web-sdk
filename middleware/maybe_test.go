@@ -10,8 +10,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
-// marking is a middleware whose one side effect is the X-Marked response
-// header, so a test can tell whether it ran.
 func marking(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Marked", "yes")
@@ -19,7 +17,6 @@ func marking(next http.Handler) http.Handler {
 	})
 }
 
-// isWrite is a predicate holding for the request methods that carry a body.
 func isWrite(r *http.Request) bool {
 	return r.Method == http.MethodPost || r.Method == http.MethodPut
 }
@@ -50,7 +47,6 @@ func TestMaybe_SkipsWhenThePredicateFails(t *testing.T) {
 	}
 }
 
-// The predicate decides per request, on the request it is given.
 func TestMaybe_PredicateSeesEachRequest(t *testing.T) {
 	handler := web.Chain(noContent, middleware.Maybe(marking, isWrite))
 	tests := []struct {
@@ -74,10 +70,6 @@ func TestMaybe_PredicateSeesEachRequest(t *testing.T) {
 	}
 }
 
-// Maybe composes mw around the next handler once, when the chain is built,
-// never per request. A middleware that counts its own constructions (calls
-// of the outer func(http.Handler) http.Handler) proves it: after one chain
-// composition and several requests, both branches taken, the count is 1.
 func TestMaybe_ComposesTheMiddlewareOnce(t *testing.T) {
 	constructions := 0
 	counting := func(next http.Handler) http.Handler {
@@ -97,8 +89,6 @@ func TestMaybe_ComposesTheMiddlewareOnce(t *testing.T) {
 	}
 }
 
-// Under a group, composition happens at registration, once per route the
-// group's chain applies to; the request path never constructs.
 func TestMaybe_ComposesOncePerRegistrationUnderAGroup(t *testing.T) {
 	constructions := 0
 	counting := func(next http.Handler) http.Handler {
@@ -155,8 +145,6 @@ func TestNotProbe(t *testing.T) {
 	}
 }
 
-// A middleware wrapped in Maybe(mw, NotProbe) never runs against either
-// probe path, and does run against an ordinary route.
 func TestMaybe_WithNotProbeExcludesBothProbes(t *testing.T) {
 	handler := web.Chain(noContent, middleware.Maybe(marking, middleware.NotProbe))
 

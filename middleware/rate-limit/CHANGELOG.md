@@ -8,6 +8,11 @@ only; the base module keeps its own.
 
 ## [Unreleased]
 
+### Changed
+
+- The `go-web-sdk` requirement is v0.18.0, which adds `web.NewClient` and leaves every API the
+  middleware uses unchanged.
+
 ## [v0.5.0] - 2026-11-11
 
 ### Changed

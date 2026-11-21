@@ -10,6 +10,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
+// See docs/middleware.md
+
 // ContentType answers a 415 problem, naming allowed, to a request of any
 // method whose media type is not one of them. It panics on no types or one
 // that is not a bare type/subtype. [Maybe] scopes it to writes:
@@ -54,9 +56,6 @@ func ContentType(allowed ...string) web.Middleware {
 	}
 }
 
-// reject writes the 415 for ContentType: why the request's Content-Type
-// failed, and the types that would have passed. The encoder's error is
-// dropped, as the router's own miss handlers drop theirs; nothing here logs.
 func reject(w http.ResponseWriter, r *http.Request, why, accepted string) {
 	_ = web.Problem{
 		Status: http.StatusUnsupportedMediaType,

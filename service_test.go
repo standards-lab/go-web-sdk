@@ -18,8 +18,6 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// records is the logger node's writer: each record the handler writes is
-// one line, sent on a channel as it is written and kept for the whole log.
 type records struct {
 	mu    sync.Mutex
 	buf   bytes.Buffer
@@ -42,15 +40,11 @@ func (r *records) String() string {
 	return r.buf.String()
 }
 
-// next returns the next record logged, or fails the test.
 func (r *records) next(t *testing.T) string {
 	t.Helper()
 	return recvOrFail(t, r.lines, "a log record")
 }
 
-// participant is a fake node value the Coordinator starts, watches, and
-// shuts down: Start fails with startErr, Shutdown with stopErr, and a
-// runtime failure arrives on errs.
 type participant struct {
 	startErr error
 	stopErr  error
@@ -66,11 +60,6 @@ func (p *participant) Start(context.Context) error    { return p.startErr }
 func (p *participant) Shutdown(context.Context) error { return p.stopErr }
 func (p *participant) Err() <-chan error              { return p.errs }
 
-// service is a small graph in a service's shape: a lifecycle config node, a
-// logger node over a records writer, a participant node, and a real
-// *web.Server on an ephemeral port that uses both. The participant is the
-// only root, so the server and the logger reach the Build only because
-// Server joins every Build.
 type service struct {
 	log         *records
 	graph       *graph.Graph
@@ -80,7 +69,6 @@ type service struct {
 	server      *graph.Node[*web.Server]
 	fake        *participant
 
-	// built is the server node's value, set when the Build constructs it.
 	mu    sync.Mutex
 	built *web.Server
 }
@@ -106,7 +94,6 @@ func newService(t *testing.T) *service {
 	return s
 }
 
-// value returns the Service over s's graph.
 func (s *service) value() web.Service {
 	return web.Service{
 		Graph:           s.graph,
@@ -117,15 +104,12 @@ func (s *service) value() web.Service {
 	}
 }
 
-// builtServer returns the server node's value, nil when no Build reached it.
 func (s *service) builtServer() *web.Server {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.built
 }
 
-// run starts Run on s in a goroutine and returns the channel its exit code
-// arrives on.
 func (s *service) run(ctx context.Context, stderr io.Writer) <-chan int {
 	done := make(chan int, 1)
 	svc := s.value()
@@ -133,10 +117,6 @@ func (s *service) run(ctx context.Context, stderr io.Writer) <-chan int {
 	return done
 }
 
-// Once startup completes, Run logs "server ready" once with the address the
-// server bound, the assigned port of a port 0; when the context ends and the
-// System drains cleanly, it logs "server stopped" and returns 0. Nothing goes
-// to stderr.
 func TestService_ReadyThenCleanStop(t *testing.T) {
 	var stderr bytes.Buffer
 	s := newService(t)
@@ -170,8 +150,6 @@ func TestService_ReadyThenCleanStop(t *testing.T) {
 	}
 }
 
-// A failed startup logs "service failed" with an error naming the failing
-// node and returns 1. Nothing reports ready.
 func TestService_StartupFailureExitsOne(t *testing.T) {
 	var stderr bytes.Buffer
 	s := newService(t)
@@ -192,9 +170,6 @@ func TestService_StartupFailureExitsOne(t *testing.T) {
 	}
 }
 
-// A Monitored value's runtime failure ends the run: Run logs "service
-// failed" with the error, naming the failing node, and returns 1 after the
-// ready record.
 func TestService_RuntimeFailureExitsOne(t *testing.T) {
 	var stderr bytes.Buffer
 	s := newService(t)
@@ -217,9 +192,6 @@ func TestService_RuntimeFailureExitsOne(t *testing.T) {
 	}
 }
 
-// A failed shutdown fails the run: after a ready record and the end of the
-// context, Run logs "service failed" with the error, naming the failing
-// node, and returns 1.
 func TestService_ShutdownFailureExitsOne(t *testing.T) {
 	var stderr bytes.Buffer
 	s := newService(t)
@@ -245,10 +217,6 @@ func TestService_ShutdownFailureExitsOne(t *testing.T) {
 	}
 }
 
-// A constructor's error fails the Build: Run writes "service failed:" and
-// the error, naming the failing node, to stderr and returns 1. It logs
-// nothing, since the node that failed may be the logger, and starts
-// nothing, so nothing reports ready.
 func TestService_BuildFailureOnStderr(t *testing.T) {
 	var stderr bytes.Buffer
 	s := newService(t)
@@ -256,8 +224,6 @@ func TestService_BuildFailureOnStderr(t *testing.T) {
 		return nil, errors.New("logger unavailable")
 	})
 
-	// Cancelled up front, so a Build that wrongly succeeds drains at once
-	// and fails the exit-code check instead of hanging.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if code := recvOrFail(t, s.run(ctx, &stderr), "Run to return"); code != 1 {
@@ -274,8 +240,6 @@ func TestService_BuildFailureOnStderr(t *testing.T) {
 	}
 }
 
-// panicsWith calls fn and fails the test unless it panics with a message
-// containing want.
 func panicsWith(t *testing.T, want string, fn func()) {
 	t.Helper()
 	defer func() {
@@ -292,8 +256,6 @@ func panicsWith(t *testing.T, want string, fn func()) {
 	fn()
 }
 
-// Run panics on a wiring mistake, naming the missing field, before it
-// builds or starts anything.
 func TestService_PanicsOnMissingField(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -324,12 +286,8 @@ func TestService_PanicsOnMissingField(t *testing.T) {
 	}
 }
 
-// A Build that does not reach the Logger node is a wiring mistake: Run
-// panics, naming the Logger, before anything starts.
 func TestService_PanicsWhenLoggerNotReached(t *testing.T) {
 	s := newService(t)
-	// The server logs to its own sink, so nothing the Build reaches uses
-	// the logger node.
 	s.graph.Replace(s.server, func(sc *graph.Scope) (*web.Server, error) {
 		sc.Use(s.participant)
 		srv := web.NewServer(finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)}), http.NewServeMux(), discard)

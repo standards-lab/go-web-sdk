@@ -11,7 +11,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/middleware"
 )
 
-// noContent is a handler that answers 204 and nothing else.
 var noContent = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 })
@@ -39,9 +38,6 @@ func TestHeaders_SetsEveryEntry(t *testing.T) {
 	}
 }
 
-// A name is canonicalized as http.Header.Set canonicalizes it, so a
-// lowercase key lands on the same header a client reads by its canonical
-// name.
 func TestHeaders_CanonicalizesNames(t *testing.T) {
 	handler := web.Chain(noContent, middleware.Headers(map[string]string{
 		"cache-control": "no-store",
@@ -78,9 +74,6 @@ func TestHeaders_EmptyMapAppliesNothing(t *testing.T) {
 	}
 }
 
-// The headers are set before the handler runs, so they are on the response
-// whoever writes it: here a Recoverer answering a panic, in either chain
-// order.
 func TestHeaders_SurviveARecoveredPanic(t *testing.T) {
 	panicking := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
@@ -108,8 +101,6 @@ func TestHeaders_SurviveARecoveredPanic(t *testing.T) {
 	}
 }
 
-// The middleware sets; it does not enforce. A handler that sets the same
-// header afterwards wins.
 func TestHeaders_HandlerCanOverride(t *testing.T) {
 	handler := web.Chain(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=60")
@@ -123,8 +114,6 @@ func TestHeaders_HandlerCanOverride(t *testing.T) {
 	}
 }
 
-// The map is copied at construction: a caller that mutates it afterwards
-// changes nothing.
 func TestHeaders_CopiesTheMap(t *testing.T) {
 	headers := map[string]string{"Cache-Control": "no-store"}
 	handler := web.Chain(noContent, middleware.Headers(headers))
@@ -147,8 +136,6 @@ func TestHeaders_EmptyNamePanics(t *testing.T) {
 	})
 }
 
-// Two names that canonicalize to one header would be applied in map order,
-// random per request; that is a wiring mistake, caught at construction.
 func TestHeaders_DuplicateCanonicalNamePanics(t *testing.T) {
 	mustPanic(t, `Headers({"cache-control", "Cache-Control"})`, func() {
 		middleware.Headers(map[string]string{

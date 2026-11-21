@@ -103,8 +103,6 @@ func TestHandle_NeverWritesASecondResponse(t *testing.T) {
 	}
 }
 
-// brokenWriter is a ResponseWriter whose Write fails as a dropped client
-// connection does: headers and status go through, the body does not.
 type brokenWriter struct {
 	http.ResponseWriter
 	err error
@@ -154,9 +152,6 @@ func TestHandle_NilWriterPanics(t *testing.T) {
 	})
 }
 
-// The end-to-end check for the step: a route group of error-returning
-// handlers using the request helpers, compiled into a module and served
-// through a router, one request per outcome the SDK maps.
 func TestHandleErr_EndToEnd(t *testing.T) {
 	errConflict := errors.New("name already taken")
 	errInternal := errors.New("driver: connection reset")
@@ -212,7 +207,7 @@ func TestHandleErr_EndToEnd(t *testing.T) {
 		name   string
 		req    *http.Request
 		status int
-		detail string // "" means the detail member must be absent
+		detail string
 	}{
 		{"list", httptest.NewRequest(http.MethodGet, "/api/things?size=5&name[like]=a%25", nil), http.StatusOK, ""},
 		{"list with a bad page", httptest.NewRequest(http.MethodGet, "/api/things?page=0", nil), http.StatusBadRequest, `query page="0"`},
@@ -254,9 +249,6 @@ func TestHandleErr_EndToEnd(t *testing.T) {
 	}
 }
 
-// Both of Handle's failure records — an error after a committed response and
-// a failed problem write — carry request_id when the request's context holds
-// one, and omit it otherwise.
 func TestHandle_RequestIDOnFailureRecords(t *testing.T) {
 	withID := func(path, id string) *http.Request {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -290,7 +282,7 @@ func TestHandle_RequestIDOnFailureRecords(t *testing.T) {
 	requests := []struct {
 		name string
 		req  *http.Request
-		id   any // nil means the attribute must be absent
+		id   any
 	}{
 		{"with an id", withID("/things/1", "abc123"), "abc123"},
 		{"without an id", httptest.NewRequest(http.MethodGet, "/things/1", nil), nil},

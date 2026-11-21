@@ -292,8 +292,6 @@ func TestParseQuery_Rejections(t *testing.T) {
 	}
 }
 
-// The largest page whose offset, (page-1) times the largest size, still
-// fits an int is accepted; the next is the rejection above.
 func TestParseQuery_LastAddressablePage(t *testing.T) {
 	last := math.MaxInt / limits.MaxSize
 	q, err := web.ParseQuery(url.Values{"page": {strconv.Itoa(last)}}, limits)

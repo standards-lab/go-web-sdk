@@ -12,6 +12,8 @@ import (
 	"github.com/standards-lab/go-core/lifecycle"
 )
 
+// See docs/server.md
+
 // Server wraps an http.Server whose bind and serve phases are split. As a
 // graph node's value it is a lifecycle.Subsystem and a lifecycle.Monitored:
 // the Coordinator starts it with [Server.Start], shuts it down with
@@ -24,7 +26,6 @@ type Server struct {
 	listener net.Listener
 }
 
-// The Coordinator starts, stops, and watches a Server node's value.
 var (
 	_ lifecycle.Subsystem = (*Server)(nil)
 	_ lifecycle.Monitored = (*Server)(nil)
@@ -51,8 +52,6 @@ func NewServer(cfg Config, handler http.Handler, logger *slog.Logger) *Server {
 		IdleTimeout:       cfg.IdleTimeout.Duration(),
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
 	}
-	// An unset MaxHeaderBytes stays zero, net/http's signal to apply its own
-	// default.
 	if cfg.MaxHeaderBytes != nil {
 		srv.MaxHeaderBytes = *cfg.MaxHeaderBytes
 	}
@@ -125,8 +124,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	err := s.http.Shutdown(ctx)
 	if err != nil && errors.Is(err, ctx.Err()) {
-		// Close reaches only the connections net/http tracks; it neither
-		// waits for a running handler nor touches a hijacked connection.
 		_ = s.http.Close()
 	}
 	return err

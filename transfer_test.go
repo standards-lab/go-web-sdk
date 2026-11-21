@@ -16,8 +16,6 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// TransferRate defaults to 64 KiB/s, takes its override, and must be
-// positive.
 func TestConfig_TransferRate(t *testing.T) {
 	var cfg web.Config
 	if err := cfg.Finalize(""); err != nil {
@@ -49,10 +47,6 @@ func TestConfig_TransferRate(t *testing.T) {
 	}
 }
 
-// A Transfer allows grace plus the body's size, capped at the limit, at
-// the rate; a negative size counts as the limit, and a transfer too long
-// for a Duration saturates rather than overflowing. Config.Transfer takes the
-// longer of the read and write timeouts as its grace.
 func TestTransfer_Duration(t *testing.T) {
 	tr := web.NewTransfer(10<<20, 1<<20, 5*time.Second)
 	for _, tc := range []struct {
@@ -105,8 +99,6 @@ func TestTransfer_PanicsOnADefect(t *testing.T) {
 	}
 }
 
-// timedServer serves h through web.Handle, as a service serves its routes,
-// with tight read and write timeouts: a Config's defaults, scaled down.
 func timedServer(t *testing.T, h web.HandlerFunc) *httptest.Server {
 	t.Helper()
 	ew := web.NewErrorWriter(slog.New(slog.DiscardHandler))
@@ -118,7 +110,6 @@ func timedServer(t *testing.T, h web.HandlerFunc) *httptest.Server {
 	return srv
 }
 
-// pacedBody yields left bytes in chunks of size, pausing before each chunk.
 type pacedBody struct {
 	left, size int
 	pause      time.Duration
@@ -134,11 +125,8 @@ func (p *pacedBody) Read(b []byte) (int, error) {
 	return n, nil
 }
 
-// WidenUpload lets a client within the rate send a body for longer than
-// the server's read timeout. It fails a client slower than the rate when
-// the deadline its declared size earns passes, not at the read timeout.
 func TestTransfer_WidenUpload(t *testing.T) {
-	transfer := web.NewTransfer(1<<20, 2000, 100*time.Millisecond) // 1000 bytes: 600ms
+	transfer := web.NewTransfer(1<<20, 2000, 100*time.Millisecond)
 	type outcome struct {
 		err     error
 		elapsed time.Duration
@@ -166,26 +154,21 @@ func TestTransfer_WidenUpload(t *testing.T) {
 		return <-read
 	}
 
-	// Within the rate: 1000 bytes over about 300ms, past the 100ms read
-	// timeout.
+	earned := transfer.Duration(1000)
 	if o := post(30 * time.Millisecond); o.err != nil {
-		t.Fatalf("paced upload: read %v; want the whole body", o.err)
+		t.Fatalf("paced upload past the read timeout, within %s: read %v; want the whole body", earned, o.err)
 	}
-	// Slower than the rate: 1000 bytes over about 1s, cut off at about
-	// 600ms, the deadline 1000 bytes earn, not the 100ms read timeout.
 	o := post(100 * time.Millisecond)
 	if !errors.Is(o.err, os.ErrDeadlineExceeded) {
 		t.Errorf("slow upload: read %v, want os.ErrDeadlineExceeded", o.err)
 	}
-	if o.elapsed < 450*time.Millisecond || o.elapsed > 900*time.Millisecond {
-		t.Errorf("slow upload cut off after %s, want about 600ms", o.elapsed)
+	if o.elapsed < earned*3/4 || o.elapsed > earned*3/2 {
+		t.Errorf("slow upload cut off after %s, want about %s, what its size earns", o.elapsed, earned)
 	}
 }
 
-// WidenDownload lets a handler write a response for longer than the
-// server's write timeout.
 func TestTransfer_WidenDownload(t *testing.T) {
-	transfer := web.NewTransfer(1<<20, 2000, 100*time.Millisecond) // 1000 bytes: 600ms
+	transfer := web.NewTransfer(1<<20, 2000, 100*time.Millisecond)
 	srv := timedServer(t, func(w http.ResponseWriter, r *http.Request) error {
 		if r.URL.Query().Has("widen") {
 			if err := transfer.WidenDownload(w, 1000); err != nil {
@@ -216,15 +199,12 @@ func TestTransfer_WidenDownload(t *testing.T) {
 	}
 }
 
-// A Config that disables a timeout gets a Transfer that leaves that
-// deadline alone: an upload on a server with no read timeout runs past
-// what its size earns.
 func TestTransfer_KeepsADisabledTimeoutDisabled(t *testing.T) {
 	cfg := web.Config{ReadTimeout: dur(0), WriteTimeout: dur(0), TransferRate: new(int64(1 << 30))}
 	if err := cfg.Finalize(""); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
-	transfer := cfg.Transfer(1 << 20) // 1000 bytes earn about 1µs
+	transfer := cfg.Transfer(1 << 20)
 	read := make(chan error, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := transfer.WidenUpload(w, r); err != nil {
@@ -244,8 +224,6 @@ func TestTransfer_KeepsADisabledTimeoutDisabled(t *testing.T) {
 	}
 }
 
-// A writer with no connection deadlines has none to set: a handler served
-// to a recorder, as in a unit test, runs as it would on a connection.
 func TestTransfer_AWriterWithNoDeadlines(t *testing.T) {
 	transfer := web.NewTransfer(1, 1, 0)
 	r := httptest.NewRequest("POST", "/", nil)

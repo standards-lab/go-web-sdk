@@ -11,8 +11,6 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// testPrefix is the env prefix override tests finalize with; the names below
-// are what Finalize composes from it under the "server" block.
 const (
 	testPrefix           = "test"
 	envHost              = "TEST_SERVER_HOST"
@@ -24,8 +22,6 @@ const (
 	envTransferRate      = "TEST_SERVER_TRANSFER_RATE"
 )
 
-// testBlock is the non-default block FinalizeBlock tests finalize with; the
-// names below are what it composes from testPrefix and testBlock.
 const (
 	testBlock                = "management"
 	envMgmtHost              = "TEST_MANAGEMENT_HOST"
@@ -75,8 +71,6 @@ func TestConfig_MergeOverlaysMaxHeaderBytes(t *testing.T) {
 }
 
 func TestConfig_FinalizeLeavesMaxHeaderBytesUnset(t *testing.T) {
-	// MaxHeaderBytes has no SDK default: unset stays nil so NewServer leaves
-	// http.Server.MaxHeaderBytes to net/http's own default.
 	var cfg web.Config
 	if err := cfg.Finalize(""); err != nil {
 		t.Fatalf("Finalize: %v", err)
@@ -161,7 +155,6 @@ func TestConfig_FinalizeEnvOverridesFiles(t *testing.T) {
 }
 
 func TestConfig_FinalizeEmptyEnvValueLeavesConfigured(t *testing.T) {
-	// An empty variable reads as unset, not as a request to clear the value.
 	t.Setenv(envReadTimeout, "")
 
 	cfg := web.Config{ReadTimeout: dur(45 * time.Second)}
@@ -174,8 +167,6 @@ func TestConfig_FinalizeEmptyEnvValueLeavesConfigured(t *testing.T) {
 }
 
 func TestConfig_FinalizeEmptyPrefixSkipsOverrides(t *testing.T) {
-	// An empty prefix composes no variable names, so nothing in the
-	// environment applies — the hermetic form.
 	t.Setenv(envHost, "from-env")
 	t.Setenv(envPort, "9443")
 
@@ -333,7 +324,6 @@ func TestConfig_FinalizeRejectsNegativePortFromEnv(t *testing.T) {
 	}
 }
 
-// An empty prefix composes no names, so no override is read.
 func TestConfig_FinalizeEmptyPrefixComposesNoNames(t *testing.T) {
 	var cfg web.Config
 	if err := cfg.Finalize(""); err != nil {
@@ -384,8 +374,6 @@ func TestConfig_FinalizeBlockComposesNamesFromBlock(t *testing.T) {
 }
 
 func TestConfig_FinalizeBlockEnvOverridesOnlyItsOwnBlock(t *testing.T) {
-	// The primary server's variables are set alongside the management block's,
-	// so a value leaking across blocks would show up as the wrong port.
 	t.Setenv(envHost, "primary-env")
 	t.Setenv(envPort, "9443")
 	t.Setenv(envMgmtHost, "mgmt-env")

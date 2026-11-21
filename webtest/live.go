@@ -7,10 +7,8 @@ import (
 	"github.com/standards-lab/go-web-sdk"
 )
 
-// probe is the client Live polls with: a short timeout, so a service that
-// has bound its port but not yet served answers false on this poll and
-// true on a later one, and its own connection, so a poll never holds the
-// suite client's one connection.
+// See docs/server.md
+
 var probe = newHTTPClient(time.Second)
 
 // Live reports whether the service at base answers its liveness probe with

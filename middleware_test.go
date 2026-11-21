@@ -8,8 +8,6 @@ import (
 	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
-// tag returns middleware that appends its name to order as the request passes
-// through, so the recorded sequence is the execution order.
 func tag(order *[]string, name string) web.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

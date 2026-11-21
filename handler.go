@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+// See docs/problems.md
+
 // HandlerFunc is an http.HandlerFunc that reports failure by returning an
 // error instead of writing it. A nil return means the handler wrote the
 // response itself; a non-nil return is written as a problem by the
@@ -46,8 +48,6 @@ func Handle(fn HandlerFunc, ew *ErrorWriter) http.Handler {
 	})
 }
 
-// handleAttrs is the attribute set of the error writer's records, named as
-// the middleware package's request logger names them.
 func handleAttrs(r *http.Request, status int, err error) []slog.Attr {
 	attrs := make([]slog.Attr, 0, 6)
 	attrs = append(attrs,

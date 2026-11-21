@@ -10,15 +10,12 @@ import (
 	"github.com/standards-lab/go-web-sdk/internal/handlertest"
 )
 
-// module compiles a one-route group answering GET <prefix><pattern>.
 func module(prefix, pattern string) *web.Module {
 	g := web.NewGroup(prefix)
 	g.Handle(http.MethodGet, pattern, ok())
 	return web.NewModule(g)
 }
 
-// expectProblem fails the test unless rec holds a problem document with the
-// given status and title, about:blank type, and the path as instance.
 func expectProblem(t *testing.T, rec *httptest.ResponseRecorder, status int, title, path string) {
 	t.Helper()
 	if rec.Code != status {
@@ -39,8 +36,6 @@ func expectProblem(t *testing.T, rec *httptest.ResponseRecorder, status int, tit
 	}
 }
 
-// custom is a handler that marks its response with a header, so a test can
-// tell it apart from the default.
 func custom(status int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-Custom", "yes")
@@ -48,22 +43,26 @@ func custom(status int) http.Handler {
 	})
 }
 
-// Prefixes match on segment boundaries: /api/v10 shares the string prefix
-// /api/v1 but is a different segment, so it falls through to the native mux.
 func TestRouter_LongestPrefixMatchOnSegmentBoundaries(t *testing.T) {
 	r := web.NewRouter()
 	r.Mount(module("/api", "/status"))
 	r.Mount(module("/api/v1", "/orders"))
 
-	for path, want := range map[string]int{
-		"/api/v1/orders": http.StatusOK,       // the longer mount wins
-		"/api/status":    http.StatusOK,       // the shorter mount still serves its own
-		"/api/v1":        http.StatusNotFound, // owned by the longer mount, no route binds it
-		"/api/v10/x":     http.StatusNotFound, // string prefix, different segment
+	for _, tt := range []struct {
+		name string
+		path string
+		want int
+	}{
+		{"the longer mount wins", "/api/v1/orders", http.StatusOK},
+		{"the shorter mount still serves its own", "/api/status", http.StatusOK},
+		{"the longer mount owns its bare prefix, which no route binds", "/api/v1", http.StatusNotFound},
+		{"a string prefix in a different segment does not match", "/api/v10/x", http.StatusNotFound},
 	} {
-		if got := handlertest.Get(r, path).Code; got != want {
-			t.Errorf("GET %s = %d, want %d", path, got, want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			if got := handlertest.Get(r, tt.path).Code; got != tt.want {
+				t.Errorf("GET %s = %d, want %d", tt.path, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -80,9 +79,6 @@ func TestRouter_FallsBackToNativeMux(t *testing.T) {
 	}
 }
 
-// *Router satisfies Mounter, so RegisterHealth mounts the probes on the
-// native mux — structurally outside every module's middleware, with no
-// exemption logic.
 func TestRouter_ProbesMountOutsideModuleMiddleware(t *testing.T) {
 	var order []string
 
@@ -97,9 +93,6 @@ func TestRouter_ProbesMountOutsideModuleMiddleware(t *testing.T) {
 	if got := handlertest.Get(r, web.HealthPath).Code; got != http.StatusOK {
 		t.Fatalf("GET %s = %d, want 200", web.HealthPath, got)
 	}
-	// The coordinator never ran, so 503 rather than 200; what this test
-	// checks is that the path is mounted and reaches the probe, not the
-	// coordinator's readiness state.
 	if got := handlertest.Get(r, web.ReadyPath).Code; got != http.StatusServiceUnavailable {
 		t.Fatalf("GET %s = %d, want 503 before the coordinator runs", web.ReadyPath, got)
 	}
@@ -108,8 +101,6 @@ func TestRouter_ProbesMountOutsideModuleMiddleware(t *testing.T) {
 	}
 }
 
-// Router middleware wraps the whole dispatch — module paths and the native
-// fallback alike — and runs before any group middleware.
 func TestRouter_UseWrapsWholeDispatch(t *testing.T) {
 	var order []string
 
@@ -151,7 +142,6 @@ func TestRouter_UnmatchedPathIs404(t *testing.T) {
 	}
 }
 
-// A miss on the native mux is a problem document, not ServeMux's plain text.
 func TestRouter_MissIsAProblem(t *testing.T) {
 	r := web.NewRouter()
 	r.Handle("GET /status", ok())
@@ -166,28 +156,31 @@ func TestRouter_MissIsAProblem(t *testing.T) {
 	}
 }
 
-// ServeMux's own redirects — path cleaning and the trailing-slash
-// redirect — are served as before, not swallowed into a 404.
 func TestRouter_RedirectsStillRedirect(t *testing.T) {
 	r := web.NewRouter()
 	r.Handle("GET /things/", ok())
 
-	for path, location := range map[string]string{
-		"//nowhere":   "/nowhere", // cleaned; nothing matches the cleaned path
-		"/things":     "/things/", // trailing-slash redirect to a registered pattern
-		"/things/../": "/",        // cleaned; still nothing there
+	for _, tt := range []struct {
+		name     string
+		path     string
+		location string
+	}{
+		{"cleaned, though nothing matches the cleaned path", "//nowhere", "/nowhere"},
+		{"trailing slash added for a registered pattern", "/things", "/things/"},
+		{"cleaned, though nothing is there either", "/things/../", "/"},
 	} {
-		rec := handlertest.Get(r, path)
-		if rec.Code != http.StatusTemporaryRedirect {
-			t.Errorf("GET %s = %d, want 307; body %q", path, rec.Code, rec.Body.String())
-		}
-		if got := rec.Header().Get("Location"); got != location {
-			t.Errorf("GET %s Location = %q, want %q", path, got, location)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			rec := handlertest.Get(r, tt.path)
+			if rec.Code != http.StatusTemporaryRedirect {
+				t.Errorf("GET %s = %d, want 307; body %q", tt.path, rec.Code, rec.Body.String())
+			}
+			if got := rec.Header().Get("Location"); got != tt.location {
+				t.Errorf("GET %s Location = %q, want %q", tt.path, got, tt.location)
+			}
+		})
 	}
 }
 
-// The mux's guard against a "*" request-URI survives the change of dispatch.
 func TestRouter_AsteriskRequestURIIs400(t *testing.T) {
 	r := web.NewRouter()
 	if got := handlertest.Serve(r, http.MethodOptions, "*").Code; got != http.StatusBadRequest {
@@ -200,7 +193,6 @@ func TestRouter_SetNotFoundAndSetMethodNotAllowedOverrideTheDefaults(t *testing.
 	r.Handle("GET /status", ok())
 	r.SetNotFound(custom(http.StatusNotFound))
 	r.SetMethodNotAllowed(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		// The Allow header is on the response before the handler runs.
 		w.Header().Set("X-Allow-Seen", w.Header().Get("Allow"))
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}))
@@ -214,13 +206,10 @@ func TestRouter_SetNotFoundAndSetMethodNotAllowedOverrideTheDefaults(t *testing.
 		t.Errorf("POST /status = %d, X-Allow-Seen %q; want the custom 405 with Allow visible", rec.Code, rec.Header().Get("X-Allow-Seen"))
 	}
 
-	// nil restores the default.
 	r.SetNotFound(nil)
 	expectProblem(t, handlertest.Serve(r, http.MethodGet, "/nowhere"), http.StatusNotFound, "Not Found", "/nowhere")
 }
 
-// A miss inside a module is the module's, answered by its group's handlers,
-// not the router's.
 func TestRouter_ModuleMissUsesTheModuleHandlers(t *testing.T) {
 	g := web.NewGroup("/api")
 	g.Handle(http.MethodGet, "/things", ok())
@@ -237,10 +226,6 @@ func TestRouter_ModuleMissUsesTheModuleHandlers(t *testing.T) {
 	}
 }
 
-// A matched request reaches its handler with the fields ServeMux.ServeHTTP
-// sets: the matched pattern and the path wildcards. ServeMux.Handler, which
-// the miss discrimination uses, leaves both empty, so a hit must still be
-// dispatched through ServeHTTP. Module routes and native-mux routes alike.
 func TestRouter_MatchSetsPatternAndPathValues(t *testing.T) {
 	var pattern, id string
 	capture := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
