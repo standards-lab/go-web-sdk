@@ -12,7 +12,7 @@ jq = "1.8.2"
 GO_MODULES = ". middleware/rate-limit"
 
 [tasks.check]
-description = "Build, vet, format, fix, tidy, test, and lint every module, then run lint-context and lint-references from the repository root; writes nothing"
+description = "Build, vet, format, fix, tidy, test, and lint every module, then run lint-context and lint-references; writes nothing"
 run = '''
 set -eu
 export GOWORK=off
@@ -34,9 +34,9 @@ for lint in lint-context lint-references; do
   if ! command -v "$lint" >/dev/null; then
     echo "FAIL: $lint is not on PATH; run mise install" >&2
     fail=1
-    continue
+  elif ! "$lint"; then
+    fail=1
   fi
-  "$lint" || fail=1
 done
 exit "$fail"
 '''

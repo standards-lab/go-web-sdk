@@ -154,15 +154,16 @@ func TestTransfer_WidenUpload(t *testing.T) {
 		return <-read
 	}
 
+	earned := transfer.Duration(1000)
 	if o := post(30 * time.Millisecond); o.err != nil {
-		t.Fatalf("paced upload: read %v; want the whole body", o.err)
+		t.Fatalf("paced upload past the read timeout, within %s: read %v; want the whole body", earned, o.err)
 	}
 	o := post(100 * time.Millisecond)
 	if !errors.Is(o.err, os.ErrDeadlineExceeded) {
 		t.Errorf("slow upload: read %v, want os.ErrDeadlineExceeded", o.err)
 	}
-	if o.elapsed < 450*time.Millisecond || o.elapsed > 900*time.Millisecond {
-		t.Errorf("slow upload cut off after %s, want about 600ms", o.elapsed)
+	if o.elapsed < earned*3/4 || o.elapsed > earned*3/2 {
+		t.Errorf("slow upload cut off after %s, want about %s, what its size earns", o.elapsed, earned)
 	}
 }
 
