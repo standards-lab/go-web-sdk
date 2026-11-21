@@ -20,12 +20,12 @@ use it never compiles its dependencies.
 `go-web-sdk` is the Application SDK for web services of
 [Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md), the
 minimal-dependency Go standard. This README and each package's `doc.go` document the
-repository, and the pages under `docs/` hold the reasoning behind the unexported machinery: the
+repository. The pages under `docs/` hold the reasoning behind the unexported machinery: the
 [client handler](docs/client.md), [routing misses](docs/routing.md),
 [problems](docs/problems.md), [requests and responses](docs/requests-and-responses.md), the
-[server and service](docs/server.md), and the [middleware](docs/middleware.md). The standard's
-principles it enhances are stated below.
-Its repository-level principles:
+[server and service](docs/server.md), and the [middleware](docs/middleware.md).
+
+The repository-level principles below enhance the standard's:
 
 - The base module depends on the standard library and `go-core`, and takes at most packages as
   idiomatic and stable as the standard library. Vendor SDKs never enter it.

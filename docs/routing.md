@@ -1,7 +1,7 @@
 # Routing misses
 
-How a [`Router`](../router.go) and a [`Module`](../module.go) answer a request no route matches,
-and why.
+This page explains how a [`Router`](../router.go) and a [`Module`](../module.go) answer a request
+no route matches, and why.
 
 ## Discriminating a miss
 

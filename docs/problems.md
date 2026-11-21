@@ -1,6 +1,7 @@
 # Problems and errors
 
-Reasoning behind [`Problem`](../problem.go) and the [`ErrorWriter`](../errorwriter.go).
+This page holds the reasoning behind [`Problem`](../problem.go) and the
+[`ErrorWriter`](../errorwriter.go).
 
 ## Status policy stays with the matchers
 

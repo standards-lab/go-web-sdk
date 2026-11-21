@@ -1,6 +1,6 @@
 # The server and the service
 
-Reasoning behind [`Server`](../server.go), [`Service`](../service.go), and
+This page holds the reasoning behind [`Server`](../server.go), [`Service`](../service.go), and
 [`webtest.Live`](../webtest/live.go).
 
 - An unset `Config.MaxHeaderBytes` leaves `http.Server.MaxHeaderBytes` zero, net/http's signal to

@@ -73,12 +73,11 @@ Two-way. Nothing is tagged, and every change stays under Unreleased.
 
 ## Progress
 
-slices 0/6 committed · standards — · spec — · editor —
+slices 6/6 committed · standards ✓ · spec ✓ · editor ✓
 
 ## Decisions
 
-- adopt: SQL file headers are package documentation and stay. (wave 1, W1)
-- adopt: CHANGELOG entries record only changes to a module's `go.mod` requirements. (wave 1, W2)
+None.
 
 ## Pending edits
 

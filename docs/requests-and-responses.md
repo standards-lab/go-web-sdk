@@ -1,8 +1,8 @@
 # Requests and responses
 
-Reasoning behind the request helpers in [`request.go`](../request.go) and
-[`query.go`](../query.go), the object response in [`response.go`](../response.go), and the deadlines in
-[`transfer.go`](../transfer.go).
+This page holds the reasoning behind the request helpers in [`request.go`](../request.go) and
+[`query.go`](../query.go), the object response in [`response.go`](../response.go), and the
+deadlines in [`transfer.go`](../transfer.go).
 
 ## Requests
 

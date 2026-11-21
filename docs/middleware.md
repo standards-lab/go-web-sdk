@@ -1,6 +1,6 @@
 # Middleware
 
-Reasoning behind the middleware in [`middleware/`](../middleware) and
+This page holds the reasoning behind the middleware in [`middleware/`](../middleware) and
 [`middleware/rate-limit`](../middleware/rate-limit).
 
 ## RequestLogger

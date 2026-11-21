@@ -1,7 +1,7 @@
 # The client handler
 
-How [`NewClient`](../client.go) serves a Vite build, and why. What it serves is documented on
-`NewClient` and in the package documentation; this page holds the reasoning behind it.
+This page explains how [`NewClient`](../client.go) serves a Vite build, and why. `NewClient`'s
+documentation and the package documentation say what it serves.
 
 ## Caching
 
@@ -10,10 +10,10 @@ revalidate it. The shell and a build file Vite did not hash, such as one copied 
 public directory, keep their name across builds, so a browser revalidates them on every use: the
 shell names the current build's hashed entry, and a stale one would load the previous build.
 
-Every file the client serves as no-cache, each file outside the directories of hashed files
-(the manifest's directories, Vite's `build.assetsDir`), carries a strong ETag: the quoted hex of
-the first 16 bytes of its SHA-256, enough that two builds' versions of a file never share one.
-Dotfiles and dot directories get none, since they are never served. An embedded file has no
+Every file the client serves as no-cache, that is, each file outside the directories of hashed
+files (the manifest's directories, Vite's `build.assetsDir`), carries a strong ETag: the quoted
+hex of the first 16 bytes of its SHA-256, enough that two builds' versions of a file never share
+one. Dotfiles and dot directories get none, since they are never served. An embedded file has no
 modification time, so no `Last-Modified` is sent; the ETag is the validator `http.ServeContent`
 answers a conditional request against.
 
@@ -38,7 +38,7 @@ script after theirs.
 
 `html/template` escapes the base and title as an attribute and as text, and the asset paths as
 URLs. The config arrives as `template.JS`, already JSON that `json.Marshal` has escaped for HTML
-(`<`, `>`, and `&` as `<`, `>`, and `&`), so its text can never close the script
+(`<`, `>`, and `&` as `\u003c`, `\u003e`, and `\u0026`), so its text can never close the script
 element and is written as it is. The render-blocking modules' scripts precede the entry's, in
 their order, so the browser runs each before it and paints nothing until they have all run. The
 body is empty: the client appends its own content.
