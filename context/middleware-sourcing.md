@@ -1,7 +1,8 @@
 # Middleware sourcing
 
 This note records the unbuilt middleware: one hand-rolled item and three sourced ones. CORS is
-planned under `v1.middleware`; real client IP and compression wait in the backlog.
+planned under `v1.middleware`; real client IP and compression wait in the backlog
+(`standards-lab/roadmap/index.toml`).
 
 The sourcing section of `architecture/standards/go-elemental/principles/dependencies.md` decides
 whether a middleware is hand-rolled or sourced, and the README states where each kind lives.
