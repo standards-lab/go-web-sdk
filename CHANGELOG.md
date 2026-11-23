@@ -6,6 +6,10 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+### Changed
+
+- CI runs jdx/mise-action v5.3.0.
+
 ## [v0.18.0] - 2026-11-19
 
 A service serves its client application from the same binary: `web.NewClient` serves an embedded
