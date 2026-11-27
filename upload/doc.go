@@ -3,6 +3,19 @@
 // as RFC 9530 carries them. This comment lists every exported name; each
 // symbol's own documentation states its contract.
 //
+// # Handler
+//
+// The handler serves the draft's upload creation, offset retrieval,
+// append, and cancellation on net/http, under a prefix the consumer
+// mounts it at. It appends a chunk only once a digest covering it
+// matches, so an interrupted request appends nothing, and it leaves two
+// appends racing at one offset to the store's conditional commit.
+//
+//   - [Handler] is the handler's configuration, every field required, and
+//     [Handler.Routes] returns the web.Group that serves it.
+//   - [File] is what the handler kept of a completed upload, passed to
+//     the Complete function that writes the completing response.
+//
 // # Stores
 //
 // An upload's metadata, chunks, offset, and running SHA-256 state live in
