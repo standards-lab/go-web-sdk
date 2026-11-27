@@ -6,6 +6,35 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.19.0] - 2026-11-27
+
+A service accepts large files as resumable uploads: package `upload` serves and sends uploads as
+draft-ietf-httpbis-resumable-upload-16 defines them, appending a chunk only once its SHA-256
+digest matches and checking the whole file against its digest before handing it on. A store
+shared across replicas is the consumer's, proven with the conformance suite in
+`upload/uploadtest`.
+
+### Added
+
+- `upload.Handler`, the server side of the draft: `Handler.Routes` returns the `web.Group` a
+  service mounts, which creates an upload with a 104 (Upload Resumption Supported) ahead of its
+  201, and answers the HEAD, PATCH, and DELETE of each upload resource. A completed upload is
+  checked against the creation's `Repr-Digest`, then passed as a `upload.File` with its content
+  to the consumer's `Complete` function.
+- `upload.Client` and `upload.Resource`, the Go client: `Client.Create` creates the upload
+  resource for a file, and `Resource.Send` appends it in chunks with their `Content-Digest`,
+  resuming from the server's offset after an interruption.
+- `upload.Store`, the interface an upload store satisfies in standard library types only, and
+  `upload.MemoryStore`, a store within one process, made with `upload.NewMemoryStore`.
+- `upload/uploadtest.Run`, the conformance suite a module runs against its own `Store`.
+- `upload.FormatDigest` and `upload.ParseDigest`, which write and read a SHA-256 as an RFC 9530
+  `Repr-Digest` or `Content-Digest` field value, and the RFC 9651 Structured Field subset the
+  draft's fields use: `ParseInteger`, `FormatInteger`, `ParseBoolean`, `FormatBoolean`,
+  `ParseDictionary`, `FormatDictionary`, `Dictionary`, and `Member`.
+- `upload.DraftRevision` and `upload.InteropVersion`, the draft revision the package implements
+  and the `Upload-Draft-Interop-Version` it sends and answers. `mise run currency` reports the
+  pin behind when the draft gains a revision or becomes an RFC.
+
 ### Changed
 
 - CI runs jdx/mise-action v5.3.0.
@@ -602,7 +631,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.19.0...HEAD
+[v0.19.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.18.0...v0.19.0
 [v0.18.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.17.0...v0.18.0
 [v0.17.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.16.0...v0.17.0
 [v0.16.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.15.2...v0.16.0

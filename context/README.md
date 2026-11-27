@@ -3,7 +3,7 @@
 go-web-sdk is the Application SDK for web services of Go Elemental, the Standards Lab
 organization's Go implementation of the Elemental Architecture. It provides the HTTP server and
 its configuration, routing, serving an embedded client application, RFC 9457 problem responses,
-the liveness and readiness probes, and middleware.
+the liveness and readiness probes, middleware, and resumable uploads.
 
 The README, the pages under `docs/`, and each package's `doc.go` document this repository. The
 [Go Elemental](https://github.com/standards-lab/architecture/blob/main/standards/go-elemental/README.md) standard states the principles it follows.
@@ -27,6 +27,11 @@ about to build it.
   third-party library, is the first sourced sub-module.
 - **webtest** (built): the integration toolkit, with the black-box client and the liveness
   observation ([`webtest/doc.go`](../webtest/doc.go)).
+- **upload** (built): resumable uploads under draft-ietf-httpbis-resumable-upload-16
+  ([`upload/doc.go`](../upload/doc.go)), with the handler (`Handler`, `File`), the client
+  (`Client`, `Resource`), the stores (`Store`, `MemoryStore`), the digests and Structured Fields,
+  and the draft pin (`DraftRevision`, `InteropVersion`). `upload/uploadtest` is the `Store`
+  conformance suite ([`upload/uploadtest/doc.go`](../upload/uploadtest/doc.go)).
 - **Error handler extension points** (planned): the two deferred ones
   ([error-handling.md](error-handling.md)).
 - **Unbuilt middleware** (planned): one hand-rolled and three sourced
