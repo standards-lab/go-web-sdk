@@ -12,9 +12,9 @@ provides:
 - resumable uploads
 
 `github.com/standards-lab/go-web-sdk` is a base Go module with the `web` package at its root and
-`middleware`, `webtest`, `upload`, and `upload/uploadtest` as sub-packages. A middleware that needs a third-party library is a
-sub-module of its own under `middleware/`, released on its own tag, so a service that does not
-use it never compiles its dependencies.
+`middleware`, `webtest`, `upload`, and `upload/uploadtest` as sub-packages. A middleware that
+needs a third-party library is a sub-module of its own under `middleware/`, released on its own
+tag, so a service that does not use it never compiles its dependencies.
 
 ## Standard
 
@@ -39,7 +39,8 @@ The repository-level principles below enhance the standard's:
   would catch.
 - Its standard tier is RFC 9110 and RFC 9457 over the stdlib `net/http` transport, with
   draft-ietf-httpbis-resumable-upload-16, RFC 9530 digests, and RFC 9651 Structured Fields for
-  uploads, and it has no providers: nothing changes on a provider swap because there is nothing to swap.
+  uploads, and it has no providers: nothing changes on a provider swap because there is nothing
+  to swap.
 - `web` is one cohesive package. `middleware` is the sub-package holding the hand-rolled
   middleware implementations, while the `Middleware` type and `Chain` stay in `web`, where
   routing consumes them. `webtest` is the integration toolkit a service's suite drives it

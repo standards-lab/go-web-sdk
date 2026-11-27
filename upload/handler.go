@@ -116,19 +116,19 @@ type File struct {
 func (h Handler) Routes(prefix string) *web.Group {
 	switch {
 	case h.Store == nil:
-		panic("upload: Handler requires a Store")
+		panic("upload: Handler.Routes requires a Store")
 	case h.Transfer == web.Transfer{}:
-		panic("upload: Handler requires a Transfer")
+		panic("upload: Handler.Routes requires a Transfer")
 	case h.Lifetime <= 0:
-		panic("upload: Handler requires a positive Lifetime")
+		panic("upload: Handler.Routes requires a positive Lifetime")
 	case h.Complete == nil:
-		panic("upload: Handler requires a Complete function")
+		panic("upload: Handler.Routes requires a Complete function")
 	case h.Logger == nil:
-		panic("upload: Handler requires a Logger")
+		panic("upload: Handler.Routes requires a Logger")
 	}
 	limit := h.Transfer.Limit()
 	if _, err := FormatInteger(limit); err != nil || limit <= 0 {
-		panic(fmt.Sprintf("upload: Handler requires a Transfer whose limit is a positive structured field Integer, not %d", limit))
+		panic(fmt.Sprintf("upload: Handler.Routes requires a Transfer whose limit is a positive structured field Integer, not %d", limit))
 	}
 	s := &server{h: h, limit: limit}
 	g := web.NewGroup(prefix)

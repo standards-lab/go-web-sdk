@@ -72,14 +72,14 @@ type Resource struct {
 // [InteropVersion], so the server names the resource in a 104 (Upload
 // Resumption Supported) as well as in its 201. When the 201 is lost after
 // the 104, the Resource reads its offset before it sends. When neither
-// arrives, Create repeats the creation, within c.Attempts. A final response other than a 2xx,
-// 429, or 5xx is returned as an error.
+// arrives, Create repeats the creation, within c.Attempts. A final
+// response other than a 2xx, 429, or 5xx is returned as an error.
 func (c Client) Create(ctx context.Context, target, mediaType, name string, content io.ReadSeeker) (*Resource, error) {
 	switch {
 	case c.HTTP == nil:
-		panic("upload: Client requires an HTTP client")
+		panic("upload: Client.Create requires an HTTP client")
 	case c.Attempts < 1:
-		panic("upload: Client requires a positive Attempts")
+		panic("upload: Client.Create requires a positive Attempts")
 	}
 	digest, length, err := whole(content)
 	if err != nil {

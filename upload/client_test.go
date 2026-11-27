@@ -12,7 +12,6 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -578,8 +577,8 @@ func TestClientRequiresFields(t *testing.T) {
 		c    upload.Client
 		want string
 	}{
-		{upload.Client{Attempts: 1}, "upload: Client requires an HTTP client"},
-		{upload.Client{HTTP: http.DefaultClient}, "upload: Client requires a positive Attempts"},
+		{upload.Client{Attempts: 1}, "upload: Client.Create requires an HTTP client"},
+		{upload.Client{HTTP: http.DefaultClient}, "upload: Client.Create requires a positive Attempts"},
 	} {
 		func() {
 			defer func() {
@@ -593,14 +592,16 @@ func TestClientRequiresFields(t *testing.T) {
 }
 
 func TestClientCreationRefused(t *testing.T) {
-	srv := httptest.NewServer(handlerLimited(16, &completions{}))
+	j := &journal{next: handlerLimited(16, &completions{})}
+	srv := httptest.NewServer(j)
 	defer srv.Close()
 	_, err := client(srv).Create(bounded(t), srv.URL+prefix, "", "", bytes.NewReader(fileOf(3)))
 	if err == nil {
 		t.Fatal("Create without a media type succeeded, want the handler's 415")
 	}
-	if !strings.Contains(err.Error(), "415") {
-		t.Errorf("Create: %v, want the 415 surfaced", err)
+	want := []seen{{Method: http.MethodPost, Interop: strconv.Itoa(upload.InteropVersion), Status: http.StatusUnsupportedMediaType}}
+	if got := j.entries(); !slices.Equal(got, want) {
+		t.Errorf("requests %+v, want the one creation the 415 answers, not repeated", got)
 	}
 }
 

@@ -777,12 +777,12 @@ func TestRoutesRequiresFields(t *testing.T) {
 		want string
 		edit func(*upload.Handler)
 	}{
-		{"upload: Handler requires a Store", func(h *upload.Handler) { h.Store = nil }},
-		{"upload: Handler requires a Transfer", func(h *upload.Handler) { h.Transfer = web.Transfer{} }},
-		{"upload: Handler requires a Transfer whose limit", func(h *upload.Handler) { h.Transfer = web.NewTransfer(0, 1, 0) }},
-		{"upload: Handler requires a positive Lifetime", func(h *upload.Handler) { h.Lifetime = 0 }},
-		{"upload: Handler requires a Complete function", func(h *upload.Handler) { h.Complete = nil }},
-		{"upload: Handler requires a Logger", func(h *upload.Handler) { h.Logger = nil }},
+		{"upload: Handler.Routes requires a Store", func(h *upload.Handler) { h.Store = nil }},
+		{"upload: Handler.Routes requires a Transfer", func(h *upload.Handler) { h.Transfer = web.Transfer{} }},
+		{"upload: Handler.Routes requires a Transfer whose limit", func(h *upload.Handler) { h.Transfer = web.NewTransfer(0, 1, 0) }},
+		{"upload: Handler.Routes requires a positive Lifetime", func(h *upload.Handler) { h.Lifetime = 0 }},
+		{"upload: Handler.Routes requires a Complete function", func(h *upload.Handler) { h.Complete = nil }},
+		{"upload: Handler.Routes requires a Logger", func(h *upload.Handler) { h.Logger = nil }},
 	}
 	for _, c := range cases {
 		t.Run(c.want, func(t *testing.T) {

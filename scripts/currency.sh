@@ -3,9 +3,9 @@
 # release, one line each, and exits non-zero when it reports any. It reads the
 # network and writes nothing. Run it through `mise run currency`. The actions it
 # checks are those of the project root's workflows and, when the repository nests
-# the project in a subdirectory, of the git top-level's. The resumable-upload
-# draft package upload implements trails when datatracker names a later revision
-# or the RFC it became.
+# the project in a subdirectory, of the git top-level's. It also reports the
+# resumable-upload draft revision package upload implements when datatracker
+# names a later revision or the RFC the draft became.
 # See architecture/principles/rolling-currency.md
 set -euo pipefail
 cd "$MISE_PROJECT_ROOT"
