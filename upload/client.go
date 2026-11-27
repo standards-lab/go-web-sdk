@@ -68,11 +68,11 @@ type Resource struct {
 // [Resource.Send] then seeks content to each offset it sends from, so
 // content holds the same bytes until the upload completes.
 //
-// The creation carries no content and Upload-Draft-Interop-Version: 11,
-// so the server names the resource in a 104 (Upload Resumption Supported)
-// as well as in its 201. When the 201 is lost after the 104, the Resource
-// reads its offset before it sends. When neither arrives, Create repeats
-// the creation, within c.Attempts. A final response other than a 2xx,
+// The creation carries no content and an Upload-Draft-Interop-Version of
+// [InteropVersion], so the server names the resource in a 104 (Upload
+// Resumption Supported) as well as in its 201. When the 201 is lost after
+// the 104, the Resource reads its offset before it sends. When neither
+// arrives, Create repeats the creation, within c.Attempts. A final response other than a 2xx,
 // 429, or 5xx is returned as an error.
 func (c Client) Create(ctx context.Context, target, mediaType, name string, content io.ReadSeeker) (*Resource, error) {
 	switch {
@@ -382,7 +382,7 @@ func (r *Resource) pause(ctx context.Context) error {
 }
 
 func interop(req *http.Request) {
-	req.Header.Set(fieldInterop, strconv.Itoa(interopVersion))
+	req.Header.Set(fieldInterop, strconv.Itoa(InteropVersion))
 }
 
 func (r *Resource) limits(h http.Header) {

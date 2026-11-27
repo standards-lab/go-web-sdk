@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -175,11 +176,12 @@ func TestClientUpload(t *testing.T) {
 		t.Errorf("Complete got type %q and name %q, want the creation's", f.MediaType, f.Name)
 	}
 
+	interop := strconv.Itoa(upload.InteropVersion)
 	want := []seen{
-		{Method: http.MethodPost, Length: 0, Interop: "11", Status: http.StatusCreated},
-		{Method: http.MethodPatch, Offset: "0", Length: 16, Interop: "11", Status: http.StatusNoContent},
-		{Method: http.MethodPatch, Offset: "16", Length: 16, Interop: "11", Status: http.StatusNoContent},
-		{Method: http.MethodPatch, Offset: "32", Length: 8, Interop: "11", Status: http.StatusOK},
+		{Method: http.MethodPost, Length: 0, Interop: interop, Status: http.StatusCreated},
+		{Method: http.MethodPatch, Offset: "0", Length: 16, Interop: interop, Status: http.StatusNoContent},
+		{Method: http.MethodPatch, Offset: "16", Length: 16, Interop: interop, Status: http.StatusNoContent},
+		{Method: http.MethodPatch, Offset: "32", Length: 8, Interop: interop, Status: http.StatusOK},
 	}
 	if got := j.entries(); !slices.Equal(got, want) {
 		t.Errorf("requests %+v, want %+v", got, want)

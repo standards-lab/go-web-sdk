@@ -274,7 +274,7 @@ func TestCreateInterim(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Header = creation("?0", nil).Header.Clone()
-	r.Header.Set("Upload-Draft-Interop-Version", "11")
+	r.Header.Set("Upload-Draft-Interop-Version", strconv.Itoa(upload.InteropVersion))
 	r.Header.Set("Content-Digest", digestField(t, chunk))
 	res, err := srv.Client().Do(r)
 	if err != nil {
@@ -288,8 +288,8 @@ func TestCreateInterim(t *testing.T) {
 		t.Fatalf("got %d 104 responses, want 1", len(interims))
 	}
 	interim := interims[0]
-	if interim.Get("Upload-Draft-Interop-Version") != "11" {
-		t.Errorf("104 Upload-Draft-Interop-Version = %q, want 11", interim.Get("Upload-Draft-Interop-Version"))
+	if got := interim.Get("Upload-Draft-Interop-Version"); got != strconv.Itoa(upload.InteropVersion) {
+		t.Errorf("104 Upload-Draft-Interop-Version = %q, want %d", got, upload.InteropVersion)
 	}
 	if interim.Get("Location") == "" || interim.Get("Location") != res.Header.Get("Location") {
 		t.Errorf("104 Location %q, final Location %q: want one URI", interim.Get("Location"), res.Header.Get("Location"))
@@ -903,7 +903,7 @@ func TestCreateCompleteMismatchDeletes(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Header = creation("?1", nil).Header.Clone()
-	r.Header.Set("Upload-Draft-Interop-Version", "11")
+	r.Header.Set("Upload-Draft-Interop-Version", strconv.Itoa(upload.InteropVersion))
 	res, err := srv.Client().Do(r)
 	if err != nil {
 		t.Fatal(err)

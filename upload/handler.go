@@ -26,8 +26,6 @@ import (
 // See https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-resumable-upload-16
 
 const (
-	interopVersion = 11
-
 	statusUploadResumptionSupported = 104
 
 	partialUpload = "application/partial-upload"
@@ -191,8 +189,8 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) error {
 	}
 	w.Header().Set("Location", r.URL.EscapedPath()+"/"+id)
 	w.Header().Set(fieldLimit, s.limits(expires))
-	if version, ok := integerField(r, fieldInterop); ok && version == interopVersion {
-		w.Header().Set(fieldInterop, strconv.Itoa(interopVersion))
+	if version, ok := integerField(r, fieldInterop); ok && version == InteropVersion {
+		w.Header().Set(fieldInterop, strconv.Itoa(InteropVersion))
 		w.WriteHeader(statusUploadResumptionSupported)
 		w.Header().Del(fieldInterop)
 	}

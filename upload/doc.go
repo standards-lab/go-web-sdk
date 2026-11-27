@@ -3,6 +3,12 @@
 // as RFC 9530 carries them. This comment lists every exported name; each
 // symbol's own documentation states its contract.
 //
+// # Draft
+//
+//   - [DraftRevision] is the draft revision the package implements.
+//   - [InteropVersion] is the Upload-Draft-Interop-Version that revision
+//     assigns, which the client sends and the handler answers.
+//
 // # Handler
 //
 // The handler serves the draft's upload creation, offset retrieval,

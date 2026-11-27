@@ -42,7 +42,7 @@ exit "$fail"
 '''
 
 [tasks.currency]
-description = "Report every requirement, Go version, tool, and action pin behind its latest; writes nothing"
+description = "Report every requirement, Go version, tool, action pin, and the upload draft revision behind its latest; writes nothing"
 run = "scripts/currency.sh"
 
 [tasks.upgrade]
