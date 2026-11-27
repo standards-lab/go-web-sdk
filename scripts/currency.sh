@@ -3,7 +3,9 @@
 # release, one line each, and exits non-zero when it reports any. It reads the
 # network and writes nothing. Run it through `mise run currency`. The actions it
 # checks are those of the project root's workflows and, when the repository nests
-# the project in a subdirectory, of the git top-level's.
+# the project in a subdirectory, of the git top-level's. It also reports the
+# resumable-upload draft revision package upload implements when datatracker
+# names a later revision or the RFC the draft became.
 # See architecture/principles/rolling-currency.md
 set -euo pipefail
 cd "$MISE_PROJECT_ROOT"
@@ -70,6 +72,23 @@ report_outdated_actions() {
 	done
 }
 
+report_outdated_upload_draft() {
+	local source=upload/draft.go draft=draft-ietf-httpbis-resumable-upload pin doc rev rfc
+	pin=$(sed -n 's/^const DraftRevision = \([0-9][0-9]*\)$/\1/p' "$source")
+	if [ -z "$pin" ]; then
+		echo "$source: no DraftRevision constant" >&2
+		exit 1
+	fi
+	doc=$(curl -fsS "https://datatracker.ietf.org/doc/$draft/doc.json")
+	rev=$(jq -r .rev <<<"$doc")
+	rfc=$(jq -r '.rfc // empty' <<<"$doc")
+	if [ -n "$rfc" ]; then
+		report "$source: $draft $pin -> RFC $rfc"
+	elif [ "$rev" != "$pin" ]; then
+		report "$source: $draft $pin -> $rev"
+	fi
+}
+
 go_minor=$(mise latest go | cut -d. -f1,2)
 for mod in $GO_MODULES; do
 	report_outdated_requirements "$mod"
@@ -77,4 +96,5 @@ for mod in $GO_MODULES; do
 done
 report_outdated_mise_tools
 report_outdated_actions
+report_outdated_upload_draft
 exit "$stale"

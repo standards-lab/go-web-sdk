@@ -9,11 +9,12 @@ provides:
 - RFC 9457 problem responses
 - the liveness and readiness probes
 - middleware
+- resumable uploads
 
 `github.com/standards-lab/go-web-sdk` is a base Go module with the `web` package at its root and
-`middleware` and `webtest` as sub-packages. A middleware that needs a third-party library is a
-sub-module of its own under `middleware/`, released on its own tag, so a service that does not
-use it never compiles its dependencies.
+`middleware`, `webtest`, `upload`, and `upload/uploadtest` as sub-packages. A middleware that
+needs a third-party library is a sub-module of its own under `middleware/`, released on its own
+tag, so a service that does not use it never compiles its dependencies.
 
 ## Standard
 
@@ -36,8 +37,10 @@ The repository-level principles below enhance the standard's:
   `github.com/go-chi/httprate` under the threat-model category: per-key limiting with eviction,
   whose failure mode is a memory-growth denial of service rather than a wrong answer a test
   would catch.
-- Its standard tier is RFC 9110 and RFC 9457 over the stdlib `net/http` transport, and it has no
-  providers: nothing changes on a provider swap because there is nothing to swap.
+- Its standard tier is RFC 9110 and RFC 9457 over the stdlib `net/http` transport, plus
+  draft-ietf-httpbis-resumable-upload-16, RFC 9530 digests, and RFC 9651 Structured Fields for
+  uploads. It has no providers: nothing changes on a provider swap because there is nothing to
+  swap.
 - `web` is one cohesive package. `middleware` is the sub-package holding the hand-rolled
   middleware implementations, while the `Middleware` type and `Chain` stay in `web`, where
   routing consumes them. `webtest` is the integration toolkit a service's suite drives it
@@ -73,6 +76,20 @@ The repository-level principles below enhance the standard's:
   - the client a black-box suite drives a running service through, sending JSON or raw bodies
     and reading responses and RFC 9457 problems as `web` writes them
   - the liveness observation a harness waits on
+- `upload` serves and sends resumable uploads as draft-ietf-httpbis-resumable-upload-16 defines
+  them, each chunk and the whole file checked against an RFC 9530 SHA-256 digest. It provides:
+  - the server handler. A service mounts it by nesting `upload.Handler{...}.Routes(prefix)` in
+    one of its groups, supplying the store, the transfer limit, the upload lifetime, a logger,
+    and the `Complete` function that takes the finished file
+  - the Go client, which creates an upload resource and sends a file in chunks, resuming from the
+    server's offset after an interruption
+  - the `Store` interface, in standard library types only, and `MemoryStore`, which serves a
+    single process. A service with more than one replica writes its own `Store` over storage
+    its replicas share, and its tests run `upload/uploadtest`, the conformance suite, against it
+  - the digest and Structured Field helpers the draft's fields use
+
+  Out of scope: a store backed by blob storage, interop with tusd, 104 progress responses during
+  an append, and digest algorithms other than SHA-256.
 
 ## Development
 
@@ -80,7 +97,7 @@ Tasks run through [mise](https://mise.jdx.dev):
 
 ```
 mise run check      # build, vet, format, fix, tidy, test, and lint every module, then lint-context and lint-references; writes nothing
-mise run currency   # report requirements, Go, tools, and actions behind their latest
+mise run currency   # report requirements, Go, tools, actions, and the upload draft behind their latest
 mise run upgrade    # upgrade every module's go directive and requirements, and the tools, to their latest
 ```
 
