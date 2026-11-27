@@ -9,12 +9,15 @@
 // append, and cancellation on net/http, under a prefix the consumer
 // mounts it at. It appends a chunk only once a digest covering it
 // matches, so an interrupted request appends nothing, and it leaves two
-// appends racing at one offset to the store's conditional commit.
+// appends racing at one offset to the store's conditional commit. When an
+// upload completes, it checks the whole file against the creation's
+// Repr-Digest before handing the file on, and then deletes the upload.
 //
 //   - [Handler] is the handler's configuration, every field required, and
 //     [Handler.Routes] returns the web.Group that serves it.
-//   - [File] is what the handler kept of a completed upload, passed to
-//     the Complete function that writes the completing response.
+//   - [File] is what the handler kept of a completed upload, passed with
+//     the assembled file to the Complete function that writes the
+//     completing response.
 //
 // # Stores
 //

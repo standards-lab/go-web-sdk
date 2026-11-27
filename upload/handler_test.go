@@ -32,7 +32,10 @@ const (
 	inconsistentLength = "https://iana.org/assignments/http-problem-types#inconsistent-upload-length"
 )
 
-var fileSum = sum([]byte("the whole file"))
+var (
+	wholeFile = []byte("the whole file")
+	fileSum   = sum(wholeFile)
+)
 
 func sum(b []byte) string {
 	s := sha256.Sum256(b)
@@ -49,22 +52,46 @@ func digestField(t *testing.T, b []byte) string {
 }
 
 type completions struct {
-	mu    sync.Mutex
-	files []upload.File
+	mu       sync.Mutex
+	files    []upload.File
+	contents [][]byte
+	fail     error
 }
 
-func (c *completions) complete(w http.ResponseWriter, _ *http.Request, f upload.File) error {
+func (c *completions) complete(w http.ResponseWriter, _ *http.Request, f upload.File, content io.Reader) error {
+	b, err := io.ReadAll(content)
+	if err != nil {
+		return err
+	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.files = append(c.files, f)
-	c.mu.Unlock()
+	c.contents = append(c.contents, b)
+	if c.fail != nil {
+		return c.fail
+	}
+	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("stored"))
 	return nil
+}
+
+func (c *completions) failWith(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.fail = err
 }
 
 func (c *completions) all() []upload.File {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return append([]upload.File(nil), c.files...)
+}
+
+func (c *completions) content(i int) []byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.contents[i]
 }
 
 func handlerOver(store upload.Store, done *completions) http.Handler {
@@ -395,7 +422,7 @@ func TestCreateRefusals(t *testing.T) {
 
 func TestCreateComplete(t *testing.T) {
 	f := newFixture(t)
-	file := []byte("whole file")
+	file := wholeFile
 	r := creation("?1", file)
 	res := f.serve(r)
 	if res.StatusCode != http.StatusOK {
@@ -415,7 +442,10 @@ func TestCreateComplete(t *testing.T) {
 	if got.MediaType != "application/pdf" || got.Digest != fileSum || got.Name != "report.pdf" || got.Length != int64(len(file)) {
 		t.Errorf("Complete got %+v", got)
 	}
-	wantContent(t, f.store, got.ID, file)
+	if content := f.done.content(0); !bytes.Equal(content, file) {
+		t.Errorf("Complete read %q, want %q", content, file)
+	}
+	wantGone(t, f, prefix+"/"+got.ID)
 }
 
 func wantContent(t *testing.T, store upload.Store, id string, want []byte) {
@@ -479,7 +509,7 @@ func TestExpired(t *testing.T) {
 func TestAppend(t *testing.T) {
 	f := newFixture(t)
 	loc := f.create(-1)
-	parts := [][]byte{[]byte("hello, "), []byte("resumable "), []byte("world")}
+	parts := [][]byte{[]byte("the "), []byte("whole "), []byte("file")}
 	var offset int64
 	for i, p := range parts {
 		complete := "?0"
@@ -506,7 +536,9 @@ func TestAppend(t *testing.T) {
 	if len(files) != 1 || files[0].ID != id(loc) || files[0].Length != offset {
 		t.Fatalf("Complete got %+v, want one call for %s at length %d", files, id(loc), offset)
 	}
-	wantContent(t, f.store, id(loc), []byte("hello, resumable world"))
+	if content := f.done.content(0); !bytes.Equal(content, wholeFile) {
+		t.Errorf("Complete read %q, want %q", content, wholeFile)
+	}
 }
 
 func TestAppendMismatchedOffset(t *testing.T) {
@@ -765,4 +797,156 @@ func TestRoutesRequiresFields(t *testing.T) {
 			h.Routes("/uploads")
 		})
 	}
+}
+
+func wantGone(t *testing.T, f *fixture, location string) {
+	t.Helper()
+	if res := f.serve(httptest.NewRequest(http.MethodHead, location, nil)); res.StatusCode != http.StatusNotFound {
+		t.Errorf("HEAD after the completion: status %d, want 404", res.StatusCode)
+	}
+}
+
+func wantComplete(t *testing.T, res *http.Response) {
+	t.Helper()
+	if got := res.Header.Get("Upload-Complete"); got != "?1" {
+		t.Errorf("Upload-Complete = %q, want ?1", got)
+	}
+}
+
+func TestCompleteMatching(t *testing.T) {
+	f := newFixture(t)
+	loc := f.create(-1)
+	half := int64(len(wholeFile) / 2)
+	if res := f.serve(appendRequest(t, loc, 0, "?0", wholeFile[:half])); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("first append: status %d, want 204", res.StatusCode)
+	}
+	res := f.serve(appendRequest(t, loc, half, "?1", wholeFile[half:]))
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("completing append: status %d, want the completion's 200", res.StatusCode)
+	}
+	wantComplete(t, res)
+	if body, _ := io.ReadAll(res.Body); string(body) != "stored" {
+		t.Errorf("final response %q, want the completion's", body)
+	}
+	for _, name := range []string{"Location", "Upload-Limit", "Upload-Offset"} {
+		if got := res.Header.Get(name); got != "" {
+			t.Errorf("the final response carries %s %q", name, got)
+		}
+	}
+	files := f.done.all()
+	if len(files) != 1 {
+		t.Fatalf("Complete ran %d times, want once", len(files))
+	}
+	if content := f.done.content(0); !bytes.Equal(content, wholeFile) {
+		t.Errorf("Complete read %q, want %q", content, wholeFile)
+	}
+	wantGone(t, f, loc)
+
+	again := f.serve(appendRequest(t, loc, int64(len(wholeFile)), "?1", nil))
+	if again.StatusCode != http.StatusNotFound {
+		t.Errorf("a second completing request: status %d, want 404", again.StatusCode)
+	}
+	if n := len(f.done.all()); n != 1 {
+		t.Errorf("Complete ran %d times, want once", n)
+	}
+}
+
+func TestCompleteMismatch(t *testing.T) {
+	other := []byte("not the file")
+	cases := []struct {
+		name     string
+		complete func(*fixture) (*http.Response, string)
+	}{
+		{"append", func(f *fixture) (*http.Response, string) {
+			loc := f.create(-1)
+			return f.serve(appendRequest(f.t, loc, 0, "?1", other)), loc
+		}},
+		{"creation", func(f *fixture) (*http.Response, string) {
+			return f.serve(creation("?1", other)), ""
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFixture(t)
+			res, loc := c.complete(f)
+			if res.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status %d, want 400", res.StatusCode)
+			}
+			wantComplete(t, res)
+			if n := len(f.done.all()); n != 0 {
+				t.Errorf("Complete ran %d times on a mismatch, want never", n)
+			}
+			if loc != "" {
+				wantGone(t, f, loc)
+			}
+		})
+	}
+}
+
+func TestCreateCompleteMismatchDeletes(t *testing.T) {
+	f := newFixture(t)
+	srv := httptest.NewServer(f.handler)
+	defer srv.Close()
+
+	var location string
+	trace := &httptrace.ClientTrace{
+		Got1xxResponse: func(code int, h textproto.MIMEHeader) error {
+			if code == 104 {
+				location = h.Get("Location")
+			}
+			return nil
+		},
+	}
+	other := []byte("not the file")
+	r, err := http.NewRequestWithContext(httptrace.WithClientTrace(t.Context(), trace), http.MethodPost, srv.URL+prefix, bytes.NewReader(other))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Header = creation("?1", nil).Header.Clone()
+	r.Header.Set("Upload-Draft-Interop-Version", "11")
+	res, err := srv.Client().Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status %d, want 400", res.StatusCode)
+	}
+	wantComplete(t, res)
+	if n := len(f.done.all()); n != 0 {
+		t.Errorf("Complete ran %d times on a mismatch, want never", n)
+	}
+	if location == "" {
+		t.Fatal("no 104 named the upload")
+	}
+	wantGone(t, f, location)
+}
+
+func TestCompleteError(t *testing.T) {
+	f := newFixture(t)
+	f.done.failWith(web.Problem{Status: http.StatusServiceUnavailable, Detail: "the archive is down"})
+	loc := f.create(-1)
+	res := f.serve(appendRequest(t, loc, 0, "?1", wholeFile))
+	if res.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status %d, want the completion's 503", res.StatusCode)
+	}
+	wantComplete(t, res)
+	if got := f.offset(loc); got != int64(len(wholeFile)) {
+		t.Errorf("offset = %d after the completion failed, want the upload kept at %d", got, len(wholeFile))
+	}
+
+	f.done.failWith(nil)
+	res = f.serve(appendRequest(t, loc, int64(len(wholeFile)), "?1", nil))
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("retried completion: status %d, want 200", res.StatusCode)
+	}
+	wantComplete(t, res)
+	files := f.done.all()
+	if len(files) != 2 {
+		t.Fatalf("Complete ran %d times, want twice", len(files))
+	}
+	if content := f.done.content(1); !bytes.Equal(content, wholeFile) {
+		t.Errorf("the retried Complete read %q, want %q", content, wholeFile)
+	}
+	wantGone(t, f, loc)
 }

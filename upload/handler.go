@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -48,6 +49,12 @@ const (
 // the HEAD, PATCH, and DELETE of each upload resource. Every field is
 // required; [Handler.Routes] panics, naming the field, when one is missing.
 //
+// A creation carries the whole file's SHA-256 in a Repr-Digest with a
+// sha-256 member, or is answered 400, and the completion checks the file
+// against it. A creation's content counts toward the upload only when a
+// Content-Digest covers it or the creation completes the upload, whose
+// Repr-Digest then covers it.
+//
 // The handler holds no lock of its own. Two requests appending at one
 // offset, whichever replicas serve them, are settled by the Store's
 // conditional [Store.Append]: one commits, and the other is answered 409
@@ -67,19 +74,30 @@ type Handler struct {
 	Lifetime time.Duration
 
 	// Complete writes the final response of the request that completes an
-	// upload, once its content is appended. The handler has already set
-	// Upload-Complete: ?1 on w. An error it returns is written as a
-	// problem, as an error from any of the handler's routes is.
-	Complete func(w http.ResponseWriter, r *http.Request, f File) error
+	// upload. The handler calls it once the content is appended and the
+	// whole file matches the creation's Repr-Digest, with the upload's
+	// metadata in f and the assembled file in content, which the handler
+	// closes when Complete returns; on a mismatch the handler answers 400
+	// with Upload-Complete: ?1, deletes the upload, and never calls
+	// Complete. The handler has already set Upload-Complete: ?1 on w.
+	//
+	// When Complete returns nil the upload is finished: the handler deletes
+	// it from the Store, and later requests to it answer 404, so Complete
+	// keeps what it needs of content before it returns. An error it
+	// returns is written as a problem, as an error from any of the
+	// handler's routes is, and the handler keeps the upload, so the client
+	// may repeat the completing request.
+	Complete func(w http.ResponseWriter, r *http.Request, f File, content io.Reader) error
 
-	// Logger receives the cause of every 5xx the handler sends.
+	// Logger receives the cause of every 5xx the handler sends, and the
+	// error of a completed upload the Store fails to delete.
 	Logger *slog.Logger
 }
 
 // File is what the handler kept of an upload that completed, for
-// [Handler.Complete]: its identifier, under which the Store holds its
-// content; the Content-Type, Repr-Digest SHA-256 in lowercase hex, and
-// Content-Disposition file name its creation carried; and its length.
+// [Handler.Complete]: its identifier; the Content-Type, Repr-Digest
+// SHA-256 in lowercase hex, and Content-Disposition file name its creation
+// carried; and its length.
 type File struct {
 	ID        string
 	MediaType string
@@ -188,13 +206,14 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	var state []byte
 	if !checked && !complete {
 		end = 0
-	} else if err := s.commit(r.Context(), w, id, 0, nil, body); err != nil {
+	} else if state, err = s.commit(r.Context(), w, id, 0, nil, body); err != nil {
 		return err
 	}
 	if complete {
-		return s.complete(w, r, id, length, end)
+		return s.complete(w, r, id, length, end, state)
 	}
 	w.Header().Set(fieldOffset, strconv.FormatInt(end, 10))
 	w.WriteHeader(http.StatusCreated)
@@ -284,11 +303,11 @@ func (s *server) append(w http.ResponseWriter, r *http.Request) error {
 	if !checked && len(body) > 0 {
 		return badRequest("an append requires a Content-Digest with a sha-256 member")
 	}
-	if err := s.commit(r.Context(), w, id, offset, state, body); err != nil {
+	if state, err = s.commit(r.Context(), w, id, offset, state, body); err != nil {
 		return err
 	}
 	if complete {
-		return s.complete(w, r, id, length, end)
+		return s.complete(w, r, id, length, end, state)
 	}
 	w.Header().Set(fieldOffset, strconv.FormatInt(end, 10))
 	w.WriteHeader(http.StatusNoContent)
@@ -337,7 +356,7 @@ func (s *server) read(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 func (s *server) bound(ctx context.Context, id string, offset, length, n int64, complete bool) (int64, error) {
 	end := offset + n
 	if length >= 0 && end > length {
-		if err := s.h.Store.Delete(ctx, id); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := s.discard(ctx, id); err != nil {
 			return 0, err
 		}
 		return 0, inconsistent(fmt.Sprintf("the content runs to %d, past the upload's length, %d; the upload is deactivated", end, length))
@@ -348,25 +367,25 @@ func (s *server) bound(ctx context.Context, id string, offset, length, n int64, 
 	return end, nil
 }
 
-func (s *server) commit(ctx context.Context, w http.ResponseWriter, id string, offset int64, state, chunk []byte) error {
+func (s *server) commit(ctx context.Context, w http.ResponseWriter, id string, offset int64, state, chunk []byte) ([]byte, error) {
 	if len(chunk) == 0 {
-		return nil
+		return state, nil
 	}
 	next, err := advance(state, chunk)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	current, committed, err := s.h.Store.Append(ctx, id, offset, chunk, next)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !committed {
-		return conflict(w, current, offset)
+		return nil, conflict(w, current, offset)
 	}
-	return nil
+	return next, nil
 }
 
-func (s *server) complete(w http.ResponseWriter, r *http.Request, id string, length, end int64) error {
+func (s *server) complete(w http.ResponseWriter, r *http.Request, id string, length, end int64, state []byte) error {
 	if length < 0 {
 		recorded, err := s.h.Store.SetLength(r.Context(), id, end)
 		if err != nil {
@@ -385,7 +404,35 @@ func (s *server) complete(w http.ResponseWriter, r *http.Request, id string, len
 	h.Del(fieldLimit)
 	h.Del(fieldOffset)
 	h.Set(fieldComplete, FormatBoolean(true))
-	return s.h.Complete(w, r, File{ID: id, MediaType: mediaType, Digest: digest, Name: name, Length: end})
+	whole, err := finish(state)
+	if err != nil {
+		return err
+	}
+	if whole != digest {
+		if err := s.discard(r.Context(), id); err != nil {
+			return err
+		}
+		return badRequest("the whole file does not match the creation's Repr-Digest; the upload is failed")
+	}
+	content, err := s.h.Store.Open(r.Context(), id)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = content.Close() }()
+	if err := s.h.Complete(w, r, File{ID: id, MediaType: mediaType, Digest: digest, Name: name, Length: end}, content); err != nil {
+		return err
+	}
+	if err := s.discard(r.Context(), id); err != nil {
+		s.h.Logger.Error("upload: delete the completed upload", "id", id, "error", err)
+	}
+	return nil
+}
+
+func (s *server) discard(ctx context.Context, id string) error {
+	if err := s.h.Store.Delete(ctx, id); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func (s *server) limits(expires time.Time) string {
@@ -394,14 +441,30 @@ func (s *server) limits(expires time.Time) string {
 }
 
 func advance(state, chunk []byte) ([]byte, error) {
+	h, err := restore(state)
+	if err != nil {
+		return nil, err
+	}
+	h.Write(chunk)
+	return h.(encoding.BinaryMarshaler).MarshalBinary()
+}
+
+func finish(state []byte) (string, error) {
+	h, err := restore(state)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func restore(state []byte) (hash.Hash, error) {
 	h := sha256.New()
 	if len(state) > 0 {
 		if err := h.(encoding.BinaryUnmarshaler).UnmarshalBinary(state); err != nil {
 			return nil, fmt.Errorf("upload: restore the hash state: %w", err)
 		}
 	}
-	h.Write(chunk)
-	return h.(encoding.BinaryMarshaler).MarshalBinary()
+	return h, nil
 }
 
 func checkDigest(r *http.Request, chunk []byte) (bool, error) {
