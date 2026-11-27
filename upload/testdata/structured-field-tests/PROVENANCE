@@ -1,0 +1,1 @@
+From https://github.com/httpwg/structured-field-tests (4a4782f8234512af133f6f57c4ca998578b57110), BSD-3-Clause (LICENSE.md): the vectors for Items, Integers, Booleans, Byte Sequences, Dictionaries, and their keys and parameters, unchanged; the List, String, Token, Date, Display String, and large-field files are not vendored.
