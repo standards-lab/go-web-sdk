@@ -3,6 +3,16 @@
 // as RFC 9530 carries them. This comment lists every exported name; each
 // symbol's own documentation states its contract.
 //
+// # Stores
+//
+// An upload's metadata, chunks, offset, and running SHA-256 state live in
+// a store, which commits each append only at the offset it names.
+//
+//   - [Store] is the interface a store satisfies, in standard library
+//     types only; package uploadtest is its conformance suite.
+//   - [MemoryStore] is a Store within one process, and [NewMemoryStore]
+//     makes one.
+//
 // # Digests
 //
 // The Repr-Digest of a whole file and the Content-Digest of one chunk each
