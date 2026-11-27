@@ -86,7 +86,10 @@ type Handler struct {
 	// keeps what it needs of content before it returns. An error it
 	// returns is written as a problem, as an error from any of the
 	// handler's routes is, and the handler keeps the upload, so the client
-	// may repeat the completing request.
+	// may repeat the completing request. Two completing requests that
+	// overlap, such as a client's retry after a dropped connection while
+	// the first still runs, can each call Complete for one upload, so
+	// Complete is idempotent on f.ID.
 	Complete func(w http.ResponseWriter, r *http.Request, f File, content io.Reader) error
 
 	// Logger receives the cause of every 5xx the handler sends, and the
