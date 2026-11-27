@@ -199,7 +199,10 @@ func (r *Resource) Location() string {
 //
 // Send appends from the server's offset in chunks no larger than the
 // max-append-size the server last announced and the client's ChunkSize,
-// each with its Content-Digest, the last with Upload-Complete: ?1. After
+// each with its Content-Digest, the last with Upload-Complete: ?1. Send
+// reads each of the draft's fields from all of its field lines, combined
+// as RFC 9651 requires, and ignores an Upload-Limit whole when a member
+// the draft defines is invalid, as the draft requires. After
 // a request that gets no response, a 5xx, or a 429, Send reads the
 // server's offset with HEAD, never while one of its own requests to the
 // upload is in flight, and resumes from it; a 409 carries the offset to
@@ -386,18 +389,44 @@ func interop(req *http.Request) {
 }
 
 func (r *Resource) limits(h http.Header) {
-	d, ok := ParseDictionary(h.Get(fieldLimit))
+	d, ok := ParseDictionary(field(h, fieldLimit))
 	if !ok {
 		return
 	}
+	values := map[string]int64{}
 	for _, m := range d {
-		if m.Key != "max-append-size" {
+		floor, known := limitFloors[m.Key]
+		if !known {
 			continue
 		}
-		if n, ok := m.Value.(int64); ok && n > 0 {
-			r.limit = n
+		n, ok := m.Value.(int64)
+		if !ok || n < floor {
+			return
 		}
+		values[m.Key] = n
 	}
+	if !ordered(values, "min-size", "max-size") ||
+		!ordered(values, "min-append-size", "max-append-size") ||
+		!ordered(values, "min-append-size", "max-size") {
+		return
+	}
+	if n, ok := values["max-append-size"]; ok {
+		r.limit = n
+	}
+}
+
+var limitFloors = map[string]int64{
+	"max-size":        1,
+	"min-size":        0,
+	"max-append-size": 1,
+	"min-append-size": 0,
+	"max-age":         0,
+}
+
+func ordered(values map[string]int64, low, high string) bool {
+	l, lok := values[low]
+	h, hok := values[high]
+	return !lok || !hok || l <= h
 }
 
 func whole(content io.ReadSeeker) (string, int64, error) {
@@ -413,7 +442,7 @@ func whole(content io.ReadSeeker) (string, int64, error) {
 }
 
 func completes(res *http.Response, sent bool) bool {
-	raw := res.Header.Get(fieldComplete)
+	raw := field(res.Header, fieldComplete)
 	if raw == "" {
 		return sent && success(res.StatusCode)
 	}
@@ -422,7 +451,7 @@ func completes(res *http.Response, sent bool) bool {
 }
 
 func offsetField(h http.Header) (int64, bool) {
-	n, ok := ParseInteger(h.Get(fieldOffset))
+	n, ok := ParseInteger(field(h, fieldOffset))
 	return n, ok && n >= 0
 }
 

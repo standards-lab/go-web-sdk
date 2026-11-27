@@ -158,7 +158,7 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	digest, ok := ParseDigest(field(r, fieldReprDigest))
+	digest, ok := ParseDigest(field(r.Header, fieldReprDigest))
 	if !ok {
 		return badRequest("the creation requires a Repr-Digest with a sha-256 member")
 	}
@@ -469,7 +469,7 @@ func restore(state []byte) (hash.Hash, error) {
 }
 
 func checkDigest(r *http.Request, chunk []byte) (bool, error) {
-	raw := field(r, fieldContentDigest)
+	raw := field(r.Header, fieldContentDigest)
 	if raw == "" {
 		return false, nil
 	}
@@ -508,12 +508,12 @@ func fileName(r *http.Request) (string, error) {
 	return params["filename"], nil
 }
 
-func field(r *http.Request, name string) string {
-	return strings.Join(r.Header.Values(name), ", ")
+func field(h http.Header, name string) string {
+	return strings.Join(h.Values(name), ", ")
 }
 
 func integerField(r *http.Request, name string) (int64, bool) {
-	raw := field(r, name)
+	raw := field(r.Header, name)
 	if raw == "" {
 		return 0, false
 	}
@@ -522,7 +522,7 @@ func integerField(r *http.Request, name string) (int64, bool) {
 }
 
 func booleanField(r *http.Request, name string) (bool, bool) {
-	raw := field(r, name)
+	raw := field(r.Header, name)
 	if raw == "" {
 		return false, false
 	}

@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -632,4 +633,131 @@ func TestClientRepeatsCreation(t *testing.T) {
 	res, err := r.Send(ctx)
 	wantStored(t, res, err)
 	wantFile(t, done, file)
+}
+
+type lineSplitter struct {
+	http.ResponseWriter
+	name  string
+	when  func(code int) bool
+	split func(value string) []string
+}
+
+func (s *lineSplitter) WriteHeader(code int) {
+	h := s.Header()
+	if v := h.Get(s.name); v != "" && s.when(code) {
+		h[http.CanonicalHeaderKey(s.name)] = s.split(v)
+	}
+	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *lineSplitter) Unwrap() http.ResponseWriter {
+	return s.ResponseWriter
+}
+
+func splitting(next http.Handler, name string, when func(code int) bool, split func(value string) []string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(&lineSplitter{ResponseWriter: w, name: name, when: when, split: split}, r)
+	})
+}
+
+func always(int) bool { return true }
+
+func TestClientUploadLimitLines(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		limit int64
+		lines func(value string) []string
+		want  []int64
+	}{
+		{
+			"split across two lines",
+			1024,
+			func(v string) []string {
+				appendSize, age, _ := strings.Cut(v, ", ")
+				return []string{age, appendSize}
+			},
+			[]int64{1024, 1024, 952},
+		},
+		{
+			"a known member of the wrong type",
+			4096,
+			func(v string) []string { return []string{"max-append-size=1024", "max-age=?0"} },
+			[]int64{3000},
+		},
+		{
+			"a known member out of range",
+			4096,
+			func(v string) []string { return []string{"max-append-size=1024, max-age=-1"} },
+			[]int64{3000},
+		},
+		{
+			"an invalid combined range",
+			4096,
+			func(v string) []string { return []string{"max-append-size=1024, min-append-size=2048"} },
+			[]int64{3000},
+		},
+		{
+			"an unknown member",
+			4096,
+			func(v string) []string { return []string{"max-append-size=1024, flavor=?0"} },
+			[]int64{1024, 1024, 952},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			done := &completions{}
+			j := &journal{next: splitting(handlerLimited(tc.limit, done), "Upload-Limit", always, tc.lines)}
+			srv := httptest.NewServer(j)
+			defer srv.Close()
+			file := fileOf(3000)
+
+			ctx := bounded(t)
+			r, err := client(srv).Create(ctx, srv.URL+prefix, "text/plain", "", bytes.NewReader(file))
+			if err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+			res, err := r.Send(ctx)
+			wantStored(t, res, err)
+			wantFile(t, done, file)
+			if got := j.appends(); !slices.Equal(got, tc.want) {
+				t.Errorf("appends of %v bytes, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestClientSplitOffsetOnConflict(t *testing.T) {
+	done := &completions{}
+	file := fileOf(40)
+	inner := handlerLimited(16, done)
+	conflict := func(code int) bool { return code == http.StatusConflict }
+	j := &journal{next: splitting(inner, "Upload-Offset", conflict, func(v string) []string {
+		return []string{v[:1], v[1:]}
+	})}
+	j.before = func(n int, r *http.Request) {
+		if r.Method != http.MethodPatch || n != 1 {
+			return
+		}
+		rec := httptest.NewRecorder()
+		inner.ServeHTTP(rec, appendRequest(t, r.URL.Path, 16, "?0", file[16:32]))
+	}
+	srv := httptest.NewServer(j)
+	defer srv.Close()
+
+	ctx := bounded(t)
+	r, err := client(srv).Create(ctx, srv.URL+prefix, "text/plain", "", bytes.NewReader(file))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	res, err := r.Send(ctx)
+	wantStored(t, res, err)
+	wantFile(t, done, file)
+
+	var got []string
+	for _, e := range j.entries() {
+		got = append(got, e.Method+" "+strconv.Itoa(e.Status))
+	}
+	want := []string{"POST 201", "PATCH 204", "PATCH 409", "HEAD 204", "PATCH 200"}
+	if !slices.Equal(got, want) {
+		t.Errorf("requests %v, want %v: the 409's split Upload-Offset read as missing, so an offset retrieval", got, want)
+	}
 }
