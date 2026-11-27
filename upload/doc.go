@@ -19,6 +19,21 @@
 //     the assembled file to the Complete function that writes the
 //     completing response.
 //
+// # Client
+//
+// The client uploads a file to a draft-16 server such as the handler: it
+// creates the upload resource, appends the file in chunks the server's
+// limits allow, each with its Content-Digest, and resumes from the
+// server's offset after an interruption, within the attempts its caller
+// allows.
+//
+//   - [Client] is the client's configuration, and [Client.Create] creates
+//     the upload resource for a file.
+//   - [Resource] is one upload resource: [Resource.Send] sends the file
+//     and returns the completing request's final response,
+//     [Resource.Cancel] deletes the upload, and [Resource.Location] names
+//     it.
+//
 // # Stores
 //
 // An upload's metadata, chunks, offset, and running SHA-256 state live in
