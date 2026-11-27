@@ -17,10 +17,10 @@ shared across replicas is the consumer's, proven with the conformance suite in
 ### Added
 
 - `upload.Handler`, the server side of the draft: `Handler.Routes` returns the `web.Group` a
-  service mounts, which creates an upload with a 104 (Upload Resumption Supported) ahead of its
-  201, and answers the HEAD, PATCH, and DELETE of each upload resource. A completed upload is
-  checked against the creation's `Repr-Digest`, then passed as a `upload.File` with its content
-  to the consumer's `Complete` function.
+  service mounts. The group creates an upload, sending a 104 (Upload Resumption Supported) ahead
+  of its 201, and answers the HEAD, PATCH, and DELETE of each upload resource. The handler checks
+  a completed upload against the creation's `Repr-Digest`, then passes it as an `upload.File`
+  with its content to the consumer's `Complete` function.
 - `upload.Client` and `upload.Resource`, the Go client: `Client.Create` creates the upload
   resource for a file, and `Resource.Send` appends it in chunks with their `Content-Digest`,
   resuming from the server's offset after an interruption.
@@ -33,7 +33,7 @@ shared across replicas is the consumer's, proven with the conformance suite in
   `ParseDictionary`, `FormatDictionary`, `Dictionary`, and `Member`.
 - `upload.DraftRevision` and `upload.InteropVersion`, the draft revision the package implements
   and the `Upload-Draft-Interop-Version` it sends and answers. `mise run currency` reports the
-  pin behind when the draft gains a revision or becomes an RFC.
+  pin as behind when the draft gains a revision or becomes an RFC.
 
 ### Changed
 

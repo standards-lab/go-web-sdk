@@ -37,10 +37,10 @@ The repository-level principles below enhance the standard's:
   `github.com/go-chi/httprate` under the threat-model category: per-key limiting with eviction,
   whose failure mode is a memory-growth denial of service rather than a wrong answer a test
   would catch.
-- Its standard tier is RFC 9110 and RFC 9457 over the stdlib `net/http` transport, with
+- Its standard tier is RFC 9110 and RFC 9457 over the stdlib `net/http` transport, plus
   draft-ietf-httpbis-resumable-upload-16, RFC 9530 digests, and RFC 9651 Structured Fields for
-  uploads, and it has no providers: nothing changes on a provider swap because there is nothing
-  to swap.
+  uploads. It has no providers: nothing changes on a provider swap because there is nothing to
+  swap.
 - `web` is one cohesive package. `middleware` is the sub-package holding the hand-rolled
   middleware implementations, while the `Middleware` type and `Chain` stay in `web`, where
   routing consumes them. `webtest` is the integration toolkit a service's suite drives it
@@ -79,8 +79,8 @@ The repository-level principles below enhance the standard's:
 - `upload` serves and sends resumable uploads as draft-ietf-httpbis-resumable-upload-16 defines
   them, each chunk and the whole file checked against an RFC 9530 SHA-256 digest. It provides:
   - the server handler. A service mounts it by nesting `upload.Handler{...}.Routes(prefix)` in
-    one of its groups, supplying the store, the transfer limit, the upload lifetime, and the
-    `Complete` function that takes the finished file
+    one of its groups, supplying the store, the transfer limit, the upload lifetime, a logger,
+    and the `Complete` function that takes the finished file
   - the Go client, which creates an upload resource and sends a file in chunks, resuming from the
     server's offset after an interruption
   - the `Store` interface, in standard library types only, and `MemoryStore`, which serves a
