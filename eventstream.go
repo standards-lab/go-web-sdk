@@ -106,7 +106,7 @@ func (es EventStream) Serve(w http.ResponseWriter, r *http.Request, fn func(ctx 
 	s.last = time.Now()
 
 	stopped := make(chan struct{})
-	go s.keepAlive(ctx, es.keepAlive, stopped)
+	go s.keepAlive(es.keepAlive, stopped)
 	err := fn(ctx, s)
 	cancel()
 	<-stopped
@@ -172,13 +172,21 @@ func (s *EventSender) do(encode func(*sse.Encoder) error) error {
 	return s.writeLocked(encode)
 }
 
-func (s *EventSender) keepAlive(ctx context.Context, interval time.Duration, stopped chan<- struct{}) {
+func (s *EventSender) end() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed == nil {
+		s.closed = errStreamEnded
+	}
+}
+
+func (s *EventSender) keepAlive(interval time.Duration, stopped chan<- struct{}) {
 	defer close(stopped)
 	timer := time.NewTimer(interval)
 	defer timer.Stop()
 	for {
 		select {
-		case <-ctx.Done():
+		case <-s.ctx.Done():
 			return
 		case <-timer.C:
 		}
@@ -253,12 +261,4 @@ func (sw *streamWriter) Write(p []byte) (int, error) {
 		sw.err = err
 	}
 	return n, err
-}
-
-func (s *EventSender) end() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed == nil {
-		s.closed = errStreamEnded
-	}
 }
