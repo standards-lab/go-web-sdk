@@ -1,8 +1,9 @@
 # Requests and responses
 
 This page holds the reasoning behind the request helpers in [`request.go`](../request.go) and
-[`query.go`](../query.go), the object response in [`response.go`](../response.go), and the
-deadlines in [`transfer.go`](../transfer.go).
+[`query.go`](../query.go), the object response in [`response.go`](../response.go), the
+deadlines in [`transfer.go`](../transfer.go), and the event stream in
+[`eventstream.go`](../eventstream.go).
 
 ## Requests
 
@@ -31,3 +32,40 @@ deadlines in [`transfer.go`](../transfer.go).
   the scan.
 - A `Transfer` deadline too long for a `time.Duration` saturates, and a saturated duration sets
   no deadline at all.
+
+## The event stream
+
+- A stream's context ends when the request's context or the run context `Server.Start` carries
+  into the request ends, whichever is first. The request's context alone would hold the
+  connection open through a drain, since `http.Server.Shutdown` waits for every active
+  connection. The run context alone would miss a client that went away. The stream's context is
+  a child of the request's, and `context.AfterFunc` cancels it, with the run context's cause, when
+  the run context ends. A request with no carried run context, as under a plain `httptest`
+  server, ends with the request alone. [The server page](server.md) says why the run context is a
+  value rather than the request context's parent.
+- Before each write, the headers included, the writer sets the write deadline to the Config's
+  `WriteTimeout` from now, rather than once for the whole stream. A stream has no size to derive
+  a transfer deadline from, and a deadline on each write keeps `WriteTimeout` meaning what it
+  means for any response: a stalled client fails within one `WriteTimeout`, while a stream that
+  keeps writing lasts as long as it needs.
+- The sender keeps one `sse.Encoder` behind a mutex, since an Encoder isn't safe for concurrent
+  use. The Encoder writes through a wrapper that records any write error, so the sender can tell
+  two failures apart. When the Encoder rejects an event, it has written nothing, and the stream
+  stays usable. When a write fails, part of an event may have reached the client, so the sender
+  closes.
+- The writer owns keepalives rather than leaving them to the handler, for two reasons. A
+  keepalive writes to the same `sse.Encoder` as the handler's events, and only the sender,
+  holding its mutex, can write one without interleaving it with an event. A keepalive is also how
+  a stream notices a client that has gone away: a stream with nothing to send writes nothing, so
+  without keepalives a dead connection would stay open until the stream's context ended.
+- One goroutine per stream runs a timer for the `KeepAlive` interval. When the timer fires, the
+  goroutine takes the mutex and writes an empty comment if nothing has been written for a whole
+  interval; otherwise it resets the timer for the rest of the interval. Each successful write
+  records its time, so an event or a retry restarts the interval and a busy stream carries no
+  keepalives. A keepalive goes through the same deadline and flush as an event, and a failed one
+  closes the sender like any failed write. The goroutine stops when the sender closes or the
+  stream's context ends, and `Serve` waits for it before returning.
+- The sender closes when the stream's context ends, when a deadline, write, or flush fails, or
+  when `Serve` returns, so a producer still holding it can't write to a finished response.
+- Nothing is written at the end of a stream: no closing event, comment, or retry. The client sees
+  the response end and reconnects, or not, by its own policy.

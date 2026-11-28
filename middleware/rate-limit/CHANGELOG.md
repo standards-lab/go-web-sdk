@@ -10,8 +10,12 @@ only; the base module keeps its own.
 
 ### Changed
 
-- The `go-web-sdk` requirement is v0.18.0, which adds `web.NewClient` and leaves every API the
-  middleware uses unchanged.
+- **Breaking:** The `go-core` requirement is v0.14.0, which pulls v0.13.0's raise break into
+  every importer's build: `EventKind.Raise` takes a trailing `event.RaiseOptions`. The
+  middleware doesn't call it.
+- **Breaking:** The `go-web-sdk` requirement is v0.19.0, which carries the same go-core
+  requirement and adds `web.NewClient` and package `upload`. The middleware's own behavior is
+  unchanged.
 
 ## [v0.5.0] - 2026-11-11
 

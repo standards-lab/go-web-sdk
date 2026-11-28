@@ -19,9 +19,9 @@ about to build it.
   `Config`), routing (`Group`, `NewModule`, `Router`), the problem model (`Problem`, `ErrorWriter`,
   `Handle`), the read contract (`ParseQuery`, `NewPage`), the request helpers (`IfMatch`,
   `DecodeJSON`, `ReadUpload`, `PathUUID`), the object proxy (`WriteObject`, `Attachment`), the
-  client handler (`NewClient`, `ClientOptions`, `ManifestPath`, `ConfigElementID`), the probes
-  (`RegisterHealth`, `Doctor`), `Recorder`, the `Middleware` type with `Chain`, and the service
-  runner (`Service`).
+  event stream writer (`EventStream`, `EventSender`), the client handler (`NewClient`,
+  `ClientOptions`, `ManifestPath`, `ConfigElementID`), the probes (`RegisterHealth`, `Doctor`),
+  `Recorder`, the `Middleware` type with `Chain`, and the service runner (`Service`).
 - **middleware** (built): the hand-rolled middleware, written in this repository, and their chain
   order ([`middleware/doc.go`](../middleware/doc.go)). `middleware/rate-limit`, built over a
   third-party library, is the first sourced sub-module.

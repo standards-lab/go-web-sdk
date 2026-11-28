@@ -64,7 +64,10 @@ func NewServer(cfg Config, handler http.Handler, logger *slog.Logger) *Server {
 
 // Start binds the listener on the calling goroutine: a bind failure is the
 // returned error, and ctx bounds the bind. It then serves in the
-// background. A second Start returns an error.
+// background. ctx is also carried into every request's context as a value,
+// not as its parent, so a stream can end when the run context does while an
+// ordinary request still drains to completion. A second Start returns an
+// error.
 func (s *Server) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -79,6 +82,9 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("listen %s: %w", s.http.Addr, err)
 	}
 	s.listener = listener
+	s.http.BaseContext = func(net.Listener) context.Context {
+		return context.WithValue(context.Background(), runContextKey{}, ctx)
+	}
 
 	go func() {
 		defer close(s.errs)
@@ -88,6 +94,13 @@ func (s *Server) Start(ctx context.Context) error {
 	}()
 
 	return nil
+}
+
+type runContextKey struct{}
+
+func runContext(ctx context.Context) (context.Context, bool) {
+	run, ok := ctx.Value(runContextKey{}).(context.Context)
+	return run, ok
 }
 
 // Addr reports the bound address once started (a configured port 0 reads

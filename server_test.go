@@ -63,9 +63,14 @@ func startTestServer(t *testing.T, handler http.Handler) *web.Server {
 
 func startServer(t *testing.T, cfg web.Config, handler http.Handler) *web.Server {
 	t.Helper()
+	return startServerWithContext(t, context.Background(), cfg, handler)
+}
+
+func startServerWithContext(t *testing.T, ctx context.Context, cfg web.Config, handler http.Handler) *web.Server {
+	t.Helper()
 
 	srv := web.NewServer(finalized(t, cfg), handler, discard)
-	if err := srv.Start(context.Background()); err != nil {
+	if err := srv.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(func() {
