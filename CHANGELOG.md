@@ -6,6 +6,8 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+## [v0.20.0] - 2026-11-28
+
 ### Added
 
 - `web.EventStream`, the server-sent event writer, which `Config.EventStream` builds at wiring
@@ -652,7 +654,8 @@ standard library and `github.com/standards-lab/go-core v0.1.0`.
   handler at error before the panic continues, and wraps the `ResponseWriter` so the recorded
   status, `http.ResponseController`, and `io.ReaderFrom` all keep working.
 
-[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/standards-lab/go-web-sdk/compare/v0.20.0...HEAD
+[v0.20.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.19.0...v0.20.0
 [v0.19.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.18.0...v0.19.0
 [v0.18.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.17.0...v0.18.0
 [v0.17.0]: https://github.com/standards-lab/go-web-sdk/compare/v0.16.0...v0.17.0
