@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,9 +64,14 @@ func startTestServer(t *testing.T, handler http.Handler) *web.Server {
 
 func startServer(t *testing.T, cfg web.Config, handler http.Handler) *web.Server {
 	t.Helper()
+	return startServerWithContext(t, context.Background(), cfg, handler)
+}
+
+func startServerWithContext(t *testing.T, ctx context.Context, cfg web.Config, handler http.Handler) *web.Server {
+	t.Helper()
 
 	srv := web.NewServer(finalized(t, cfg), handler, discard)
-	if err := srv.Start(context.Background()); err != nil {
+	if err := srv.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(func() {
@@ -152,6 +158,94 @@ func TestServer_StartReportsBindFailure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "listen") {
 		t.Errorf("error = %v, want it to mention listen", err)
+	}
+}
+
+type carriedRunContext struct {
+	present bool
+	runErr  error
+	reqErr  error
+}
+
+func getAndDiscard(t *testing.T, addr string) {
+	t.Helper()
+	resp, err := http.Get("http://" + addr + "/")
+	if err != nil {
+		t.Errorf("GET /: %v", err)
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+}
+
+func TestServer_CancelledStartContextEndsCarriedRunContextNotRequest(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	serving := make(chan struct{})
+	cancelled := make(chan struct{})
+	seen := make(chan carriedRunContext, 1)
+	handler := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(serving)
+		<-cancelled
+		run, ok := web.RunContext(r.Context())
+		got := carriedRunContext{present: ok}
+		if ok {
+			select {
+			case <-run.Done():
+				got.runErr = run.Err()
+			case <-time.After(failsafe):
+			}
+		}
+		got.reqErr = r.Context().Err()
+		seen <- got
+	})
+	srv := startServerWithContext(t, ctx, web.Config{Host: "127.0.0.1", Port: new(0)}, handler)
+
+	go getAndDiscard(t, srv.Addr())
+	recvOrFail(t, serving, "the handler to start")
+	cancel()
+	close(cancelled)
+
+	got := recvOrFail(t, seen, "the handler to report")
+	if !got.present {
+		t.Fatal("the request carries no run context")
+	}
+	if !errors.Is(got.runErr, context.Canceled) {
+		t.Errorf("carried run context err = %v, want context.Canceled", got.runErr)
+	}
+	if got.reqErr != nil {
+		t.Errorf("request context err = %v, want nil: the request must outlive the run context", got.reqErr)
+	}
+}
+
+func TestServer_CarriedRunContextIsLiveUntilCancelled(t *testing.T) {
+	seen := make(chan carriedRunContext, 1)
+	handler := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		run, ok := web.RunContext(r.Context())
+		got := carriedRunContext{present: ok}
+		if ok {
+			got.runErr = run.Err()
+		}
+		seen <- got
+	})
+	srv := startTestServer(t, handler)
+
+	getAndDiscard(t, srv.Addr())
+
+	got := recvOrFail(t, seen, "the handler to report")
+	if !got.present {
+		t.Fatal("the request carries no run context")
+	}
+	if got.runErr != nil {
+		t.Errorf("carried run context err = %v, want nil", got.runErr)
+	}
+}
+
+func TestServer_RequestWithoutServerCarriesNoRunContext(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	if run, ok := web.RunContext(r.Context()); ok {
+		t.Errorf("RunContext = %v, true for a request no Server served, want false", run)
 	}
 }
 
