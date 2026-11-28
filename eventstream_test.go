@@ -83,6 +83,20 @@ func decodeAll(t *testing.T, body []byte) []sse.Event {
 	}
 }
 
+func checkWholeEvents(t *testing.T, body []byte, want int) {
+	t.Helper()
+	got := decodeAll(t, body)
+	if len(got) != want {
+		t.Errorf("decoded %d events, want %d", len(got), want)
+	}
+	for _, e := range got {
+		id, err := strconv.Atoi(e.ID)
+		if err != nil || !sameEvent(e, numbered(id)) {
+			t.Errorf("event %+v is not whole", e)
+		}
+	}
+}
+
 func waitOrTimeout(ch <-chan struct{}) error {
 	select {
 	case <-ch:
@@ -392,9 +406,7 @@ func TestEventSender_ConcurrentSends(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Serve = %v", err)
 	}
-	if got := decodeAll(t, rec.Body.Bytes()); len(got) != senders*each {
-		t.Errorf("decoded %d events, want %d whole events", len(got), senders*each)
-	}
+	checkWholeEvents(t, rec.Body.Bytes(), senders*each)
 }
 
 type ended struct {
@@ -604,8 +616,8 @@ func TestEventStream_BusyStreamCarriesNoKeepAlive(t *testing.T) {
 }
 
 func TestEventSender_ConcurrentSendsAgainstKeepAlives(t *testing.T) {
-	const senders, each = 8, 20
-	es := keepAliveStream(t, time.Millisecond)
+	const senders, each, keepAlive = 8, 10, time.Millisecond
+	es := keepAliveStream(t, keepAlive)
 	served := make(chan error, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		served <- es.Serve(w, r, func(_ context.Context, s *web.EventSender) error {
@@ -615,7 +627,7 @@ func TestEventSender_ConcurrentSendsAgainstKeepAlives(t *testing.T) {
 				wg.Go(func() {
 					for i := range each {
 						errs <- s.Send(numbered(g*each + i))
-						time.Sleep(time.Millisecond)
+						time.Sleep(20 * keepAlive)
 					}
 				})
 			}
@@ -638,16 +650,10 @@ func TestEventSender_ConcurrentSendsAgainstKeepAlives(t *testing.T) {
 	if err := recvOrFail(t, served, "Serve to return"); err != nil {
 		t.Fatalf("Serve = %v", err)
 	}
-	got := decodeAll(t, raw)
-	if len(got) != senders*each {
-		t.Errorf("decoded %d events, want %d", len(got), senders*each)
+	if commentLines(raw) == 0 {
+		t.Error("no keepalive was written between the sends")
 	}
-	for _, e := range got {
-		id, err := strconv.Atoi(e.ID)
-		if err != nil || !sameEvent(e, numbered(id)) {
-			t.Errorf("event %+v is not whole", e)
-		}
-	}
+	checkWholeEvents(t, raw, senders*each)
 }
 
 type goneWriter struct {
@@ -744,13 +750,15 @@ func TestEventStream_KeepAlivesStopWhenTheStreamEnds(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
-	err := es.Serve(w, r, func(ctx context.Context, _ *web.EventSender) error {
+	err := es.Serve(w, r, func(ctx context.Context, s *web.EventSender) error {
 		if err := waitOrTimeout(w.wrote); err != nil {
 			return err
 		}
 		cancel()
 		<-ctx.Done()
-		time.Sleep(10 * keepAlive)
+		if err := s.Send(numbered(0)); err == nil {
+			t.Error("Send after the stream's context ended = nil, want an error")
+		}
 		body := w.snapshot()
 		time.Sleep(20 * keepAlive)
 		if got := w.snapshot(); got != body {
