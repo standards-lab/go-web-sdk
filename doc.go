@@ -206,8 +206,9 @@
 //   - [EventStream] serves a server-sent event stream, built by
 //     [Config.EventStream] from its [EventStreamOptions]. [EventStream.Serve]
 //     hands the handler an [EventSender], which writes each event or retry
-//     field through go-core's sse.Encoder and flushes it, until the request
-//     or the run context [Server.Start] carries into it ends. The writer
-//     sends a keepalive comment whenever the stream goes quiet for its
-//     KeepAlive, so a handler writes none of its own.
+//     field through go-core's sse.Encoder and flushes it. The stream ends
+//     when the request ends or when the run context [Server.Start] carries
+//     into the request ends. The writer sends a keepalive comment whenever
+//     KeepAlive passes with nothing written, so a handler writes none of
+//     its own.
 package web
