@@ -22,8 +22,11 @@ var errStreamEnded = errors.New("web: event stream ended")
 // every default.
 type EventStreamOptions struct {
 	// KeepAlive is how long a stream may go without a write before the
-	// writer sends a keepalive. Zero means 15 seconds; a negative value is
-	// a wiring defect and panics.
+	// writer sends a keepalive: an empty comment line, which a client skips
+	// without dispatching an event. Each event or retry written restarts the
+	// interval, so a stream that keeps sending carries no keepalives. The
+	// writer owns keepalives: a handler writes none of its own. Zero means
+	// 15 seconds; a negative value is a wiring defect and panics.
 	KeepAlive time.Duration
 }
 
@@ -33,6 +36,13 @@ type EventStreamOptions struct {
 // the Config's WriteTimeout from now, so a stream lasts past WriteTimeout
 // while a client that stalls on one write fails within it. A WriteTimeout
 // the Config disables (an explicit zero) leaves the deadline alone.
+//
+// While the handler runs, the writer sends a keepalive comment whenever
+// the stream's KeepAlive passes with nothing written, through the same
+// deadline and flush as an event, so a client that has gone away fails a
+// write and closes the sender even when the handler has nothing to send.
+// Keepalives and the handler's writes never interleave, and the keepalives
+// stop before Serve returns.
 //
 // A stream ends when its request's context ends or when the run context a
 // [Server] carries into the request ends, whichever comes first, so a
@@ -93,9 +103,13 @@ func (es EventStream) Serve(w http.ResponseWriter, r *http.Request, fn func(ctx 
 	if err := s.rc.Flush(); err != nil {
 		return fmt.Errorf("flush the event stream's headers: %w", err)
 	}
+	s.last = time.Now()
 
+	stopped := make(chan struct{})
+	go s.keepAlive(ctx, es.keepAlive, stopped)
 	err := fn(ctx, s)
 	cancel()
+	<-stopped
 	s.end()
 	return err
 }
@@ -123,7 +137,8 @@ func (es EventStream) check() {
 // flushing each write. It is safe for concurrent use. Once the stream's
 // context ends, a write fails, or Serve returns, the sender is closed: every
 // later [EventSender.Send] and [EventSender.Retry] returns an error and
-// writes nothing, so a producer's loop ends.
+// writes nothing, so a producer's loop ends. A failed keepalive write closes
+// the sender too.
 type EventSender struct {
 	ctx   context.Context
 	rc    *http.ResponseController
@@ -133,6 +148,7 @@ type EventSender struct {
 	out    *streamWriter
 	enc    *sse.Encoder
 	closed error
+	last   time.Time
 }
 
 // Send writes e as one event and flushes it. When the sse.Encoder rejects
@@ -153,7 +169,43 @@ func (s *EventSender) Retry(d time.Duration) error {
 func (s *EventSender) do(encode func(*sse.Encoder) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.writeLocked(encode)
+}
 
+func (s *EventSender) keepAlive(ctx context.Context, interval time.Duration, stopped chan<- struct{}) {
+	defer close(stopped)
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		next, ok := s.keepAliveDue(interval)
+		if !ok {
+			return
+		}
+		timer.Reset(next)
+	}
+}
+
+func (s *EventSender) keepAliveDue(interval time.Duration) (time.Duration, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed != nil {
+		return 0, false
+	}
+	if quiet := time.Since(s.last); quiet < interval {
+		return interval - quiet, true
+	}
+	if err := s.writeLocked(func(enc *sse.Encoder) error { return enc.Comment("") }); err != nil {
+		return 0, false
+	}
+	return interval, true
+}
+
+func (s *EventSender) writeLocked(encode func(*sse.Encoder) error) error {
 	if s.closed != nil {
 		return s.closed
 	}
@@ -176,6 +228,7 @@ func (s *EventSender) do(encode func(*sse.Encoder) error) error {
 		s.closed = fmt.Errorf("flush the event stream: %w", err)
 		return s.closed
 	}
+	s.last = time.Now()
 	return nil
 }
 

@@ -12,6 +12,9 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
   its `web.EventStreamOptions`. `EventStream.Serve` writes the stream's headers and hands the
   handler a `web.EventSender`, whose `Send` and `Retry` write through go-core's `sse.Encoder`,
   flushing each write and setting the connection's write deadline to `WriteTimeout` before it.
+  The writer sends a keepalive comment whenever `EventStreamOptions.KeepAlive` (15 seconds by
+  default) passes with nothing written, so a handler writes no keepalives of its own, and a
+  failed keepalive closes the sender.
   The stream ends when the request or the run context `Server.Start` carries into it ends, so a
   `Service` drains with a stream open.
 

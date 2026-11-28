@@ -52,6 +52,18 @@ deadlines in [`transfer.go`](../transfer.go), and the event stream in
   use. It writes through a writer that records a write error, which tells the Encoder's own
   rejection, which writes nothing and leaves the stream usable, from a failed write, which may
   have written part of an event and closes the sender.
+- The writer owns keepalives rather than leaving them to the handler. A keepalive is a write to
+  the same `sse.Encoder` as the handler's events, and the Encoder isn't safe for concurrent use,
+  so only the sender, holding its mutex, can write one without interleaving it with an event. A
+  keepalive is also how a stream notices a client that has gone away: a stream with nothing to
+  send writes nothing, so without one a dead connection would sit until the stream's context
+  ended. One goroutine per stream runs a timer for the `KeepAlive` interval; when it fires, it
+  takes the mutex and writes an empty comment only if nothing has been written for a whole
+  interval, otherwise it waits out the rest. Each successful write records its time, so an event
+  or a retry restarts the interval and a busy stream carries no keepalives. The keepalive goes
+  through the same deadline and flush as an event, and a failed one closes the sender like any
+  failed write. The goroutine stops when the sender closes or the stream's context ends, and
+  `Serve` waits for it before returning.
 - The sender closes when the stream's context ends, when a deadline, write, or flush fails, or
   when `Serve` returns, so a producer still holding it can't write to a finished response.
 - Nothing is written at the end of a stream: no closing event, comment, or retry. The client sees

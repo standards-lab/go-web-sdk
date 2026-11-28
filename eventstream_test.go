@@ -1,6 +1,7 @@
 package web_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -488,6 +490,276 @@ func TestService_DrainsAStream(t *testing.T) {
 	}
 	if e, err := d.Next(); !errors.Is(err, io.EOF) {
 		t.Errorf("after the drain: Next = %+v, %v, want io.EOF", e, err)
+	}
+}
+
+func keepAliveStream(t *testing.T, keepAlive time.Duration) web.EventStream {
+	t.Helper()
+	cfg := finalized(t, web.Config{})
+	return cfg.EventStream(web.EventStreamOptions{KeepAlive: keepAlive})
+}
+
+func openRawStream(t *testing.T, url string) *bufio.Reader {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	return bufio.NewReader(resp.Body)
+}
+
+func commentLines(body []byte) int {
+	n := 0
+	for line := range strings.Lines(string(body)) {
+		if strings.HasPrefix(line, ":") {
+			n++
+		}
+	}
+	return n
+}
+
+func TestEventStream_KeepsAQuietStreamAlive(t *testing.T) {
+	const keepAlive, want = 20 * time.Millisecond, 3
+	es := keepAliveStream(t, keepAlive)
+	release := make(chan struct{})
+	served := make(chan error, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		served <- es.Serve(w, r, func(context.Context, *web.EventSender) error {
+			return waitOrTimeout(release)
+		})
+	}))
+	defer srv.Close()
+
+	start := time.Now()
+	body := openRawStream(t, srv.URL)
+	var raw bytes.Buffer
+	for comments := 0; comments < want; {
+		line, err := body.ReadString('\n')
+		if err != nil {
+			t.Fatalf("reading the stream after %d comments: %v", comments, err)
+		}
+		raw.WriteString(line)
+		if strings.HasPrefix(line, ":") {
+			comments++
+		}
+	}
+	if elapsed := time.Since(start); elapsed < want*keepAlive {
+		t.Errorf("%d keepalives arrived within %s, want one per %s", want, elapsed, keepAlive)
+	}
+	close(release)
+	rest, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatalf("reading the stream's end: %v", err)
+	}
+	raw.Write(rest)
+	if err := recvOrFail(t, served, "Serve to return"); err != nil {
+		t.Errorf("Serve = %v, want nil", err)
+	}
+	if got := decodeAll(t, raw.Bytes()); len(got) != 0 {
+		t.Errorf("decoded %+v from a quiet stream, want no event", got)
+	}
+}
+
+func TestEventStream_BusyStreamCarriesNoKeepAlive(t *testing.T) {
+	const keepAlive = 100 * time.Millisecond
+	es := keepAliveStream(t, keepAlive)
+	served := make(chan error, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		served <- es.Serve(w, r, func(_ context.Context, s *web.EventSender) error {
+			deadline := time.Now().Add(3 * keepAlive)
+			for i := 0; time.Now().Before(deadline); i++ {
+				var err error
+				if i%2 == 0 {
+					err = s.Send(numbered(i))
+				} else {
+					err = s.Retry(time.Second)
+				}
+				if err != nil {
+					return err
+				}
+				time.Sleep(keepAlive / 20)
+			}
+			return nil
+		})
+	}))
+	defer srv.Close()
+
+	raw, err := io.ReadAll(openRawStream(t, srv.URL))
+	if err != nil {
+		t.Fatalf("reading the stream: %v", err)
+	}
+	if err := recvOrFail(t, served, "Serve to return"); err != nil {
+		t.Errorf("Serve = %v, want nil", err)
+	}
+	if n := commentLines(raw); n != 0 {
+		t.Errorf("a stream sending every %s carried %d keepalives, want none", keepAlive/20, n)
+	}
+	if got := decodeAll(t, raw); len(got) == 0 {
+		t.Error("decoded no event from a busy stream")
+	}
+}
+
+func TestEventSender_ConcurrentSendsAgainstKeepAlives(t *testing.T) {
+	const senders, each = 8, 20
+	es := keepAliveStream(t, time.Millisecond)
+	served := make(chan error, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		served <- es.Serve(w, r, func(_ context.Context, s *web.EventSender) error {
+			var wg sync.WaitGroup
+			errs := make(chan error, senders*each)
+			for g := range senders {
+				wg.Go(func() {
+					for i := range each {
+						errs <- s.Send(numbered(g*each + i))
+						time.Sleep(time.Millisecond)
+					}
+				})
+			}
+			wg.Wait()
+			close(errs)
+			for err := range errs {
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}))
+	defer srv.Close()
+
+	raw, err := io.ReadAll(openRawStream(t, srv.URL))
+	if err != nil {
+		t.Fatalf("reading the stream: %v", err)
+	}
+	if err := recvOrFail(t, served, "Serve to return"); err != nil {
+		t.Fatalf("Serve = %v", err)
+	}
+	got := decodeAll(t, raw)
+	if len(got) != senders*each {
+		t.Errorf("decoded %d events, want %d", len(got), senders*each)
+	}
+	for _, e := range got {
+		id, err := strconv.Atoi(e.ID)
+		if err != nil || !sameEvent(e, numbered(id)) {
+			t.Errorf("event %+v is not whole", e)
+		}
+	}
+}
+
+type goneWriter struct {
+	*httptest.ResponseRecorder
+	gone   atomic.Bool
+	failed chan struct{}
+	once   sync.Once
+}
+
+func (g *goneWriter) Write(p []byte) (int, error) {
+	if g.gone.Load() {
+		g.once.Do(func() { close(g.failed) })
+		return 0, errors.New("broken pipe")
+	}
+	return g.ResponseRecorder.Write(p)
+}
+
+func TestEventSender_KeepAliveFailureClosesTheSender(t *testing.T) {
+	es := keepAliveStream(t, time.Millisecond)
+	w := &goneWriter{ResponseRecorder: httptest.NewRecorder(), failed: make(chan struct{})}
+	err := es.Serve(w, httptest.NewRequest(http.MethodGet, "/", nil), func(_ context.Context, s *web.EventSender) error {
+		w.gone.Store(true)
+		if err := waitOrTimeout(w.failed); err != nil {
+			return err
+		}
+		w.gone.Store(false)
+		if err := s.Send(numbered(0)); err == nil || !strings.Contains(err.Error(), "broken pipe") {
+			t.Errorf("Send after a failed keepalive = %v, want the keepalive's write error", err)
+		}
+		if err := s.Retry(time.Second); err == nil {
+			t.Error("Retry after a failed keepalive = nil, want the sender closed")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Serve = %v", err)
+	}
+	if got := decodeAll(t, w.Body.Bytes()); len(got) != 0 {
+		t.Errorf("events = %+v, want nothing written after the failed keepalive", got)
+	}
+}
+
+type watchedRecorder struct {
+	*httptest.ResponseRecorder
+	mu    sync.Mutex
+	body  bytes.Buffer
+	wrote chan struct{}
+}
+
+func newWatchedRecorder() *watchedRecorder {
+	return &watchedRecorder{ResponseRecorder: httptest.NewRecorder(), wrote: make(chan struct{}, 1)}
+}
+
+func (w *watchedRecorder) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	select {
+	case w.wrote <- struct{}{}:
+	default:
+	}
+	return w.body.Write(p)
+}
+
+func (w *watchedRecorder) snapshot() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.body.String()
+}
+
+func TestEventStream_KeepAlivesStopWhenServeReturns(t *testing.T) {
+	const keepAlive = time.Millisecond
+	es := keepAliveStream(t, keepAlive)
+	w := newWatchedRecorder()
+	err := es.Serve(w, httptest.NewRequest(http.MethodGet, "/", nil), func(context.Context, *web.EventSender) error {
+		return waitOrTimeout(w.wrote)
+	})
+	if err != nil {
+		t.Fatalf("Serve = %v", err)
+	}
+	body := w.snapshot()
+	if commentLines([]byte(body)) == 0 {
+		t.Fatalf("body = %q, want a keepalive while fn ran", body)
+	}
+	time.Sleep(20 * keepAlive)
+	if got := w.snapshot(); got != body {
+		t.Errorf("body grew from %q to %q after Serve returned", body, got)
+	}
+}
+
+func TestEventStream_KeepAlivesStopWhenTheStreamEnds(t *testing.T) {
+	const keepAlive = time.Millisecond
+	es := keepAliveStream(t, keepAlive)
+	w := newWatchedRecorder()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
+	err := es.Serve(w, r, func(ctx context.Context, _ *web.EventSender) error {
+		if err := waitOrTimeout(w.wrote); err != nil {
+			return err
+		}
+		cancel()
+		<-ctx.Done()
+		time.Sleep(10 * keepAlive)
+		body := w.snapshot()
+		time.Sleep(20 * keepAlive)
+		if got := w.snapshot(); got != body {
+			t.Errorf("body grew from %q to %q after the stream's context ended", body, got)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Serve = %v", err)
 	}
 }
 
