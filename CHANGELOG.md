@@ -6,6 +6,12 @@ All notable changes to `github.com/standards-lab/go-web-sdk` are documented here
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** the `go-core` requirement is v0.14.0, which pulls v0.13.0's raise break into every
+  importer's build: `EventKind.Raise` takes a trailing `event.RaiseOptions`. go-core's changelog
+  has the migration from v0.12.0. The SDK doesn't call it.
+
 ## [v0.19.0] - 2026-11-27
 
 A service accepts large files as resumable uploads: package `upload` serves and sends uploads as
