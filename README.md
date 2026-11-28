@@ -62,6 +62,9 @@ The repository-level principles below enhance the standard's:
   - the request helpers: the `If-Match` precondition, a strict JSON body, a UUID path value, and a
     raw upload accepted by its declared type and length
   - the proxied object response, with its validators and a 304 on a matching `If-None-Match`
+  - `EventStream`, the server-sent event writer: a handler streams events through go-core's `sse`
+    encoder, each one flushed with its own write deadline, until the request or the server's run
+    context ends
   - `NewClient`, the handler that serves a client application from its embedded Vite build: the
     HTML shell for every client route, with the client's configuration written into it, and the
     build's files, those under the manifest's directories cached for a year and the rest

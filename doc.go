@@ -26,7 +26,8 @@
 //
 // [Server.Start] binds on the calling goroutine and only then serves in the
 // background, so a bind failure is returned rather than lost, and
-// [Server.Err] reports a later serve failure. A *Server is a
+// [Server.Err] reports a later serve failure. Start carries its run context
+// into every request, so an [EventStream] ends when the run does. A *Server is a
 // [lifecycle.Subsystem] and a [lifecycle.Monitored], so a composition root
 // defines it as a graph node's value and the [lifecycle.Coordinator] starts
 // it, shuts it down, and watches its Err, with no Monitor call. A
@@ -202,4 +203,9 @@
 //   - [Transfer] sets an upload's or a download's connection deadlines from
 //     the body's size and the slowest pace a client is allowed;
 //     [Config.Transfer] and [NewTransfer] build one.
+//   - [EventStream] serves a server-sent event stream, built by
+//     [Config.EventStream] from its [EventStreamOptions]. [EventStream.Serve]
+//     hands the handler an [EventSender], which writes each event or retry
+//     field through go-core's sse.Encoder and flushes it, until the request
+//     or the run context [Server.Start] carries into it ends.
 package web

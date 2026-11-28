@@ -13,11 +13,12 @@ This page holds the reasoning behind [`Server`](../server.go), [`Service`](../se
   context's parent. The Coordinator cancels the run context before it calls `Shutdown`, and
   `http.Server.Shutdown` waits for every active connection. A long-lived response such as a
   server-sent event stream would hold its connection past the drain deadline, so the stream writer
-  reads the carried run context and ends when it does. Were the run context the parent, every
+  reads the carried run context and ends when it does
+  ([requests and responses](requests-and-responses.md#the-event-stream)). Were the run context the parent, every
   request would be cancelled at the start of the drain, and an ordinary request, such as an
   upload's PATCH, could no longer drain to completion. A request served by a handler without a
-  `Server`, as under a plain `httptest` server, carries no run context, and the stream writer
-  treats its absence as a run that never ends.
+  `Server`, as under a plain `httptest` server, carries no run context, and `EventStream` treats
+  its absence as a run that never ends.
 - `Server` is a go-core `lifecycle.Subsystem` and `lifecycle.Monitored`, so the Coordinator
   starts, stops, and watches a Server node's value. Both of go-core's readiness sources, the
   Coordinator and `lifecycle.Readiness`, satisfy `Doctor`, so `RegisterHealth` takes either.

@@ -1,8 +1,9 @@
 # Requests and responses
 
 This page holds the reasoning behind the request helpers in [`request.go`](../request.go) and
-[`query.go`](../query.go), the object response in [`response.go`](../response.go), and the
-deadlines in [`transfer.go`](../transfer.go).
+[`query.go`](../query.go), the object response in [`response.go`](../response.go), the
+deadlines in [`transfer.go`](../transfer.go), and the event stream in
+[`eventstream.go`](../eventstream.go).
 
 ## Requests
 
@@ -31,3 +32,27 @@ deadlines in [`transfer.go`](../transfer.go).
   the scan.
 - A `Transfer` deadline too long for a `time.Duration` saturates, and a saturated duration sets
   no deadline at all.
+
+## The event stream
+
+- A stream's context ends with the request's context or with the run context `Server.Start`
+  carries into the request, whichever ends first. The request's context alone would hold the
+  connection open through a drain, since `http.Server.Shutdown` waits for every active
+  connection; the run context alone would miss a client that went away. The merged context is a
+  child of the request's, and `context.AfterFunc` cancels it when the run context ends, with the
+  run context's cause. A request with no carried run context, as under a plain `httptest` server,
+  ends with the request alone; [the server page](server.md) says why the run context is a value
+  rather than the request context's parent.
+- The write deadline is set before each write, the headers included, to the Config's
+  `WriteTimeout` from that write, rather than once for the whole stream. A stream has no size to
+  derive a transfer deadline from, and a deadline per write keeps the server's timeout meaning
+  what it means for any response: a stalled client fails within one `WriteTimeout`, while a
+  stream that keeps writing lasts as long as it needs.
+- The sender keeps one `sse.Encoder` behind a mutex, since an Encoder isn't safe for concurrent
+  use. It writes through a writer that records a write error, which tells the Encoder's own
+  rejection, which writes nothing and leaves the stream usable, from a failed write, which may
+  have written part of an event and closes the sender.
+- The sender closes when the stream's context ends, when a deadline, write, or flush fails, or
+  when `Serve` returns, so a producer still holding it can't write to a finished response.
+- Nothing is written at the end of a stream: no closing event, comment, or retry. The client sees
+  the response end and reconnects, or not, by its own policy.

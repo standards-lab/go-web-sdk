@@ -68,6 +68,7 @@ type service struct {
 	participant *graph.Node[*participant]
 	server      *graph.Node[*web.Server]
 	fake        *participant
+	handler     http.Handler
 
 	mu    sync.Mutex
 	built *web.Server
@@ -77,7 +78,7 @@ func newService(t *testing.T) *service {
 	t.Helper()
 	cfg := finalized(t, web.Config{Host: "127.0.0.1", Port: new(0)})
 
-	s := &service{log: newRecords(), graph: graph.New(), fake: &participant{errs: make(chan error, 1)}}
+	s := &service{log: newRecords(), graph: graph.New(), fake: &participant{errs: make(chan error, 1)}, handler: http.NewServeMux()}
 	s.lcConfig = s.graph.Value("lifecycle config", lifecycle.Config{ShutdownTimeout: config.Duration(failsafe)})
 	s.logger = s.graph.Define("logger", func(*graph.Scope) (*slog.Logger, error) {
 		return slog.New(slog.NewTextHandler(s.log, nil)), nil
@@ -85,7 +86,7 @@ func newService(t *testing.T) *service {
 	s.participant = s.graph.Value("participant", s.fake)
 	s.server = s.graph.Define("server", func(sc *graph.Scope) (*web.Server, error) {
 		sc.Use(s.participant)
-		srv := web.NewServer(cfg, http.NewServeMux(), sc.Use(s.logger))
+		srv := web.NewServer(cfg, s.handler, sc.Use(s.logger))
 		s.mu.Lock()
 		s.built = srv
 		s.mu.Unlock()
